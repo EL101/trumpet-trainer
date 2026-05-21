@@ -1,66 +1,66 @@
-import { useEffect, useState } from 'react'
-import { PitchDetector } from 'pitchy'
+import { useEffect, useState } from "react";
+import { PitchDetector } from "pitchy";
 
 export default function PitchTest() {
-  const [pitch, setPitch] = useState<number>(0)
-  const [clarity, setClarity] = useState<number>(0)
-  const [status, setStatus] = useState<string>('Initializing...')
+  const [pitch, setPitch] = useState<number>(0);
+  const [clarity, setClarity] = useState<number>(0);
+  const [status, setStatus] = useState<string>("Initializing...");
 
   useEffect(() => {
-    let cancelled = false
-    let audioContext: AudioContext | null = null
-    let stream: MediaStream | null = null
-    let rafId: number | null = null
+    let cancelled = false;
+    let audioContext: AudioContext | null = null;
+    let stream: MediaStream | null = null;
+    let rafId: number | null = null;
 
     const start = async (): Promise<void> => {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
         if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop())
-          return
+          stream.getTracks().forEach((t) => t.stop());
+          return;
         }
 
-        audioContext = new AudioContext()
-        const source = audioContext.createMediaStreamSource(stream)
-        const analyser = audioContext.createAnalyser()
-        analyser.fftSize = 2048
-        source.connect(analyser)
+        audioContext = new AudioContext();
+        const source = audioContext.createMediaStreamSource(stream);
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = 2048;
+        source.connect(analyser);
 
-        const detector = PitchDetector.forFloat32Array(analyser.fftSize)
-        const input = new Float32Array(detector.inputLength)
+        const detector = PitchDetector.forFloat32Array(analyser.fftSize);
+        const input = new Float32Array(detector.inputLength);
 
-        setStatus('Mic connected, listening...')
+        setStatus("Mic connected, listening...");
 
         const update = (): void => {
-          if (cancelled || !audioContext) return
-          analyser.getFloatTimeDomainData(input)
-          const [hz, clar] = detector.findPitch(input, audioContext.sampleRate)
+          if (cancelled || !audioContext) return;
+          analyser.getFloatTimeDomainData(input);
+          const [hz, clar] = detector.findPitch(input, audioContext.sampleRate);
           if (clar > 0.9) {
-            setPitch(Math.round(hz))
-            setClarity(clar)
+            setPitch(Math.round(hz));
+            setClarity(clar);
           }
-          rafId = requestAnimationFrame(update)
-        }
-        update()
+          rafId = requestAnimationFrame(update);
+        };
+        update();
       } catch (err) {
-        const e = err as Error
-        setStatus(`Error: ${e.name} - ${e.message}`)
-        console.error('Mic error:', err)
+        const e = err as Error;
+        setStatus(`Error: ${e.name} - ${e.message}`);
+        console.error("Mic error:", err);
       }
-    }
+    };
 
-    start()
+    start();
 
     return () => {
-      cancelled = true
-      if (rafId !== null) cancelAnimationFrame(rafId)
-      if (stream) stream.getTracks().forEach((t) => t.stop())
-      if (audioContext && audioContext.state !== 'closed') {
-        audioContext.close()
+      cancelled = true;
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      if (audioContext && audioContext.state !== "closed") {
+        audioContext.close();
       }
-    }
-  }, [])
+    };
+  }, []);
 
   return (
     <div className="p-8">
@@ -68,5 +68,5 @@ export default function PitchTest() {
       <div className="text-2xl">Detected: {pitch} Hz</div>
       <div className="text-sm text-gray-500">Clarity: {clarity.toFixed(2)}</div>
     </div>
-  )
+  );
 }

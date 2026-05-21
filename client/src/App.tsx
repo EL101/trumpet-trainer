@@ -1,9 +1,8 @@
-import './App.css'
-import LandingPage from './LandingPage'
-import PitchTest from './PitchTest'
+import "./App.css";
+import LandingPage from "./LandingPage";
+import PitchTest from "./PitchTest";
 
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-
 
 function App() {
   return (
@@ -13,7 +12,7 @@ function App() {
         <Route path="/test" element={<PitchTest />} />
       </Routes>
     </BrowserRouter>
-  )
+  );
 }
 
-export default App
+export default App;
