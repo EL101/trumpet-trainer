@@ -11,5 +11,8 @@
   "description": "",
   "devDependencies": {
     "concurrently": "^9.2.1"
+  },
+  "dependencies": {
+    "semantic-ui-react": "^2.1.5"
   }
 }
