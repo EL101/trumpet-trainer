@@ -13,8 +13,8 @@ function LeftPanel() {
       bgColor="white"
       color="black"
       height="100%"
-      borderRightWidth={{ base: "none", md: "1px" }}
-      borderRightColor={{ base: "none", md: "gray.400" }}
+      borderRightWidth={{ base: "none", md: "2px" }}
+      borderRightColor={{ base: "none", md: "gray.500" }}
     >
       <Flex direction="column" gap={{ base: "2rem", md: "14rem" }} height="100%">
         <Heading size={{ base: "2xl", md: "3xl" }}>🎺 Trumpet Trainer</Heading>
@@ -48,7 +48,7 @@ function RightPanel() {
         <Flex direction="column" align="center" width="100%">
           <SignInWithGoogle />
           <Flex align="center" gap={4} opacity="0.5" m="2rem auto" width="100%">
-            <Separator flex="1" borderColor="gray.500" />
+            <Separator flex="1" borderColor="gray.500"/>
             <Text fontSize="sm" fontWeight="semibold" letterSpacing="wider">
               OR
             </Text>
@@ -63,7 +63,7 @@ function RightPanel() {
 export default function LandingPage() {
   const { user, loading } = useAuth();
   if (loading) return <Spinner />;
-  if (user) return <Navigate to="/dashboard" replace />;
+  if (user) return <Navigate to="/today" replace />;
   return (
     <Flex height="100vh" direction={{ base: "column", md: "row" }}>
       <LeftPanel />

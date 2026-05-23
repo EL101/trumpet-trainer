@@ -15,7 +15,7 @@ export default function Sidebar(props) {
     >
       <Heading size="2xl">🎺 Trumpet Trainer</Heading>
       <Separator mt="5px" size="md" borderColor="gray.500"></Separator>
-      <SidebarTab to="/dashboard" name="Today" />
+      <SidebarTab to="/today" name="Today" />
       <SidebarTab to="/generate" name="Generate" />
       <SidebarTab to="/library" name="Library" />
       <SidebarTab to="/metronome" name="Metronome" />
