@@ -15,5 +15,14 @@ export default function SignInAsGuest() {
     }
   };
 
-  return <Button onClick={handleGuest} _hover={{ bgColor: "gray.200" }} border="1px solid black" p="1rem 3rem" >Continue as Guest</Button>;
+  return (
+    <Button
+      onClick={handleGuest}
+      _hover={{ bgColor: "gray.200" }}
+      border="1px solid black"
+      p="1rem 3rem"
+    >
+      Continue as Guest
+    </Button>
+  );
 }

@@ -9,6 +9,4 @@ export const useAuth = () => {
   return context;
 };
 
-export const loading = () => {
-  
-}
+export const loading = () => {};

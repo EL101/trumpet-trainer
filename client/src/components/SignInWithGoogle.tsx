@@ -1,7 +1,9 @@
-import { Button } from "@chakra-ui/react";
+import { Button, chakra } from "@chakra-ui/react";
 import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { auth } from "../firebase";
 import { useLocation, useNavigate } from "react-router-dom";
+import { Icon } from "@chakra-ui/react";
+import { FcGoogle } from "react-icons/fc";
 
 export default function SignInWithGoogle() {
   const navigate = useNavigate();
@@ -14,7 +16,7 @@ export default function SignInWithGoogle() {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
       console.log("Signed in:", user.displayName, user.email);
-      navigate(from, {replace: true});
+      navigate(from, { replace: true });
     } catch (error) {
       if (error.code === "auth/popup-closed-by-user") {
         return;
@@ -24,8 +26,14 @@ export default function SignInWithGoogle() {
   };
 
   return (
-    <Button onClick={handleGoogleSignIn} _hover={{ bgColor: "gray.200" }} border="1px solid black" p="1rem 3rem">
-      Continue with Google
+    <Button
+      onClick={handleGoogleSignIn}
+      _hover={{ bgColor: "gray.200" }}
+      border="1px solid black"
+      p="1rem 3rem"
+    >
+      <Icon as={FcGoogle} boxSize={5} />
+      <chakra.span>Continue with Google</chakra.span>
     </Button>
   );
 }

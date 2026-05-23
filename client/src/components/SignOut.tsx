@@ -13,6 +13,8 @@ export default function SignOut() {
     }
   };
   return (
-    <Button onClick = {handleClick} p="1rem 2rem">Sign Out</Button>
+    <Button onClick={handleClick} p="1rem 2rem">
+      Sign Out
+    </Button>
   );
 }

@@ -46,7 +46,7 @@ function RightPanel() {
           Sign in
         </Heading>
         <Flex direction="column" align="center" width="100%">
-          <SignInWithGoogle/>
+          <SignInWithGoogle />
           <Flex align="center" gap={4} opacity="0.5" m="2rem auto" width="100%">
             <Separator flex="1" borderColor="gray.500" />
             <Text fontSize="sm" fontWeight="semibold" letterSpacing="wider">
@@ -61,9 +61,9 @@ function RightPanel() {
   );
 }
 export default function LandingPage() {
-  const {user, loading} = useAuth();
+  const { user, loading } = useAuth();
   if (loading) return <Spinner />;
-  if (user) return <Navigate to="/dashboard" replace/>
+  if (user) return <Navigate to="/dashboard" replace />;
   return (
     <Flex height="100vh" direction={{ base: "column", md: "row" }}>
       <LeftPanel />
