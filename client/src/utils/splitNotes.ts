@@ -81,8 +81,7 @@ export function splitNotes(notes: string, timeSig: string): string[] {
     const strToAdd = dotted ? 
       `, B4/${restDur.split(".")[0]}/r.` : 
       `, B4/${restDur}/r`
-    // measures.push(currMeasureNotes + `, B4/${restDur}/r${dotted ? "." : ""}`);
-    console.log(strToAdd)
+    // console.log(strToAdd)
     measures.push(currMeasureNotes + strToAdd);
 
   }

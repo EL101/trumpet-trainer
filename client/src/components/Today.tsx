@@ -13,7 +13,7 @@ export default function Today() {
     <DashboardTemplate>
       <Box flex="1" height="100%" p="1rem 2rem">
         <Heading size="2xl">{dateToday}</Heading>
-        <SheetMusic notes="C#5/q, B4, A4, G#4, G4/32, G4/16., G4/h." timeSig="4/4" border="1px solid red" />
+        <SheetMusic notes="C#5/q, B4, A4, G#4, G4/32, G4/16., G4/h" timeSig="4/4" border="1px solid red" />
       </Box>
     </DashboardTemplate>
   );

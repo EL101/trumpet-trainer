@@ -8,25 +8,28 @@ import { splitNotes, type SheetMusicProps } from "../utils/splitNotes";
 export default function SheetMusic({notes, timeSig, ...rest} : SheetMusicProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const measures = splitNotes(notes, timeSig);
+  const width = 250;
   useEffect(() => {
     const container = containerRef.current;
+    
     
 
     const factory = new Factory({
       renderer: {
         elementId: container as unknown as string,
-        width: 500,
-        height: 200,
+        width: width * measures.length,
+        height: 100,
       },
     })
 
     const score = factory.EasyScore()
     
-    const measures = splitNotes(notes, timeSig);
-    const width = 250;
+    
+    const start = 0;
     for (let i = 0; i < measures.length; i++) {
       const measureNotes = measures[i];
-      const system = factory.System({x: width * i, width: width})
+      const system = factory.System({x: width * i + start, y: -12, width: width})
       const stave = system.addStave({
         voices: [score.voice(score.notes(measureNotes))],
       });
@@ -45,7 +48,7 @@ export default function SheetMusic({notes, timeSig, ...rest} : SheetMusicProps) 
     return () => {
       if (container) container.innerHTML = "";
     }
-  }, [notes, timeSig]);
+  }, [notes, timeSig, measures]);
 
-  return <Box {...rest} ref={containerRef} />;
+  return <Box {...rest} ref={containerRef} width={width * measures.length}/>;
 }

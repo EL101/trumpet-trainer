@@ -1,9 +1,10 @@
-import { Container, Heading, Flex, Text, Separator, Box, Spinner } from "@chakra-ui/react";
+import { Container, Heading, Flex, Text, Separator, Box, Spinner, Center } from "@chakra-ui/react";
 import { Prose } from "@/components/ui/prose";
 import SignInWithGoogle from "./SignInWithGoogle";
 import SignInAsGuest from "./SignInAsGuest";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/auth/useAuth";
+import SheetMusic from "./SheetMusic";
 
 function LeftPanel() {
   return (
@@ -25,7 +26,9 @@ function LeftPanel() {
           <Prose color="gray.500">
             Generated exercises • Pitch + rhythm scoring • Progress saved across sessions
           </Prose>
-          <Container display={{ base: "none", md: "block" }}>EXAMPLE IMAGES GOES HERE</Container>
+          <Flex borderWidth={2} borderColor="gray.700" align="center" justify="center">
+            <SheetMusic notes="A5/q., G5/8, F5, E5/q." timeSig="4/4" alignSelf="center" justifySelf="center"/>
+          </Flex>
         </Flex>
       </Flex>
     </Box>
