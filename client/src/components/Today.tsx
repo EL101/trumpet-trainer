@@ -1,4 +1,4 @@
-import { Box, Container, Flex, Heading } from "@chakra-ui/react";
+import { Box, Heading } from "@chakra-ui/react";
 import DashboardTemplate from "./DashBoardTemplate";
 import SheetMusic from "./SheetMusic";
 
