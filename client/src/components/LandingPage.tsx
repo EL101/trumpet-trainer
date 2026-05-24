@@ -27,7 +27,12 @@ function LeftPanel() {
             Generated exercises • Pitch + rhythm scoring • Progress saved across sessions
           </Prose>
           <Flex borderWidth={2} borderColor="gray.700" align="center" justify="center">
-            <SheetMusic notes="A5/q., G5/8, F5, E5/q." timeSig="4/4" alignSelf="center" justifySelf="center"/>
+            <SheetMusic
+              notes="A5/q., G5/8, F5, E5/q."
+              timeSig="4/4"
+              alignSelf="center"
+              justifySelf="center"
+            />
           </Flex>
         </Flex>
       </Flex>
@@ -45,13 +50,17 @@ function RightPanel() {
       p={{ base: "0 4rem 1rem 3rem", md: "3rem 4rem 1rem 3rem" }}
     >
       <Flex direction="column" height="100%" gap={{ base: "4rem", md: "15rem" }}>
-        <Heading size={{ base: "2xl", md: "4xl" }} textAlign={{ base: "center", md: "left" }}>
+        <Heading
+          size="4xl"
+          display={{ base: "none", md: "block" }}
+          textAlign={{ base: "center", md: "left" }}
+        >
           Sign in
         </Heading>
         <Flex direction="column" align="center" width="100%">
           <SignInWithGoogle />
           <Flex align="center" gap={4} opacity="0.5" m="2rem auto" width="100%">
-            <Separator flex="1" borderColor="gray.500"/>
+            <Separator flex="1" borderColor="gray.500" />
             <Text fontSize="sm" fontWeight="semibold" letterSpacing="wider">
               OR
             </Text>

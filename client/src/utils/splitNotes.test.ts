@@ -20,10 +20,7 @@ describe("splitNotes", () => {
     });
 
     it("splits 12 quarter notes into three 4/4 measures", () => {
-      const result = splitNotes(
-        "C4/q, D4, E4, F4, G4, A4, B4, C5, D5, E5, F5, G5",
-        "4/4"
-      );
+      const result = splitNotes("C4/q, D4, E4, F4, G4, A4, B4, C5, D5, E5, F5, G5", "4/4");
       expect(result).toHaveLength(3);
     });
 
@@ -175,8 +172,17 @@ describe("splitNotes", () => {
 
     it("total beats of notes + rests equals the measure length", () => {
       const DURATION_TO_BEATS: Record<string, number> = {
-        w: 4, h: 2, q: 1, "8": 0.5, "16": 0.25, "32": 0.125,
-        "w.": 6, "h.": 3, "q.": 1.5, "8.": 0.75, "16.": 0.375,
+        w: 4,
+        h: 2,
+        q: 1,
+        "8": 0.5,
+        "16": 0.25,
+        "32": 0.125,
+        "w.": 6,
+        "h.": 3,
+        "q.": 1.5,
+        "8.": 0.75,
+        "16.": 0.375,
       };
 
       const result = splitNotes("C4/q, D4, E4", "4/4");
@@ -307,9 +313,7 @@ describe("splitNotes", () => {
   describe("error handling", () => {
     it("throws when a note causes beats to exceed measure without hitting it exactly", () => {
       // 3 quarters (3 beats) + 1 half (2 beats) = 5, jumps past 4
-      expect(() => splitNotes("C4/q, D4, E4, F4/h", "4/4")).toThrow(
-        "Invalid note sequence"
-      );
+      expect(() => splitNotes("C4/q, D4, E4, F4/h", "4/4")).toThrow("Invalid note sequence");
     });
 
     it("throws in 3/4 when beats overshoot", () => {
@@ -398,18 +402,16 @@ describe("splitNotes", () => {
 
     it("handles many eighth notes without accumulation error", () => {
       // 8 eighth notes = exactly 4 beats
-      const result = splitNotes(
-        "C4/8, D4, E4, F4, G4, A4, B4, C5",
-        "4/4"
-      );
+      const result = splitNotes("C4/8, D4, E4, F4, G4, A4, B4, C5", "4/4");
       expect(result).toHaveLength(1);
       expect(result[0]).not.toContain("/r");
     });
 
     it("handles many sixteenth notes without accumulation error", () => {
       // 16 sixteenth notes = exactly 4 beats
-      const sixteenths = Array.from({ length: 15 }, (_, i) => 
-        ["C4", "D4", "E4", "F4", "G4", "A4", "B4"][i % 7]
+      const sixteenths = Array.from(
+        { length: 15 },
+        (_, i) => ["C4", "D4", "E4", "F4", "G4", "A4", "B4"][i % 7],
       ).join(", ");
       const result = splitNotes(`C4/16, ${sixteenths}`, "4/4");
       expect(result).toHaveLength(1);
@@ -435,15 +437,8 @@ describe("stress tests — exact output", () => {
   });
 
   it("12 quarter notes in 4/4 produce three exact measure strings", () => {
-    const result = splitNotes(
-      "C4/q, D4, E4, F4, G4, A4, B4, C5, D5, E5, F5, G5",
-      "4/4"
-    );
-    expect(result).toEqual([
-      "C4/q, D4, E4, F4",
-      "G4/q, A4, B4, C5",
-      "D5/q, E5, F5, G5",
-    ]);
+    const result = splitNotes("C4/q, D4, E4, F4, G4, A4, B4, C5, D5, E5, F5, G5", "4/4");
+    expect(result).toEqual(["C4/q, D4, E4, F4", "G4/q, A4, B4, C5", "D5/q, E5, F5, G5"]);
   });
 
   it("4 half notes in 4/4 produce two exact measure strings", () => {
@@ -605,8 +600,9 @@ describe("12/8 time signature", () => {
   // ---- Multiple measures ----
 
   it("24 eighth notes split into two measures — exact strings", () => {
-    const eighths = Array.from({ length: 24 }, (_, i) =>
-      ["C4", "D4", "E4", "F4", "G4", "A4", "B4"][i % 7]
+    const eighths = Array.from(
+      { length: 24 },
+      (_, i) => ["C4", "D4", "E4", "F4", "G4", "A4", "B4"][i % 7],
     );
     eighths[0] = "C4/8";
     const result = splitNotes(eighths.join(", "), "12/8");
@@ -617,23 +613,18 @@ describe("12/8 time signature", () => {
   });
 
   it("8 dotted quarter notes split into two measures — exact strings", () => {
-    const result = splitNotes(
-      "C4/q., D4, E4, F4, G4, A4, B4, C5",
-      "12/8"
-    );
+    const result = splitNotes("C4/q., D4, E4, F4, G4, A4, B4, C5", "12/8");
     expect(result).toEqual(["C4/q., D4, E4, F4", "G4/q., A4, B4, C5"]);
   });
 
   it("12 quarter notes split into two measures — exact strings", () => {
-    const quarters = Array.from({ length: 12 }, (_, i) =>
-      ["C4", "D4", "E4", "F4", "G4", "A4", "B4"][i % 7]
+    const quarters = Array.from(
+      { length: 12 },
+      (_, i) => ["C4", "D4", "E4", "F4", "G4", "A4", "B4"][i % 7],
     );
     quarters[0] = "C4/q";
     const result = splitNotes(quarters.join(", "), "12/8");
-    expect(result).toEqual([
-      "C4/q, D4, E4, F4, G4, A4",
-      "B4/q, C4, D4, E4, F4, G4",
-    ]);
+    expect(result).toEqual(["C4/q, D4, E4, F4, G4, A4", "B4/q, C4, D4, E4, F4, G4"]);
   });
 
   // ---- Mixed durations ----
@@ -641,7 +632,7 @@ describe("12/8 time signature", () => {
   it("handles dotted quarter + eighth pattern (typical 12/8 feel) — exact strings", () => {
     const result = splitNotes(
       "C4/q., D4/8, E4/q., F4/8, G4/q., A4/8, B4/q., C5/8, D5/q., E5/8, F5/q., G5/8",
-      "12/8"
+      "12/8",
     );
     expect(result).toEqual([
       "C4/q., D4/8, E4/q., F4/8, G4/q., A4/8",
@@ -710,7 +701,7 @@ describe("12/8 time signature", () => {
     // Real throw: 11 eighths + 1 half = 11 + 4 = 15, jumps past 12
     const elevenEighths = Array(11).fill("C4").join(", ");
     expect(() =>
-      splitNotes(`C4/8, ${elevenEighths.split(", ").slice(1).join(", ")}, D4/h`, "12/8")
+      splitNotes(`C4/8, ${elevenEighths.split(", ").slice(1).join(", ")}, D4/h`, "12/8"),
     ).toThrow();
   });
 

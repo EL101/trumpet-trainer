@@ -15,7 +15,16 @@ function App() {
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/test" element={<PitchTest />} />
-          <Route path="/sheet-test" element={<SheetMusic notes="C#5/q, B4, A4, G#4, G4/32, G4/16., G4/h." timeSig="4/4" border="1px solid red" />} />
+          <Route
+            path="/sheet-test"
+            element={
+              <SheetMusic
+                notes="C#5/q, B4, A4, G#4, G4/32, G4/16., G4/h."
+                timeSig="4/4"
+                border="1px solid red"
+              />
+            }
+          />
           <Route element={<ProtectedRoute />}>
             <Route path="/today" element={<Today />} />
           </Route>
