@@ -7,7 +7,7 @@ export default function SheetMusic({ notes, timeSig, ...rest }: SheetMusicProps)
   const containerRef = useRef<HTMLDivElement>(null);
 
   const measures = splitNotes(notes, timeSig);
-  const width = 300;
+  const width = 300, height=110;
   useEffect(() => {
     const container = containerRef.current;
 
@@ -15,7 +15,7 @@ export default function SheetMusic({ notes, timeSig, ...rest }: SheetMusicProps)
       renderer: {
         elementId: container as unknown as string,
         width: width * measures.length,
-        height: 110,
+        height: height,
       },
     });
 
@@ -63,6 +63,14 @@ export default function SheetMusic({ notes, timeSig, ...rest }: SheetMusicProps)
 
     factory.draw();
 
+    const svg = container.querySelector("svg");
+    if (svg) {
+      svg.setAttribute("viewBox", `0 0 ${width * measures.length} ${height}`);
+      svg.removeAttribute("width");
+      svg.removeAttribute("height");
+      svg.style.width = "100%";
+      svg.style.height = "auto";
+    }
     return () => {
       if (container) container.innerHTML = "";
     };

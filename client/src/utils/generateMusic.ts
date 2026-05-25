@@ -1,24 +1,12 @@
 import { Note, Scale } from "tonal";
 import { DURATION_TO_BEATS } from "./splitNotes";
 
-export type PitchClass =
-  | "C"
-  | "C#"
-  | "Db"
-  | "D"
-  | "D#"
-  | "Eb"
-  | "E"
-  | "F"
-  | "F#"
-  | "Gb"
-  | "G"
-  | "G#"
-  | "Ab"
-  | "A"
-  | "A#"
-  | "Bb"
-  | "B";
+export const PITCH_CLASSES = [
+  "C", "C#", "Db", "D", "D#", "Eb", "E", "F",
+  "F#", "Gb", "G", "G#", "Ab", "A", "A#", "Bb", "B",
+] as const;
+
+export type PitchClass = (typeof PITCH_CLASSES)[number];
 
 export type KeyQuality = "major" | "minor";
 export type Key = `${PitchClass} ${KeyQuality}`;
