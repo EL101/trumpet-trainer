@@ -7,7 +7,9 @@ export default function SheetMusic({ notes, timeSig, ...rest }: SheetMusicProps)
   const containerRef = useRef<HTMLDivElement>(null);
 
   const measures = splitNotes(notes, timeSig);
-  const width = 300, height=110;
+  const width = 300,
+    yOffset = 10;
+  const height = 124 + 2 * yOffset;
   useEffect(() => {
     const container = containerRef.current;
 
@@ -24,7 +26,7 @@ export default function SheetMusic({ notes, timeSig, ...rest }: SheetMusicProps)
     const start = 0;
     for (let i = 0; i < measures.length; i++) {
       const measureNotes = measures[i];
-      const system = factory.System({ x: width * i + start, y: -7, width: width });
+      const system = factory.System({ x: width * i + start, y: yOffset, width: width });
 
       const allNotes = score.notes(measureNotes);
       const beamGroups: (typeof allNotes)[] = [];
@@ -76,5 +78,5 @@ export default function SheetMusic({ notes, timeSig, ...rest }: SheetMusicProps)
     };
   }, [notes, timeSig, measures]);
 
-  return <Box {...rest} ref={containerRef} width={width * measures.length} />;
+  return <Box {...rest} ref={containerRef} />;
 }

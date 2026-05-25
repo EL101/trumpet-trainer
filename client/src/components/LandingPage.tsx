@@ -25,7 +25,8 @@ function LeftPanel() {
             Practice with Interactive Exercises and Live Feedback.
           </Heading>
           <Prose color="gray.500">
-            Generated exercises • Pitch + rhythm scoring • Progress saved across sessions • Refresh the page to see examples!
+            Generated exercises • Pitch + rhythm scoring • Progress saved across sessions • Refresh
+            the page to see examples!
           </Prose>
           <Flex borderWidth={2} borderColor="gray.700" align="center" justify="center">
             <SheetMusic
