@@ -25,9 +25,33 @@ export default function SheetMusic({ notes, timeSig, ...rest }: SheetMusicProps)
     for (let i = 0; i < measures.length; i++) {
       const measureNotes = measures[i];
       const system = factory.System({ x: width * i + start, y: -7, width: width });
-      console.log(measureNotes);
+
+      const allNotes = score.notes(measureNotes);
+      const beamGroups: (typeof allNotes)[] = [];
+      let currentGroup: typeof allNotes = [];
+      let currentStemDir: number = allNotes[0].stem_direction;
+      allNotes.forEach((note) => {
+        const dur = note.getDuration();
+        const beamable = (dur === "8" || dur === "16") && !note.isRest();
+        if (beamable && (note.stem_direction === currentStemDir || currentStemDir === 0)) {
+          currentGroup.push(note);
+          currentStemDir = note.stem_direction;
+        } else {
+          if (currentGroup.length >= 2) {
+            beamGroups.push([...currentGroup]);
+          }
+          currentGroup = beamable ? [note] : [];
+          currentStemDir = beamable ? note.stem_direction : 0;
+        }
+      });
+      if (currentGroup.length >= 2) {
+        beamGroups.push(currentGroup);
+      }
+
+      beamGroups.forEach((group) => score.beam(group));
+
       const stave = system.addStave({
-        voices: [score.voice(score.notes(measureNotes), { time: timeSig })],
+        voices: [score.voice(allNotes, { time: timeSig })],
       });
       if (i === 0) {
         stave.addClef("treble").addTimeSignature(timeSig);

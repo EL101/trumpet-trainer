@@ -1,6 +1,7 @@
 import { Flex, Heading, Separator } from "@chakra-ui/react";
 import SidebarTab from "./SidebarTab";
 import { SidebarFooter } from "./SidebarFooter";
+import { DASHBOARD_PADDING } from "./constants/layout";
 
 export default function Sidebar(props) {
   return (
@@ -8,9 +9,9 @@ export default function Sidebar(props) {
       height="100%"
       borderRightWidth={2}
       borderRightColor="black"
-      p="1rem 0.8rem 1.5rem 0.8rem"
       direction="column"
       gap={2}
+      p={DASHBOARD_PADDING}
       {...props}
     >
       <Heading size="2xl">🎺 Trumpet Trainer</Heading>

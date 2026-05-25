@@ -1,10 +1,11 @@
-import { Container, Heading, Flex, Text, Separator, Box, Spinner, Center } from "@chakra-ui/react";
+import { Heading, Flex, Text, Separator, Box, Spinner } from "@chakra-ui/react";
 import { Prose } from "@/components/ui/prose";
 import SignInWithGoogle from "./SignInWithGoogle";
 import SignInAsGuest from "./SignInAsGuest";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/auth/useAuth";
 import SheetMusic from "./SheetMusic";
+import { generateMusic } from "@/utils/generateMusic";
 
 function LeftPanel() {
   return (
@@ -28,10 +29,14 @@ function LeftPanel() {
           </Prose>
           <Flex borderWidth={2} borderColor="gray.700" align="center" justify="center">
             <SheetMusic
-              notes="A5/q., G5/8, F5, E5/q."
+              notes={generateMusic(1, "4/4", "C major", "MED", "MED")}
               timeSig="4/4"
-              alignSelf="center"
-              justifySelf="center"
+              display={{ base: "block", lg: "none" }}
+            />
+            <SheetMusic
+              notes={generateMusic(2, "4/4", "C major", "MED", "MED")}
+              timeSig="4/4"
+              display={{ base: "none", lg: "block" }}
             />
           </Flex>
         </Flex>

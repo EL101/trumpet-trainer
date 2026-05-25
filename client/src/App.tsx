@@ -7,6 +7,11 @@ import { ProtectedRoute } from "./ProtectedRoute";
 import Profile from "./components/Profile";
 import Today from "./components/Today";
 import SheetMusic from "./components/SheetMusic";
+import Generate from "./components/Generate";
+import Library from "./components/Library";
+import Metronome from "./components/Metronome";
+import Tuner from "./components/Tuner";
+import Progress from "./components/Progress";
 
 function App() {
   return (
@@ -27,6 +32,21 @@ function App() {
           />
           <Route element={<ProtectedRoute />}>
             <Route path="/today" element={<Today />} />
+          </Route>
+          <Route element={<ProtectedRoute />}>
+            <Route path="/generate" element={<Generate />} />
+          </Route>
+          <Route element={<ProtectedRoute />}>
+            <Route path="/library" element={<Library />} />
+          </Route>
+          <Route element={<ProtectedRoute />}>
+            <Route path="/metronome" element={<Metronome />} />
+          </Route>
+          <Route element={<ProtectedRoute />}>
+            <Route path="/tuner" element={<Tuner />} />
+          </Route>
+          <Route element={<ProtectedRoute />}>
+            <Route path="/progress" element={<Progress />} />
           </Route>
           <Route element={<ProtectedRoute />}>
             <Route path="/profile" element={<Profile />} />

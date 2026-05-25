@@ -1,7 +1,7 @@
 import DashboardTemplate from "./DashBoardTemplate";
 import SignOut from "./SignOut";
 
-export default function Profile() {
+export default function Progress() {
   return (
     <DashboardTemplate>
       <SignOut />
