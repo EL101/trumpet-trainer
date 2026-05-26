@@ -4,7 +4,7 @@ import SignInWithGoogle from "./SignInWithGoogle";
 import SignInAsGuest from "./SignInAsGuest";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/auth/useAuth";
-import {SheetMusic} from "./SheetMusic";
+import { SheetMusic } from "./SheetMusic";
 import { generateMusic } from "@/utils/generateMusic";
 
 function LeftPanel() {
@@ -28,17 +28,19 @@ function LeftPanel() {
             Generated exercises • Pitch + rhythm scoring • Progress saved across sessions • Refresh
             the page to see examples!
           </Prose>
-          <Flex borderWidth={2} borderColor="gray.700" align="center" justify="center">
+          <Flex align="center" justify="center">
             <SheetMusic
               notes={generateMusic(1, "4/4", "C major", "MED", "MED")}
               timeSig="4/4"
-              musicKey = "C major"
+              musicKey="C major"
+              flex="1"
               display={{ base: "block", lg: "none" }}
             />
             <SheetMusic
               notes={generateMusic(2, "4/4", "C major", "MED", "MED")}
               timeSig="4/4"
-              musicKey = "C major"
+              musicKey="C major"
+              flex="1"
               display={{ base: "none", lg: "block" }}
             />
           </Flex>

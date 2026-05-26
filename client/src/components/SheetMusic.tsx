@@ -76,11 +76,19 @@ export function SheetMusic({ notes, timeSig, musicKey, ...rest }: SheetMusicProp
     factory.draw();
 
     const svg = container.querySelector("svg");
-    if (svg) {
+    if (svg && !("width" in rest)) {
       svg.setAttribute("viewBox", `0 0 ${width * measures.length} ${height}`);
       svg.removeAttribute("width");
       svg.removeAttribute("height");
       svg.style.width = "100%";
+      svg.style.maxHeight = "150";
+      svg.style.height = "auto";
+    } else if (svg) {
+      svg.setAttribute("viewBox", `0 0 ${width * measures.length} ${height}`);
+      svg.removeAttribute("width");
+      svg.removeAttribute("height");
+      svg.style.width = rest["width"];
+      svg.style.maxHeight = "150";
       svg.style.height = "auto";
     }
     return () => {
@@ -88,5 +96,7 @@ export function SheetMusic({ notes, timeSig, musicKey, ...rest }: SheetMusicProp
     };
   }, [notes, timeSig, measures]);
 
-  return <Box {...rest} ref={containerRef} />;
+  return (
+    <Box {...rest} ref={containerRef} borderWidth={2} borderRadius="md" px={3} bgColor="gray.100" />
+  );
 }

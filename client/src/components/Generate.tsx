@@ -1,80 +1,112 @@
-import { generateMusic, PITCH_CLASSES, type Difficulty, type Range, type Key, PRACTICAL_MAJOR, PRACTICAL_MINOR } from "@/utils/generateMusic";
-import { useState} from "react";
+import {
+  generateMusic,
+  PITCH_CLASSES,
+  type Difficulty,
+  type Range,
+  type Key,
+  PRACTICAL_MAJOR,
+  PRACTICAL_MINOR,
+} from "@/utils/generateMusic";
+import { useState } from "react";
 import DashboardTemplate from "./DashBoardTemplate";
-import {SheetMusic} from "./SheetMusic";
+import { SheetMusic } from "./SheetMusic";
 import { Box, Button, createListCollection, Flex, Heading } from "@chakra-ui/react";
 import { DASHBOARD_PADDING } from "./constants/layout";
 import Dropdown from "./Dropdown";
+import HistoryCard from "./HistoryCard";
 
-export default function Generate() {
+export type MusicInfo = {
+  notes: string;
+  timeSig: string;
+  musicKey: Key;
+  generationNum: number;
+};
+
+export function Generate() {
   const [timeSig, setTimeSig] = useState("4/4");
   const [measures, setMeasures] = useState(2);
   const [key, setKey] = useState<Key>("C major" as Key);
   const [range, setRange] = useState<Range>("LOW");
   const [difficulty, setDifficulty] = useState<Difficulty>("LOW");
-  
-  const [generated, setGenerated] = useState<{
-    notes: string;
-    timeSig: string;
-    musicKey: Key;
-  } | null>({
+
+  const [history, setHistory] = useState<MusicInfo[]>([]);
+
+  const [generated, setGenerated] = useState<MusicInfo>({
     notes: "",
     timeSig: "4/4",
-    musicKey: "C major" as Key
+    musicKey: "C major" as Key,
+    generationNum: 0,
   });
-  
+
   const handleGenerateClick = () => {
+    if (generated.notes) {
+      setHistory([generated, ...history]);
+    }
     setGenerated({
       notes: generateMusic(measures, timeSig, key, range, difficulty),
       timeSig: timeSig,
-      musicKey: key
+      musicKey: key,
+      generationNum: generated.generationNum + 1,
     });
   };
 
   const keySelect = createListCollection({
     items: [
-      ...PRACTICAL_MAJOR.map(k => ({ label: `${k} major`, value: `${k} major` })),
-      ...PRACTICAL_MINOR.map(k => ({ label: `${k} minor`, value: `${k} minor` })),
-    ]
+      ...PRACTICAL_MAJOR.map((k) => ({ label: `${k} major`, value: `${k} major` })),
+      ...PRACTICAL_MINOR.map((k) => ({ label: `${k} minor`, value: `${k} minor` })),
+    ],
   });
 
-  const lengthSelect = createListCollection({items: [
-    {label: "1 measure", value: "1"},
-    {label: "2 measures", value: "2"},
-    {label: "3 measures", value: "3"},
-    {label: "4 measures", value: "4"},
-  ]});
+  const lengthSelect = createListCollection({
+    items: [
+      { label: "1 measure", value: "1" },
+      { label: "2 measures", value: "2" },
+      { label: "3 measures", value: "3" },
+      { label: "4 measures", value: "4" },
+    ],
+  });
 
-  const rangeSelect = createListCollection({items: [
-    {label: "Low (F#3 - C5)", value: "LOW"},
-    {label: "Med (C4 - C6)", value: "MED"},
-    {label: "High (C5 - G6)", value: "HIGH"},
-    {label: "Any (F#3 - C5)", value: "ANY"},
-  ]});
+  const rangeSelect = createListCollection({
+    items: [
+      { label: "Low (F#3 - C5)", value: "LOW" },
+      { label: "Med (C4 - C6)", value: "MED" },
+      { label: "High (C5 - G6)", value: "HIGH" },
+      { label: "Any (F#3 - C5)", value: "ANY" },
+    ],
+  });
 
-  const difficultySelect = createListCollection({items: [
-    {label: "Low", value: "LOW"},
-    {label: "Med", value: "MED"},
-    {label: "High", value: "HIGH"},
-  ]});
+  const difficultySelect = createListCollection({
+    items: [
+      { label: "Low", value: "LOW" },
+      { label: "Med", value: "MED" },
+      { label: "High", value: "HIGH" },
+    ],
+  });
 
-  const timeSigSelect = createListCollection({ items: [
-    { label: "4/4", value: "4/4" },
-    { label: "3/4", value: "3/4" },
-    { label: "2/4", value: "2/4" },
-    { label: "2/2", value: "2/2" },
-    { label: "6/8", value: "6/8" },
-    { label: "3/8", value: "3/8" },
-    { label: "9/8", value: "9/8" },
-    { label: "12/8", value: "12/8" },
-  ],
-});
+  const timeSigSelect = createListCollection({
+    items: [
+      { label: "4/4", value: "4/4" },
+      { label: "3/4", value: "3/4" },
+      { label: "2/4", value: "2/4" },
+      { label: "2/2", value: "2/2" },
+      { label: "6/8", value: "6/8" },
+      { label: "3/8", value: "3/8" },
+      { label: "9/8", value: "9/8" },
+      { label: "12/8", value: "12/8" },
+    ],
+  });
 
   return (
     <DashboardTemplate>
-      <Box height="100%" width="100%" p={DASHBOARD_PADDING}>
-        <Flex height="100%" direction={{ base: "column", lg: "row" }}>
-          <Flex flex="1"  gap={4} height="100%" borderRightWidth={{ base: 0, lg: 2 }} direction="column">
+      <Box height="100%" minW="0" flex="1" p={DASHBOARD_PADDING}>
+        <Flex height="100%" direction="column" gap={5}>
+          <Flex
+            flex="1"
+            gap={2}
+            height="100%"
+            // borderRightWidth={{ base: 0, lg: 2 }}
+            direction="column"
+          >
             <Heading size="2xl">Generate An Exercise</Heading>
             <Dropdown
               collection={keySelect}
@@ -106,9 +138,60 @@ export default function Generate() {
               defaultVal="4/4"
               onValueChange={(e) => setTimeSig(e.value[0])}
             />
-            <Button bgColor="black" color="white" fontWeight="600" width="8rem" onClick={handleGenerateClick}>Generate</Button>
+            <Button
+              bgColor="black"
+              color="white"
+              fontWeight="600"
+              width="8rem"
+              onClick={handleGenerateClick}
+            >
+              Generate
+            </Button>
           </Flex>
-          <SheetMusic notes={generated.notes} timeSig={generated.timeSig} musicKey={generated.musicKey} minW="0" border="1px solid red" flex="1" />
+          {generated.notes && (
+            <Flex minW="0" flex="1" direction="column">
+              <Heading size="xl">GEN #{history.length + 1}</Heading>
+              <SheetMusic
+                notes={generated.notes}
+                timeSig={generated.timeSig}
+                musicKey={generated.musicKey}
+                minW="0"
+              />
+              <Heading size="lg" mt={2}>
+                HISTORY
+              </Heading>
+              <Flex
+                minW="0"
+                overflowX="auto"
+                gap={2}
+                pb={5}
+                css={{
+                  // Make the scrollbar always visible (default macOS hides it)
+                  "&::-webkit-scrollbar": {
+                    height: "8px",
+                  },
+                  "&::-webkit-scrollbar-track": {
+                    // background: "gray",
+                    background: "var(--chakra-colors-gray-400)",
+                  },
+                  "&::-webkit-scrollbar-thumb": {
+                    background: "var(--chakra-colors-gray-400)",
+                    borderRadius: "4px",
+                  },
+                  "&::-webkit-scrollbar-thumb:hover": {
+                    background: "var(--chakra-colors-gray-500)",
+                  },
+                  // Firefox
+                  scrollbarWidth: "thin",
+                  scrollbarColor: "var(--chakra-colors-gray-400) transparent",
+                }}
+              >
+                {history.map((elem) => (
+                  <HistoryCard musicInfo={elem} />
+                ))}
+              </Flex>
+            </Flex>
+          )}
         </Flex>
       </Box>
     </DashboardTemplate>

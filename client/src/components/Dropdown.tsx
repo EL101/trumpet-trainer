@@ -7,18 +7,18 @@ export default function Dropdown({
   onValueChange,
   ...props
 }: {
-  collection: ListCollection<{ label: string; value: string}>;
+  collection: ListCollection<{ label: string; value: string }>;
   label: string;
   defaultVal: string;
   onValueChange: (details: { value: string[] }) => void;
 }) {
   return (
-    <Select.Root 
-      {...props} 
-      onValueChange={onValueChange} 
-      collection={collection} 
-      size="sm" 
-      // width="320px" 
+    <Select.Root
+      {...props}
+      onValueChange={onValueChange}
+      collection={collection}
+      size="sm"
+      // width="320px"
       defaultValue={[defaultVal]}
     >
       <Select.HiddenSelect />
@@ -35,7 +35,13 @@ export default function Dropdown({
         <Select.Positioner>
           <Select.Content p={2} bgColor="white" color="black" boxShadow="sm">
             {collection.items.map((item) => (
-              <Select.Item item={item} key={item.value} p={2} _highlighted={{color:"white", bgColor:"black"}} cursor="pointer">
+              <Select.Item
+                item={item}
+                key={item.value}
+                p={2}
+                _highlighted={{ color: "white", bgColor: "black" }}
+                cursor="pointer"
+              >
                 {item.label}
                 <Select.ItemIndicator />
               </Select.Item>
