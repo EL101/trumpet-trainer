@@ -1,9 +1,16 @@
 import { useEffect, useRef } from "react";
-import { Factory, Barline } from "vexflow";
-import { Box } from "@chakra-ui/react";
-import { splitNotes, type SheetMusicProps } from "../utils/splitNotes";
+import { Factory, Barline, Accidental } from "vexflow";
+import { Box, type BoxProps } from "@chakra-ui/react";
+import { splitNotes } from "../utils/splitNotes";
+import { getKeySig, type Key } from "@/utils/generateMusic";
 
-export default function SheetMusic({ notes, timeSig, ...rest }: SheetMusicProps) {
+export type SheetMusicProps = BoxProps & {
+  notes: string;
+  timeSig: string;
+  musicKey: Key;
+};
+
+export function SheetMusic({ notes, timeSig, musicKey, ...rest }: SheetMusicProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const measures = splitNotes(notes, timeSig);
@@ -51,12 +58,15 @@ export default function SheetMusic({ notes, timeSig, ...rest }: SheetMusicProps)
       }
 
       beamGroups.forEach((group) => score.beam(group));
+      const voice = score.voice(allNotes, { time: timeSig });
+      const keySig = getKeySig(musicKey);
+      Accidental.applyAccidentals([voice], keySig);
 
       const stave = system.addStave({
-        voices: [score.voice(allNotes, { time: timeSig })],
+        voices: [voice],
       });
       if (i === 0) {
-        stave.addClef("treble").addTimeSignature(timeSig);
+        stave.addClef("treble").addTimeSignature(timeSig).addKeySignature(keySig);
       }
       if (i === measures.length - 1) {
         stave.setEndBarType(Barline.type.END);

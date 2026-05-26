@@ -23,6 +23,36 @@ export const PITCH_CLASSES = [
 
 export type PitchClass = (typeof PITCH_CLASSES)[number];
 
+export const PRACTICAL_MAJOR = [
+  "C", "C#", "Db", "D", "Eb", "E", "F",
+  "F#", "Gb", "G", "Ab", "A", "Bb", "B",
+]; // removed D#, G#, A#
+
+export const PRACTICAL_MINOR = [
+  "C", "C#", "D", "D#", "Eb", "E", "F",
+  "F#", "G", "G#", "A", "A#", "Bb", "B",
+]; // removed Db, Gb
+
+const MINOR_TO_MAJOR: Record<string, string> = {
+  "A": "C",
+  "E": "G",
+  "B": "D",
+  "F#": "A",
+  "C#": "E",
+  "G#": "B",
+  "D#": "F#",
+  "A#": "C#",
+  "D": "F",
+  "G": "Bb",
+  "C": "Eb",
+  "F": "Ab",
+  "Bb": "Db",
+  "Eb": "Gb",
+  "Ab": "Cb",
+  "Db": "E",   // Fb → E (enharmonic)
+  "Gb": "A",   // Bbb → A (enharmonic)
+};
+
 export type KeyQuality = "major" | "minor";
 export type Key = `${PitchClass} ${KeyQuality}`;
 export type Range = "LOW" | "MED" | "HIGH" | "ANY";
@@ -53,6 +83,14 @@ function generateScale(key: Key) {
 
 function randomElement<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
+}
+
+export function getKeySig(key: Key) {
+  const [root, quality] = key.split(" ");
+  if (quality === "major") return root;
+  else {
+    return MINOR_TO_MAJOR[root] ?? "C"
+  }
 }
 
 export function generateMusic(

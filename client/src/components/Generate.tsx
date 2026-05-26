@@ -1,8 +1,8 @@
-import { generateMusic, PITCH_CLASSES, type Difficulty, type Range, type Key } from "@/utils/generateMusic";
-import { useMemo, useState} from "react";
+import { generateMusic, PITCH_CLASSES, type Difficulty, type Range, type Key, PRACTICAL_MAJOR, PRACTICAL_MINOR } from "@/utils/generateMusic";
+import { useState} from "react";
 import DashboardTemplate from "./DashBoardTemplate";
-import SheetMusic from "./SheetMusic";
-import { Box, createListCollection, Flex, Heading } from "@chakra-ui/react";
+import {SheetMusic} from "./SheetMusic";
+import { Box, Button, createListCollection, Flex, Heading } from "@chakra-ui/react";
 import { DASHBOARD_PADDING } from "./constants/layout";
 import Dropdown from "./Dropdown";
 
@@ -13,16 +13,29 @@ export default function Generate() {
   const [range, setRange] = useState<Range>("LOW");
   const [difficulty, setDifficulty] = useState<Difficulty>("LOW");
   
-  const notes = useMemo(
-    () => generateMusic(measures, timeSig, key, range, difficulty),
-    [timeSig, measures, key, range, difficulty],
-  );
+  const [generated, setGenerated] = useState<{
+    notes: string;
+    timeSig: string;
+    musicKey: Key;
+  } | null>({
+    notes: "",
+    timeSig: "4/4",
+    musicKey: "C major" as Key
+  });
+  
+  const handleGenerateClick = () => {
+    setGenerated({
+      notes: generateMusic(measures, timeSig, key, range, difficulty),
+      timeSig: timeSig,
+      musicKey: key
+    });
+  };
 
   const keySelect = createListCollection({
-    items: PITCH_CLASSES.reduce<string[]>(
-      (acc, curr) => [...acc, `${curr} major`, `${curr} minor`],
-      [],
-    ).map((k) => ({ label: k, value: k })),
+    items: [
+      ...PRACTICAL_MAJOR.map(k => ({ label: `${k} major`, value: `${k} major` })),
+      ...PRACTICAL_MINOR.map(k => ({ label: `${k} minor`, value: `${k} minor` })),
+    ]
   });
 
   const lengthSelect = createListCollection({items: [
@@ -44,6 +57,18 @@ export default function Generate() {
     {label: "Med", value: "MED"},
     {label: "High", value: "HIGH"},
   ]});
+
+  const timeSigSelect = createListCollection({ items: [
+    { label: "4/4", value: "4/4" },
+    { label: "3/4", value: "3/4" },
+    { label: "2/4", value: "2/4" },
+    { label: "2/2", value: "2/2" },
+    { label: "6/8", value: "6/8" },
+    { label: "3/8", value: "3/8" },
+    { label: "9/8", value: "9/8" },
+    { label: "12/8", value: "12/8" },
+  ],
+});
 
   return (
     <DashboardTemplate>
@@ -75,9 +100,15 @@ export default function Generate() {
               defaultVal="LOW"
               onValueChange={(e) => setDifficulty(e.value[0] as Difficulty)}
             />
-            
+            <Dropdown
+              collection={timeSigSelect}
+              label="TIME SIGNATURE"
+              defaultVal="4/4"
+              onValueChange={(e) => setTimeSig(e.value[0])}
+            />
+            <Button bgColor="black" color="white" fontWeight="600" width="8rem" onClick={handleGenerateClick}>Generate</Button>
           </Flex>
-          <SheetMusic notes={notes} timeSig={timeSig} minW="0" border="1px solid red" flex="1" />
+          <SheetMusic notes={generated.notes} timeSig={generated.timeSig} musicKey={generated.musicKey} minW="0" border="1px solid red" flex="1" />
         </Flex>
       </Box>
     </DashboardTemplate>

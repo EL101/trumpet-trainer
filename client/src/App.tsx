@@ -6,7 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ProtectedRoute } from "./ProtectedRoute";
 import Profile from "./components/Profile";
 import Today from "./components/Today";
-import SheetMusic from "./components/SheetMusic";
+import {SheetMusic} from "./components/SheetMusic";
 import Generate from "./components/Generate";
 import Library from "./components/Library";
 import Metronome from "./components/Metronome";

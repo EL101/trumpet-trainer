@@ -1,5 +1,3 @@
-import type { BoxProps } from "@chakra-ui/react";
-
 export const DURATION_TO_BEATS = {
   w: 4,
   h: 2,
@@ -18,10 +16,7 @@ export const BEATS_TO_DURATION = Object.fromEntries(
   Object.entries(DURATION_TO_BEATS).map(([k, v]) => [v, k]),
 );
 
-export type SheetMusicProps = BoxProps & {
-  notes: string;
-  timeSig: string;
-};
+
 
 /**Takes in a string of notes following the vexflow format and a time signature following
  * 4/4, 12/8, etc.
