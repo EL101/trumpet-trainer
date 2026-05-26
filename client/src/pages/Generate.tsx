@@ -1,6 +1,5 @@
 import {
   generateMusic,
-  PITCH_CLASSES,
   type Difficulty,
   type Range,
   type Key,
@@ -8,12 +7,15 @@ import {
   PRACTICAL_MINOR,
 } from "@/utils/generateMusic";
 import { useState } from "react";
-import DashboardTemplate from "./DashBoardTemplate";
-import { SheetMusic } from "./SheetMusic";
+import DashboardTemplate from "../components/DashBoardTemplate";
+import { SheetMusic } from "../components/SheetMusic";
 import { Box, Button, createListCollection, Flex, Heading } from "@chakra-ui/react";
-import { DASHBOARD_PADDING } from "./constants/layout";
-import Dropdown from "./Dropdown";
-import HistoryCard from "./HistoryCard";
+import { DASHBOARD_PADDING } from "../constants/layout";
+import Dropdown from "../components/Dropdown";
+import HistoryCard from "../components/HistoryCard";
+import { usePersistedState } from "@/hooks/usePersistedState";
+import SaveButton from "@/components/SaveButton";
+import ClearHistory from "@/components/ClearHistory";
 
 export type MusicInfo = {
   notes: string;
@@ -29,9 +31,9 @@ export function Generate() {
   const [range, setRange] = useState<Range>("LOW");
   const [difficulty, setDifficulty] = useState<Difficulty>("LOW");
 
-  const [history, setHistory] = useState<MusicInfo[]>([]);
+  const [history, setHistory] = usePersistedState<Array<MusicInfo>>("exercise-history", []);
 
-  const [generated, setGenerated] = useState<MusicInfo>({
+  const [generated, setGenerated] = usePersistedState<MusicInfo>("exercise", {
     notes: "",
     timeSig: "4/4",
     musicKey: "C major" as Key,
@@ -49,6 +51,11 @@ export function Generate() {
       generationNum: generated.generationNum + 1,
     });
   };
+
+  const handleClearClick = () => {
+    setHistory([]);
+    setGenerated({...generated, generationNum: 1});
+  }
 
   const keySelect = createListCollection({
     items: [
@@ -138,60 +145,62 @@ export function Generate() {
               defaultVal="4/4"
               onValueChange={(e) => setTimeSig(e.value[0])}
             />
-            <Button
-              bgColor="black"
-              color="white"
-              fontWeight="600"
-              width="8rem"
-              onClick={handleGenerateClick}
-            >
-              Generate
-            </Button>
-          </Flex>
-          {generated.notes && (
-            <Flex minW="0" flex="1" direction="column">
-              <Heading size="xl">GEN #{history.length + 1}</Heading>
-              <SheetMusic
-                notes={generated.notes}
-                timeSig={generated.timeSig}
-                musicKey={generated.musicKey}
-                minW="0"
-              />
-              <Heading size="lg" mt={2}>
-                HISTORY
-              </Heading>
-              <Flex
-                minW="0"
-                overflowX="auto"
-                gap={2}
-                pb={5}
-                css={{
-                  // Make the scrollbar always visible (default macOS hides it)
-                  "&::-webkit-scrollbar": {
-                    height: "8px",
-                  },
-                  "&::-webkit-scrollbar-track": {
-                    // background: "gray",
-                    background: "var(--chakra-colors-gray-400)",
-                  },
-                  "&::-webkit-scrollbar-thumb": {
-                    background: "var(--chakra-colors-gray-400)",
-                    borderRadius: "4px",
-                  },
-                  "&::-webkit-scrollbar-thumb:hover": {
-                    background: "var(--chakra-colors-gray-500)",
-                  },
-                  // Firefox
-                  scrollbarWidth: "thin",
-                  scrollbarColor: "var(--chakra-colors-gray-400) transparent",
-                }}
+            <Flex gap={2}>
+              <Button
+                bgColor="black"
+                color="white"
+                fontWeight="600"
+                width="8rem"
+                onClick={handleGenerateClick}
               >
-                {history.map((elem) => (
-                  <HistoryCard musicInfo={elem} />
-                ))}
-              </Flex>
+                Generate
+              </Button>
+              <SaveButton disabled={generated.notes ? false : true} />
             </Flex>
-          )}
+          </Flex>
+          <Flex minW="0" flex="1" direction="column">
+            <Heading size="xl">GEN #{history.length + 1}</Heading>
+            <SheetMusic
+              notes={generated.notes}
+              timeSig={generated.timeSig}
+              musicKey={generated.musicKey}
+              minW="0"
+            />
+            <Flex gap={2} align="center" justify="space-between" mt={2}>
+              <Heading size="lg">HISTORY</Heading>
+              <ClearHistory onClear={handleClearClick}></ClearHistory>
+            </Flex>
+            <Flex
+              minW="0"
+              overflowX="auto"
+              gap={2}
+              pb={5}
+              css={{
+                // Make the scrollbar always visible (default macOS hides it)
+                "&::-webkit-scrollbar": {
+                  height: "8px",
+                },
+                "&::-webkit-scrollbar-track": {
+                  // background: "gray",
+                  background: "var(--chakra-colors-gray-400)",
+                },
+                "&::-webkit-scrollbar-thumb": {
+                  background: "var(--chakra-colors-gray-400)",
+                  borderRadius: "4px",
+                },
+                "&::-webkit-scrollbar-thumb:hover": {
+                  background: "var(--chakra-colors-gray-500)",
+                },
+                // Firefox
+                scrollbarWidth: "thin",
+                scrollbarColor: "var(--chakra-colors-gray-400) transparent",
+              }}
+            >
+              {history.map((elem) => (
+                <HistoryCard musicInfo={elem} />
+              ))}
+            </Flex>
+          </Flex>
         </Flex>
       </Box>
     </DashboardTemplate>

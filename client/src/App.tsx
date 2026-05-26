@@ -1,17 +1,17 @@
 import "./App.css";
 import AuthUserProvider from "./auth/AuthUserProvider";
-import LandingPage from "./components/LandingPage";
-import PitchTest from "./components/PitchTest";
+import LandingPage from "./pages/LandingPage";
+import PitchTest from "./pages/PitchTest";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ProtectedRoute } from "./ProtectedRoute";
-import Profile from "./components/Profile";
-import Today from "./components/Today";
+import Profile from "./pages/Profile";
+import Today from "./pages/Today";
 import { SheetMusic } from "./components/SheetMusic";
-import { Generate } from "./components/Generate";
-import Library from "./components/Library";
-import Metronome from "./components/Metronome";
-import Tuner from "./components/Tuner";
-import Progress from "./components/Progress";
+import { Generate } from "./pages/Generate";
+import Library from "./pages/Library";
+import Metronome from "./pages/Metronome";
+import Tuner from "./pages/Tuner";
+import Progress from "./pages/Progress";
 
 function App() {
   return (
@@ -26,6 +26,7 @@ function App() {
               <SheetMusic
                 notes="C#5/q, B4, A4, G#4, G4/32, G4/16., G4/h."
                 timeSig="4/4"
+                musicKey="C major"
                 border="1px solid red"
               />
             }

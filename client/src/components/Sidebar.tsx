@@ -1,7 +1,7 @@
 import { Flex, Heading, Separator } from "@chakra-ui/react";
 import SidebarTab from "./SidebarTab";
 import { SidebarFooter } from "./SidebarFooter";
-import { DASHBOARD_PADDING } from "./constants/layout";
+import { DASHBOARD_PADDING } from "../constants/layout";
 
 export default function Sidebar(props) {
   return (

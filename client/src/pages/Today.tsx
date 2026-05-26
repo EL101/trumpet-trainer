@@ -1,5 +1,5 @@
 import { Box, Heading } from "@chakra-ui/react";
-import DashboardTemplate from "./DashBoardTemplate";
+import DashboardTemplate from "../components/DashBoardTemplate";
 
 export default function Today() {
   const dateToday = new Date().toLocaleDateString("en-US", {

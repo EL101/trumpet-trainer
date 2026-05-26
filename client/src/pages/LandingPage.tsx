@@ -1,10 +1,10 @@
 import { Heading, Flex, Text, Separator, Box, Spinner } from "@chakra-ui/react";
 import { Prose } from "@/components/ui/prose";
-import SignInWithGoogle from "./SignInWithGoogle";
-import SignInAsGuest from "./SignInAsGuest";
+import SignInWithGoogle from "../components/SignInWithGoogle";
+import SignInAsGuest from "../components/SignInAsGuest";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/auth/useAuth";
-import { SheetMusic } from "./SheetMusic";
+import { SheetMusic } from "../components/SheetMusic";
 import { generateMusic } from "@/utils/generateMusic";
 
 function LeftPanel() {
