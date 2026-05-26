@@ -16,6 +16,7 @@ export default function ClearHistory({ onClear }: { onClear: () => void }) {
         minW="0"
         width="auto"
         p="5px"
+        transition="colors"
         onClick={() => setOpen(true)}
       >
         <LuTrash2 style={{ width: 15, height: 15 }} />

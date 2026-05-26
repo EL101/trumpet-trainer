@@ -11,7 +11,7 @@ export function SidebarFooter(props) {
     <Flex direction="column" gap={1} {...props}>
       <Separator borderColor="gray.500" size="lg" />
       <NavLink to="/profile">
-        <Flex align="center" gap={3} borderRadius="4px" p="4px" _hover={{ bg: "gray.200" }}>
+        <Flex align="center" gap={3} borderRadius="4px" p="4px" transition="backgrounds" _hover={{ bg: "gray.200" }}>
           <Box borderRadius="100%" borderWidth={2} borderColor="gray.700" width={35} height={35} />
           <Flex direction="column" gap={2}>
             <Heading size="md">{displayName}</Heading>

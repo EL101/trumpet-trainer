@@ -10,6 +10,8 @@ export default function SaveButton({ disabled, ...props }) {
       fontWeight="600"
       width="8rem"
       disabled={disabled}
+      _hover={{ bgColor:"gray.400" }}
+      transition='backgrounds'
       onClick={handleSaveClick}
       {...props}
     >

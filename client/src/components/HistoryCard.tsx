@@ -11,7 +11,7 @@ export default function HistoryCard({ musicInfo, generated, setGenerated, histor
   }
 
   return (
-    <Box width={150} flexShrink={0} height={150}>
+    <Box width={150} flexShrink={0} height={150} transform="auto" _hover={{translateY: "-10px"}} transition="transform">
       <Heading size="md" color="gray.700">
         GEN #{musicInfo.generationNum}
       </Heading>

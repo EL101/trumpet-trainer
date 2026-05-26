@@ -164,6 +164,8 @@ export function Generate() {
                 color="white"
                 fontWeight="600"
                 width="8rem"
+                _hover={{ opacity: 0.85 }}
+                transition="opacity"
                 onClick={handleGenerateClick}
               >
                 Generate
@@ -187,7 +189,7 @@ export function Generate() {
               minW="0"
               overflowX="auto"
               gap={2}
-              pb={5}
+              py={2}
               css={{
                 // Make the scrollbar always visible (default macOS hides it)
                 "&::-webkit-scrollbar": {
