@@ -31,7 +31,10 @@ export function Generate() {
   const [range, setRange] = useState<Range>("LOW");
   const [difficulty, setDifficulty] = useState<Difficulty>("LOW");
 
-  const [history, setHistory] = usePersistedState<Array<MusicInfo>>("exercise-history", []);
+  const [history, setHistory] = usePersistedState<Record<number, MusicInfo>>(
+    "exercise-history",
+    {}
+  );
 
   const [generated, setGenerated] = usePersistedState<MusicInfo>("exercise", {
     notes: "",
@@ -40,20 +43,30 @@ export function Generate() {
     generationNum: 0,
   });
 
+  const [genCount, setGenCount] = usePersistedState("gen-count", 1);
+
   const handleGenerateClick = () => {
-    if (generated.notes) {
-      setHistory([generated, ...history]);
-    }
-    setGenerated({
+    const newGenCount = genCount + 1;
+    
+
+    const exercise = {
       notes: generateMusic(measures, timeSig, key, range, difficulty),
-      timeSig: timeSig,
+      timeSig,
       musicKey: key,
-      generationNum: generated.generationNum + 1,
-    });
+      generationNum: newGenCount
+    };
+
+    if (generated.notes && !history[generated.generationNum]) {
+      setHistory({ ...history, [genCount]: generated });
+    }
+
+    setGenerated(exercise);
+    setGenCount(newGenCount);
   };
 
   const handleClearClick = () => {
-    setHistory([]);
+    setHistory({});
+    setGenCount(1);
     setGenerated({...generated, generationNum: 1});
   }
 
@@ -159,7 +172,7 @@ export function Generate() {
             </Flex>
           </Flex>
           <Flex minW="0" flex="1" direction="column">
-            <Heading size="xl">GEN #{history.length + 1}</Heading>
+            <Heading size="xl">GEN #{generated.generationNum}</Heading>
             <SheetMusic
               notes={generated.notes}
               timeSig={generated.timeSig}
@@ -196,8 +209,16 @@ export function Generate() {
                 scrollbarColor: "var(--chakra-colors-gray-400) transparent",
               }}
             >
-              {history.map((elem) => (
-                <HistoryCard musicInfo={elem} />
+              {Object.entries(history)
+                .sort(([a], [b]) => Number(b) - Number(a))
+                .map(([_, exercise]) => (
+                  <HistoryCard 
+                    musicInfo={exercise} 
+                    generated={generated}
+                    setGenerated={setGenerated}
+                    history={history}
+                    setHistory={setHistory}
+                    />
               ))}
             </Flex>
           </Flex>

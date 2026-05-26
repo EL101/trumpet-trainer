@@ -2,7 +2,14 @@ import { Box, Heading } from "@chakra-ui/react";
 import type { MusicInfo } from "../pages/Generate";
 import { SheetMusic } from "./SheetMusic";
 
-export default function HistoryCard({ musicInfo }: { musicInfo: MusicInfo }) {
+export default function HistoryCard({ musicInfo, generated, setGenerated, history, setHistory }) {
+  const handleClick = () => {
+    if (!history[generated.generationNum]) {
+      setHistory({...history, [generated.generationNum]: generated});
+    }
+    setGenerated(musicInfo);
+  }
+
   return (
     <Box width={150} flexShrink={0} height={150}>
       <Heading size="md" color="gray.700">
@@ -16,6 +23,7 @@ export default function HistoryCard({ musicInfo }: { musicInfo: MusicInfo }) {
         width="400"
         overflowX="auto"
         cursor="pointer"
+        onClick={handleClick}
       />
     </Box>
   );
