@@ -22,6 +22,7 @@ export type MusicInfo = {
   timeSig: string;
   musicKey: Key;
   generationNum: number;
+  id: string;
 };
 
 export function Generate() {
@@ -33,7 +34,7 @@ export function Generate() {
 
   const [history, setHistory] = usePersistedState<Record<number, MusicInfo>>(
     "exercise-history",
-    {}
+    {},
   );
 
   const [generated, setGenerated] = usePersistedState<MusicInfo>("exercise", {
@@ -41,19 +42,20 @@ export function Generate() {
     timeSig: "4/4",
     musicKey: "C major" as Key,
     generationNum: 0,
+    id: crypto.randomUUID(),
   });
 
   const [genCount, setGenCount] = usePersistedState("gen-count", 1);
 
   const handleGenerateClick = () => {
     const newGenCount = genCount + 1;
-    
 
     const exercise = {
       notes: generateMusic(measures, timeSig, key, range, difficulty),
       timeSig,
       musicKey: key,
-      generationNum: newGenCount
+      generationNum: newGenCount,
+      id: crypto.randomUUID(),
     };
 
     if (generated.notes && !history[generated.generationNum]) {
@@ -67,8 +69,8 @@ export function Generate() {
   const handleClearClick = () => {
     setHistory({});
     setGenCount(1);
-    setGenerated({...generated, generationNum: 1});
-  }
+    setGenerated({ ...generated, generationNum: 1 });
+  };
 
   const keySelect = createListCollection({
     items: [
@@ -170,7 +172,7 @@ export function Generate() {
               >
                 Generate
               </Button>
-              <SaveButton disabled={generated.notes ? false : true} />
+              <SaveButton disabled={!generated.notes} generated={generated} />
             </Flex>
           </Flex>
           <Flex minW="0" flex="1" direction="column">
@@ -214,14 +216,15 @@ export function Generate() {
               {Object.entries(history)
                 .sort(([a], [b]) => Number(b) - Number(a))
                 .map(([_, exercise]) => (
-                  <HistoryCard 
-                    musicInfo={exercise} 
+                  <HistoryCard
+                    key={exercise.generationNum}
+                    musicInfo={exercise}
                     generated={generated}
                     setGenerated={setGenerated}
                     history={history}
                     setHistory={setHistory}
-                    />
-              ))}
+                  />
+                ))}
             </Flex>
           </Flex>
         </Flex>

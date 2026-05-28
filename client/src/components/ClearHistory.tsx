@@ -11,7 +11,7 @@ export default function ClearHistory({ onClear }: { onClear: () => void }) {
         variant="ghost"
         size="xs"
         color="gray.500"
-        _hover={{ color: "red.500" }}
+        _hover={{ color: "white", bgColor: "red.500" }}
         height="auto"
         minW="0"
         width="auto"
@@ -31,11 +31,15 @@ export default function ClearHistory({ onClear }: { onClear: () => void }) {
               <Dialog.Header>
                 <Dialog.Title>Clear History</Dialog.Title>
               </Dialog.Header>
-              <Dialog.Body>
-                This will remove all generated exercises from your history.
-              </Dialog.Body>
+              <Dialog.Body>This will remove all generated exercises from your history.</Dialog.Body>
               <Dialog.Footer mt={2}>
-                <Button variant="outline" onClick={() => setOpen(false)} px={4} height="auto" py={2}>
+                <Button
+                  variant="outline"
+                  onClick={() => setOpen(false)}
+                  px={4}
+                  height="auto"
+                  py={2}
+                >
                   Cancel
                 </Button>
                 <Button
@@ -45,7 +49,9 @@ export default function ClearHistory({ onClear }: { onClear: () => void }) {
                     onClear();
                     setOpen(false);
                   }}
-                  px={4} height="auto" py={2}
+                  px={4}
+                  height="auto"
+                  py={2}
                   fontWeight="bold"
                 >
                   Clear

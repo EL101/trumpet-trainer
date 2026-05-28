@@ -6,6 +6,7 @@ export default function DashboardTemplate({ children }) {
     <Box height="100vh" bgColor="white" color="black">
       <Flex height="100%" width="100%">
         <Sidebar></Sidebar>
+
         {children}
       </Flex>
     </Box>

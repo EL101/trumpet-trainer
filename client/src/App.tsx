@@ -8,7 +8,7 @@ import Profile from "./pages/Profile";
 import Today from "./pages/Today";
 import { SheetMusic } from "./components/SheetMusic";
 import { Generate } from "./pages/Generate";
-import Library from "./pages/Library";
+import { Library } from "./pages/Library";
 import Metronome from "./pages/Metronome";
 import Tuner from "./pages/Tuner";
 import Progress from "./pages/Progress";
