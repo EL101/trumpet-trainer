@@ -5,7 +5,10 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "migrate": "for f in migrations/*.sql; do docker exec -i pg-dev psql -U postgres -d trumpet_trainer < \"$f\"; done"
   },
   "keywords": [],
   "author": "",
@@ -15,12 +18,15 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "firebase-admin": "^13.10.0"
+    "firebase-admin": "^13.10.0",
+    "pg": "^8.21.0",
+    "prettier": "^3.8.3"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^25.9.1",
+    "@types/pg": "^8.20.0",
     "tsx": "^4.22.3",
     "typescript": "^6.0.3"
   }

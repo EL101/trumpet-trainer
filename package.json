@@ -4,16 +4,21 @@
   "main": "index.js",
   "scripts": {
     "dev": "concurrently \"npm run dev --prefix client\" \"npm run dev --prefix server\"",
-    "test": "vitest"
+    "test": "vitest",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "devDependencies": {
-    "concurrently": "^9.2.1"
+    "@types/cors": "^2.8.19",
+    "concurrently": "^9.2.1",
+    "express": "^5.2.1"
   },
   "dependencies": {
+    "cors": "^2.8.6",
     "semantic-ui-react": "^2.1.5"
   }
 }

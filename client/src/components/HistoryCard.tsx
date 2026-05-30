@@ -1,5 +1,4 @@
 import { Box, Heading } from "@chakra-ui/react";
-import type { MusicInfo } from "../pages/Generate";
 import { SheetMusic } from "./SheetMusic";
 
 export default function HistoryCard({ musicInfo, generated, setGenerated, history, setHistory }) {

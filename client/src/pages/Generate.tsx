@@ -13,7 +13,6 @@ import { Box, Button, createListCollection, Flex, Heading } from "@chakra-ui/rea
 import { DASHBOARD_PADDING } from "../constants/layout";
 import Dropdown from "../components/Dropdown";
 import HistoryCard from "../components/HistoryCard";
-import { usePersistedState } from "@/hooks/usePersistedState";
 import SaveButton from "@/components/SaveButton";
 import ClearHistory from "@/components/ClearHistory";
 
@@ -32,12 +31,11 @@ export function Generate() {
   const [range, setRange] = useState<Range>("LOW");
   const [difficulty, setDifficulty] = useState<Difficulty>("LOW");
 
-  const [history, setHistory] = usePersistedState<Record<number, MusicInfo>>(
-    "exercise-history",
+  const [history, setHistory] = useState<Record<number, MusicInfo>>(
     {},
   );
 
-  const [generated, setGenerated] = usePersistedState<MusicInfo>("exercise", {
+  const [generated, setGenerated] = useState<MusicInfo>({
     notes: "",
     timeSig: "4/4",
     musicKey: "C major" as Key,
@@ -45,7 +43,7 @@ export function Generate() {
     id: crypto.randomUUID(),
   });
 
-  const [genCount, setGenCount] = usePersistedState("gen-count", 1);
+  const [genCount, setGenCount] = useState(1);
 
   const handleGenerateClick = () => {
     const newGenCount = genCount + 1;
@@ -215,6 +213,7 @@ export function Generate() {
             >
               {Object.entries(history)
                 .sort(([a], [b]) => Number(b) - Number(a))
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 .map(([_, exercise]) => (
                   <HistoryCard
                     key={exercise.generationNum}
