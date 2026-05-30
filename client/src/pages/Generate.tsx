@@ -180,6 +180,8 @@ export function Generate() {
               timeSig={generated.timeSig}
               musicKey={generated.musicKey}
               minW="0"
+              height="150px"
+              overflowX="auto"
             />
             <Flex gap={2} align="center" justify="space-between" mt={2}>
               <Heading size="lg">HISTORY</Heading>

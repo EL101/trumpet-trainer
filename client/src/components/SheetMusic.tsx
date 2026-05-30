@@ -78,20 +78,21 @@ export function SheetMusic({ notes, timeSig, musicKey, ...rest }: SheetMusicProp
 
     if (!container) return;
     const svg = container.querySelector("svg");
-    if (svg && !("width" in rest)) {
+    if (svg) {
       svg.setAttribute("viewBox", `0 0 ${width * measures.length} ${height}`);
       svg.removeAttribute("width");
       svg.removeAttribute("height");
-      svg.style.width = "100%";
-      svg.style.maxHeight = "150";
-      svg.style.height = "auto";
-    } else if (svg && ("width" in rest)) {
-      svg.setAttribute("viewBox", `0 0 ${width * measures.length} ${height}`);
-      svg.removeAttribute("width");
-      svg.removeAttribute("height");
-      svg.style.width = rest["width"] as string;
-      svg.style.maxHeight = "150";
-      svg.style.height = "auto";
+      svg.style.flexShrink = "0";
+      svg.style.marginLeft = "auto";
+      svg.style.marginRight = "auto";
+      if ("height" in rest) {
+        svg.style.height = rest["height"] as string;
+        svg.style.width = rest["width"] as string ?? "100%";
+      } else {
+        svg.style.width = rest["width"] as string ?? "100%";
+        svg.style.maxHeight = "150px";
+        svg.style.height = "auto";
+      }
     }
     return () => {
       if (container) container.innerHTML = "";
@@ -99,6 +100,6 @@ export function SheetMusic({ notes, timeSig, musicKey, ...rest }: SheetMusicProp
   }, [notes, timeSig, measures]);
 
   return (
-    <Box {...rest} ref={containerRef} borderWidth={2} borderRadius="md" px={3} bgColor="gray.100" />
+    <Box {...rest} ref={containerRef} display="flex" alignItems="center" borderWidth={2} borderRadius="md" px={3} bgColor="gray.100" />
   );
 }

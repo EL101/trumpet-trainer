@@ -35,7 +35,8 @@ export default function HistoryCard({ musicInfo, generated, setGenerated, histor
         timeSig={musicInfo.timeSig}
         musicKey={musicInfo.musicKey}
         minW="0"
-        width="400"
+        height="100px"
+        width="auto"
         overflowX="auto"
         cursor="pointer"
         onClick={handleClick}
