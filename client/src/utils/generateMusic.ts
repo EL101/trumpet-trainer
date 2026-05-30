@@ -132,7 +132,7 @@ export function generateMusic(
     for (let i = 3; i <= 6; i++) {
       const currNote = `${note}${i}`;
       const currMidi = Note.midi(currNote);
-      if (currMidi >= low && currMidi <= high) {
+      if (currMidi && currMidi >= low! && currMidi <= high!) {
         rangedScale.push(currNote);
       }
     }

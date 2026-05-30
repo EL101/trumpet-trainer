@@ -1,9 +1,9 @@
-import { Flex, Heading, Separator } from "@chakra-ui/react";
+import { Flex, Heading, Separator, type FlexProps } from "@chakra-ui/react";
 import SidebarTab from "./SidebarTab";
 import { SidebarFooter } from "./SidebarFooter";
 import { DASHBOARD_PADDING } from "../constants/layout";
 
-export default function Sidebar(props) {
+export default function Sidebar(props: FlexProps) {
   return (
     <Flex
       height="100%"

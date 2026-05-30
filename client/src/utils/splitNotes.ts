@@ -1,7 +1,20 @@
+type Durations = 
+  | "w"
+  | "h"
+  | "q"
+  | "8"
+  | "16"
+  | "32"
+  | "w."
+  | "h."
+  | "q."
+  | "8."
+  | "16."
+
 export const DURATION_TO_BEATS = {
-  w: 4,
-  h: 2,
-  q: 1,
+  "w": 4,
+  "h": 2,
+  "q": 1,
   "8": 0.5,
   "16": 0.25,
   "32": 0.125,
@@ -35,9 +48,9 @@ export function splitNotes(notes: string, timeSig: string): string[] {
   for (const note of notesLst) {
     if (note.includes("/")) {
       if (note.includes("r") && note.includes(".")) {
-        currNoteVal = DURATION_TO_BEATS[note.split("/")[1] + "."];
+        currNoteVal = DURATION_TO_BEATS[note.split("/")[1] + "." as Durations];
       } else {
-        currNoteVal = DURATION_TO_BEATS[note.split("/")[1]];
+        currNoteVal = DURATION_TO_BEATS[note.split("/")[1] as Durations];
       }
     }
     currMeasureDur += currNoteVal / (4 / noteValue);

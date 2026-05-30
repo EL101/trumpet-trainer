@@ -1,7 +1,16 @@
 import { Box, Heading } from "@chakra-ui/react";
 import { SheetMusic } from "./SheetMusic";
+import type { MusicInfo } from "@/pages/Generate";
+import type { Dispatch, SetStateAction } from "react";
 
-export default function HistoryCard({ musicInfo, generated, setGenerated, history, setHistory }) {
+type HistoryCardProps = {
+  musicInfo: MusicInfo;
+  generated: MusicInfo;
+  setGenerated: Dispatch<SetStateAction<MusicInfo>>;
+  history: Record<number, MusicInfo>;
+  setHistory: Dispatch<SetStateAction<Record<number, MusicInfo>>>;
+}
+export default function HistoryCard({ musicInfo, generated, setGenerated, history, setHistory }: HistoryCardProps) {
   const handleClick = () => {
     if (!history[generated.generationNum]) {
       setHistory({ ...history, [generated.generationNum]: generated });

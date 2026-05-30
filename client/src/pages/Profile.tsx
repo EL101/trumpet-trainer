@@ -12,8 +12,7 @@ export default function Profile() {
     <DashboardTemplate>
       <Box height="100%" minW="0" flex="1" p={DASHBOARD_PADDING}>
         <Flex height="100%" direction="column" gap={5}>
-          <Heading size="2xl">{user.displayName}</Heading>
-          <Heading>UID: {user.uid}</Heading>
+          <Heading size="2xl">{user ? user.displayName : "Guest"}</Heading>
           <SignOut/>
         </Flex>
       </Box>

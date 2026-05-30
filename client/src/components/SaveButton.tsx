@@ -1,18 +1,21 @@
 import { Button } from "@chakra-ui/react";
 import { AuthUserContext } from "@/auth/AuthUserContext";
-import { useContext } from "react";
+import { useContext, type ReactNode } from "react";
 import type { MusicInfo } from "@/pages/Generate";
 
+type SaveButtonProps = {
+  disabled: boolean,
+  generated: MusicInfo,
+  props?: ReactNode | undefined
+}
 export default function SaveButton({
   disabled,
   generated,
   ...props
-}: {
-  disabled: boolean;
-  generated: MusicInfo;
-}) {
+}: SaveButtonProps) {
   const { user } = useContext(AuthUserContext);
-
+  console.log(user?.displayName);
+  console.log(generated);
   const handleSaveClick = async () => {
     
   };

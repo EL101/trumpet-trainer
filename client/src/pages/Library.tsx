@@ -11,7 +11,7 @@ export type LibraryEntry = MusicInfo & {
 
 export function Library() {
   const { user } = useContext(AuthUserContext);
-
+  console.log(user?.displayName);
   return (
     <DashboardTemplate>
       <Box height="100%" minW="0" flex="1" p={DASHBOARD_PADDING}>

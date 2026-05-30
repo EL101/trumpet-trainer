@@ -4,6 +4,7 @@ import { auth } from "../firebase";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Icon } from "@chakra-ui/react";
 import { FcGoogle } from "react-icons/fc";
+import { FirebaseError } from "firebase/app";
 
 export default function SignInWithGoogle() {
   const navigate = useNavigate();
@@ -18,7 +19,7 @@ export default function SignInWithGoogle() {
       console.log("Signed in:", user.displayName, user.email);
       navigate(from, { replace: true });
     } catch (error) {
-      if (error.code === "auth/popup-closed-by-user") {
+      if (error instanceof FirebaseError && error.code === "auth/popup-closed-by-user") {
         return;
       }
       console.error("Sign-in error:", error);

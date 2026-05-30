@@ -1,11 +1,11 @@
 import { AuthUserContext } from "@/auth/AuthUserContext";
-import { Box, Flex, Heading, Separator } from "@chakra-ui/react";
+import { Box, Flex, Heading, Separator, type FlexProps } from "@chakra-ui/react";
 import { useContext } from "react";
 import { NavLink } from "react-router-dom";
 
-export function SidebarFooter(props) {
+export function SidebarFooter(props: FlexProps) {
   const { user } = useContext(AuthUserContext);
-  const displayName = user.isAnonymous ? "Guest" : user.displayName;
+  const displayName = user?.isAnonymous ? "Guest" : user?.displayName;
 
   return (
     <Flex direction="column" gap={1} {...props}>

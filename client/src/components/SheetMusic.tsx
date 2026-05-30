@@ -38,19 +38,20 @@ export function SheetMusic({ notes, timeSig, musicKey, ...rest }: SheetMusicProp
       const allNotes = score.notes(measureNotes);
       const beamGroups: (typeof allNotes)[] = [];
       let currentGroup: typeof allNotes = [];
-      let currentStemDir: number = allNotes[0].stem_direction;
+
+      let currentStemDir: number = allNotes[0].stem_direction ?? 0;
       allNotes.forEach((note) => {
         const dur = note.getDuration();
         const beamable = (dur === "8" || dur === "16") && !note.isRest();
         if (beamable && (note.stem_direction === currentStemDir || currentStemDir === 0)) {
           currentGroup.push(note);
-          currentStemDir = note.stem_direction;
+          currentStemDir = note.stem_direction ?? currentStemDir;
         } else {
           if (currentGroup.length >= 2) {
             beamGroups.push([...currentGroup]);
           }
           currentGroup = beamable ? [note] : [];
-          currentStemDir = beamable ? note.stem_direction : 0;
+          currentStemDir = beamable ? (note.stem_direction ?? currentStemDir) : 0;
         }
       });
       if (currentGroup.length >= 2) {
@@ -75,6 +76,7 @@ export function SheetMusic({ notes, timeSig, musicKey, ...rest }: SheetMusicProp
 
     factory.draw();
 
+    if (!container) return;
     const svg = container.querySelector("svg");
     if (svg && !("width" in rest)) {
       svg.setAttribute("viewBox", `0 0 ${width * measures.length} ${height}`);
@@ -83,11 +85,11 @@ export function SheetMusic({ notes, timeSig, musicKey, ...rest }: SheetMusicProp
       svg.style.width = "100%";
       svg.style.maxHeight = "150";
       svg.style.height = "auto";
-    } else if (svg) {
+    } else if (svg && ("width" in rest)) {
       svg.setAttribute("viewBox", `0 0 ${width * measures.length} ${height}`);
       svg.removeAttribute("width");
       svg.removeAttribute("height");
-      svg.style.width = rest["width"];
+      svg.style.width = rest["width"] as string;
       svg.style.maxHeight = "150";
       svg.style.height = "auto";
     }
