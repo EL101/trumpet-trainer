@@ -43,7 +43,7 @@ export function Generate() {
     id: crypto.randomUUID(),
   });
 
-  const [genCount, setGenCount] = useState(1);
+  const [genCount, setGenCount] = useState(0);
 
   const handleGenerateClick = () => {
     const newGenCount = genCount + 1;
