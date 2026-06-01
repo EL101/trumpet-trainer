@@ -1,7 +1,8 @@
-import { Box, Heading } from "@chakra-ui/react";
+import { Box, Heading, Text } from "@chakra-ui/react";
 import { SheetMusic } from "./SheetMusic";
 import type { MusicInfo } from "@/pages/Generate";
 import type { Dispatch, SetStateAction } from "react";
+import type { Key } from "@/utils/generateMusic";
 
 type HistoryCardProps = {
   musicInfo: MusicInfo;
@@ -9,6 +10,11 @@ type HistoryCardProps = {
   setGenerated: Dispatch<SetStateAction<MusicInfo>>;
   history: Record<number, MusicInfo>;
   setHistory: Dispatch<SetStateAction<Record<number, MusicInfo>>>;
+}
+
+function keyToShorthand(key: Key) {
+  if (key.includes("major")) return key.split(" ")[0];
+  return key.split(" ")[0] + "m";
 }
 export default function HistoryCard({ musicInfo, generated, setGenerated, history, setHistory }: HistoryCardProps) {
   const handleClick = () => {
@@ -41,6 +47,7 @@ export default function HistoryCard({ musicInfo, generated, setGenerated, histor
         cursor="pointer"
         onClick={handleClick}
       />
+      <Text fontSize="0.7rem" color="gray.500" fontWeight="500">{keyToShorthand(musicInfo.musicKey)} • {musicInfo.range[0]} Range • {musicInfo.difficulty[0]} Diff</Text>
     </Box>
   );
 }

@@ -10,12 +10,14 @@ type SaveButtonProps = {
 }
 export default function SaveButton({
   disabled,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   generated,
   ...props
 }: SaveButtonProps) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { user } = useContext(AuthUserContext);
-  console.log(user?.displayName);
-  console.log(generated);
+  // console.log(user?.displayName);
+  // console.log(generated);
   const handleSaveClick = async () => {
     
   };

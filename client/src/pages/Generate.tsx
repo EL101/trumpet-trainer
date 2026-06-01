@@ -6,7 +6,7 @@ import {
   PRACTICAL_MAJOR,
   PRACTICAL_MINOR,
 } from "@/utils/generateMusic";
-import { useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import DashboardTemplate from "../components/DashBoardTemplate";
 import { SheetMusic } from "../components/SheetMusic";
 import { Box, Button, createListCollection, Flex, Heading } from "@chakra-ui/react";
@@ -15,11 +15,14 @@ import Dropdown from "../components/Dropdown";
 import HistoryCard from "../components/HistoryCard";
 import SaveButton from "@/components/SaveButton";
 import ClearHistory from "@/components/ClearHistory";
+import { AuthUserContext } from "@/auth/AuthUserContext";
 
 export type MusicInfo = {
   notes: string;
   timeSig: string;
   musicKey: Key;
+  range: Range;
+  difficulty: Difficulty;
   generationNum: number;
   id: string;
 };
@@ -31,15 +34,48 @@ export function Generate() {
   const [range, setRange] = useState<Range>("LOW");
   const [difficulty, setDifficulty] = useState<Difficulty>("LOW");
 
-  const [history, setHistory] = useState<Record<number, MusicInfo>>(
-    {},
+  const [history, setHistory] = useState<Record<number, MusicInfo>>( 
+    {}
   );
+
+  const { user } = useContext(AuthUserContext);
+  useEffect(() => {
+    const controller = new AbortController();
+    async function loadHistory() {
+      try {
+        if (!user) return;
+        const token = await user.getIdToken();
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/history`, {
+          method:"GET",
+          headers: {
+            Authorization: `Bearer ${token}`
+          },
+          signal: controller.signal 
+        });
+        if (!res.ok) {
+          throw new Error(`Request failed: ${res.status}`);
+        }
+        const data = await res.json();
+        console.log("data:", data);
+        // const initialHistory = {};
+        
+      } catch (error) {
+        console.log("fetch history error: ", error);
+      }
+    }
+
+    loadHistory();
+
+    return () => controller.abort();
+  }, [user]);
 
   const [generated, setGenerated] = useState<MusicInfo>({
     notes: "",
     timeSig: "4/4",
     musicKey: "C major" as Key,
     generationNum: 0,
+    range: "MED",
+    difficulty: "LOW",
     id: crypto.randomUUID(),
   });
 
@@ -53,6 +89,8 @@ export function Generate() {
       timeSig,
       musicKey: key,
       generationNum: newGenCount,
+      range,
+      difficulty,
       id: crypto.randomUUID(),
     };
 
