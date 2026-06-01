@@ -1,9 +1,8 @@
 import "dotenv/config";
-import "./firebase";
+import "./firebase.js";
 import express, { Request, Response } from "express";
 import cors from "cors";
-import userRouter from "./routes/users";
-import historyRouter from "./routes/history";
+import historyRouter from "./routes/history.js";
 
 const app = express();
 app.use(cors());
@@ -17,7 +16,6 @@ app.get("/", (_req: Request, res: Response) => {
   res.send("hello");
 });
 
-app.use("/api/users", userRouter);
 app.use("/api/history", historyRouter);
 
 const PORT = process.env.PORT || 3001;

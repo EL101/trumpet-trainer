@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { requireAuth } from "../middleware/requireAuth";
-import { pool } from "../db";
+import { pool } from "../db.js";
 import { z } from "zod";
 import camelcaseKeys from "camelcase-keys";
 
