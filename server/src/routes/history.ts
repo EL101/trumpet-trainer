@@ -2,18 +2,19 @@ import { Router, Request, Response } from "express";
 import { requireAuth } from "../middleware/requireAuth";
 import { pool } from "../db";
 import { z } from "zod";
+import camelcaseKeys from "camelcase-keys";
 
 const router = Router();
 
 router.get("/", requireAuth, async (req: Request, res: Response) => {
   const { rows } = await pool.query(
-    `SELECT id, notes, time_sig, music_key, note_range, difficulty, generation_num
+    `SELECT id, notes, time_sig, music_key, note_range AS range, difficulty, generation_num
       FROM history
       WHERE user_id = $1
       ORDER BY created_at DESC`,
     [req.user!.uid]
   );
-  res.json(rows);
+  res.json(camelcaseKeys(rows, {deep: true}));
 });
 
 const UpdateHistorySchema = z.object({

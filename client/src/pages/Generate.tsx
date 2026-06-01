@@ -38,6 +38,17 @@ export function Generate() {
     {}
   );
 
+  const [generated, setGenerated] = useState<MusicInfo>({
+    notes: "",
+    timeSig: "4/4",
+    musicKey: "C major" as Key,
+    generationNum: 0,
+    range: "MED",
+    difficulty: "LOW",
+    id: crypto.randomUUID(),
+  });
+  const [genCount, setGenCount] = useState(0);
+
   const { user } = useContext(AuthUserContext);
   useEffect(() => {
     const controller = new AbortController();
@@ -55,11 +66,16 @@ export function Generate() {
         if (!res.ok) {
           throw new Error(`Request failed: ${res.status}`);
         }
-        const data = await res.json();
+        const data: MusicInfo[] = await res.json();
         console.log("data:", data);
-        // const initialHistory = {};
-        
+
+        setHistory(Object.fromEntries(data.map(item => [item.generationNum, item])));
+        setGenCount(data[0].generationNum);
+        // setGenerated(data[0]);
       } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+          return;
+        }
         console.log("fetch history error: ", error);
       }
     }
@@ -69,17 +85,37 @@ export function Generate() {
     return () => controller.abort();
   }, [user]);
 
-  const [generated, setGenerated] = useState<MusicInfo>({
-    notes: "",
-    timeSig: "4/4",
-    musicKey: "C major" as Key,
-    generationNum: 0,
-    range: "MED",
-    difficulty: "LOW",
-    id: crypto.randomUUID(),
-  });
+  
 
-  const [genCount, setGenCount] = useState(0);
+
+  async function addToHistory(exercise: MusicInfo) {
+    try {
+      if (!user) return;
+      const token = await user.getIdToken();
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/history`, {
+        method:"POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          notes: exercise.notes,
+          timeSig, 
+          musicKey: exercise.musicKey, 
+          noteRange: exercise.range, 
+          difficulty,
+          generationNum: exercise.generationNum
+        })
+      });
+      if (!res.ok) {
+        throw new Error(`Request failed: ${res.status}`);
+      }
+      setHistory({ ...history, [exercise.generationNum]: exercise });
+
+    } catch (error) {
+      console.log("update history error: ", error);
+    }
+  }
 
   const handleGenerateClick = () => {
     const newGenCount = genCount + 1;
@@ -95,7 +131,7 @@ export function Generate() {
     };
 
     if (generated.notes && !history[generated.generationNum]) {
-      setHistory({ ...history, [genCount]: generated });
+      addToHistory(generated);
     }
 
     setGenerated(exercise);
@@ -212,7 +248,7 @@ export function Generate() {
             </Flex>
           </Flex>
           <Flex minW="0" flex="1" direction="column">
-            <Heading size="xl">GEN #{generated.generationNum}</Heading>
+            <Heading size="xl">{generated.notes ? `GEN #${generated.generationNum}` : ""}</Heading>
             <SheetMusic
               notes={generated.notes}
               timeSig={generated.timeSig}

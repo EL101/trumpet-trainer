@@ -4,11 +4,12 @@ import { Box, type BoxProps } from "@chakra-ui/react";
 import { splitNotes } from "../utils/splitNotes";
 import { getKeySig, type Key } from "@/utils/generateMusic";
 
-export type SheetMusicProps = BoxProps & {
+
+type SheetMusicProps = BoxProps & {
   notes: string;
   timeSig: string;
   musicKey: Key;
-};
+}
 
 export function SheetMusic({ notes, timeSig, musicKey, ...rest }: SheetMusicProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -100,6 +101,6 @@ export function SheetMusic({ notes, timeSig, musicKey, ...rest }: SheetMusicProp
   }, [notes, timeSig, measures]);
 
   return (
-    <Box {...rest} ref={containerRef} display="flex" alignItems="center" borderWidth={2} borderRadius="md" px={3} bgColor="gray.100" />
+    <Box ref={containerRef} display="flex" alignItems="center" borderWidth={2} borderRadius="md" px={3} bgColor="gray.100" {...rest} />
   );
 }
