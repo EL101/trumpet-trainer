@@ -8,7 +8,8 @@
     "start": "node dist/index.js",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "migrate": "for f in migrations/*.sql; do docker exec -i pg-dev psql -U postgres -d trumpet_trainer < \"$f\"; done"
+    "migrate:local": "for f in migrations/*.sql; do echo \"applying $f\"; docker exec -i pg-dev psql -U postgres -d trumpet_trainer < \"$f\" || exit 1; done",
+    "migrate:prod": "dotenv -e .env -- bash -c 'for f in migrations/*.sql; do echo \"applying $f\"; psql \"$NEON_DATABASE_URL\" -f \"$f\" || exit 1; done'"
   },
   "keywords": [],
   "author": "",
@@ -29,6 +30,7 @@
     "@types/express": "^5.0.6",
     "@types/node": "^25.9.1",
     "@types/pg": "^8.20.0",
+    "dotenv-cli": "^11.0.0",
     "tsx": "^4.22.3",
     "typescript": "^6.0.3"
   }
