@@ -16,6 +16,7 @@ import HistoryCard from "../components/HistoryCard";
 import SaveButton from "@/components/SaveButton";
 import ClearHistory from "@/components/ClearHistory";
 import { AuthUserContext } from "@/auth/AuthUserContext";
+import { clearHistory, getInitialHistory, insertToHistory } from "@/utils/history";
 
 export type MusicInfo = {
   notes: string;
@@ -49,68 +50,13 @@ export function Generate() {
 
   const { user } = useContext(AuthUserContext);
   useEffect(() => {
-    const controller = new AbortController();
-    async function loadHistory() {
-      try {
-        if (!user) return;
-        const token = await user.getIdToken();
-        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/history`, {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          signal: controller.signal,
-        });
-        if (!res.ok) {
-          throw new Error(`Request failed: ${res.status}`);
-        }
-        const data: MusicInfo[] = await res.json();
-        console.log("data:", data);
-
-        setHistory(Object.fromEntries(data.map((item) => [item.generationNum, item])));
-        setGenCount(data[0].generationNum);
-        // setGenerated(data[0]);
-      } catch (error) {
-        if (error instanceof Error && error.name === "AbortError") {
-          return;
-        }
-        console.log("fetch history error: ", error);
-      }
-    }
-
-    loadHistory();
-
-    return () => controller.abort();
+    getInitialHistory(user, setHistory, setGenCount);
   }, [user]);
 
   
-  const addToHistory = useCallback(async (exercise: MusicInfo) => {
-    try {
-      if (!user) return;
-      const token = await user.getIdToken();
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/history`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          notes: exercise.notes,
-          timeSig,
-          musicKey: exercise.musicKey,
-          noteRange: exercise.range,
-          difficulty,
-          generationNum: exercise.generationNum,
-        }),
-      });
-      if (!res.ok) {
-        throw new Error(`Request failed: ${res.status}`);
-      }
-      setHistory((prev) => ({ ...prev, [exercise.generationNum]: exercise }));
-    } catch (error) {
-      console.log("update history error: ", error);
-    }
-  }, [user, timeSig, difficulty]);
+  const addToHistory = useCallback((exercise: MusicInfo) => {
+    insertToHistory(exercise, user, setHistory);
+  }, [user]);
 
   const generatedRef = useRef(generated);
   const addToHistoryRef = useRef(addToHistory);
@@ -148,7 +94,7 @@ export function Generate() {
   };
 
   const handleClearClick = () => {
-    setHistory({});
+    clearHistory(user, setHistory);
     setGenCount(1);
     setGenerated({ ...generated, generationNum: 1 });
   };

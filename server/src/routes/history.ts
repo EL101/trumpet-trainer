@@ -11,7 +11,7 @@ router.get("/", requireAuth, async (req: Request, res: Response) => {
     `SELECT id, notes, time_sig, music_key, note_range AS range, difficulty, generation_num
       FROM history
       WHERE user_id = $1
-      ORDER BY created_at DESC`,
+      ORDER BY generation_num DESC`,
     [req.user!.uid]
   );
   res.json(camelcaseKeys(rows, {deep: true}));
@@ -44,6 +44,18 @@ router.post("/", requireAuth, async (req: Request, res: Response) => {
   } catch (err) {
     console.error("Failed to insert history row:", err);
     res.status(500).json({ error: "Failed to save history entry" });
+  }
+});
+
+router.delete("/", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { rows } = await pool.query(
+      `TRUNCATE TABLE history`
+    );
+    res.status(201).json(camelcaseKeys(rows, {deep: true}));
+  } catch (err) {
+    console.error("Failed to clear history:", err);
+    res.status(500).json({ error: "Failed to clear history" });
   }
 });
 
