@@ -3,6 +3,7 @@ import "./firebase.js";
 import express, { Request, Response } from "express";
 import cors from "cors";
 import historyRouter from "./routes/history.js";
+import libraryRouter from "./routes/library.js";
 
 const app = express();
 app.use(cors());
@@ -17,6 +18,7 @@ app.get("/", (_req: Request, res: Response) => {
 });
 
 app.use("/api/history", historyRouter);
+app.use("/api/library", libraryRouter);
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`Server on ${PORT}`));

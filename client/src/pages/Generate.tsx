@@ -6,7 +6,7 @@ import {
   PRACTICAL_MAJOR,
   PRACTICAL_MINOR,
 } from "@/utils/generateMusic";
-import { useContext, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import DashboardTemplate from "../components/DashBoardTemplate";
 import { SheetMusic } from "../components/SheetMusic";
 import { Box, Button, createListCollection, Flex, Heading } from "@chakra-ui/react";
@@ -34,9 +34,7 @@ export function Generate() {
   const [range, setRange] = useState<Range>("LOW");
   const [difficulty, setDifficulty] = useState<Difficulty>("LOW");
 
-  const [history, setHistory] = useState<Record<number, MusicInfo>>( 
-    {}
-  );
+  const [history, setHistory] = useState<Record<number, MusicInfo>>({});
 
   const [generated, setGenerated] = useState<MusicInfo>({
     notes: "",
@@ -57,11 +55,11 @@ export function Generate() {
         if (!user) return;
         const token = await user.getIdToken();
         const res = await fetch(`${import.meta.env.VITE_API_URL}/api/history`, {
-          method:"GET",
+          method: "GET",
           headers: {
-            Authorization: `Bearer ${token}`
+            Authorization: `Bearer ${token}`,
           },
-          signal: controller.signal 
+          signal: controller.signal,
         });
         if (!res.ok) {
           throw new Error(`Request failed: ${res.status}`);
@@ -69,7 +67,7 @@ export function Generate() {
         const data: MusicInfo[] = await res.json();
         console.log("data:", data);
 
-        setHistory(Object.fromEntries(data.map(item => [item.generationNum, item])));
+        setHistory(Object.fromEntries(data.map((item) => [item.generationNum, item])));
         setGenCount(data[0].generationNum);
         // setGenerated(data[0]);
       } catch (error) {
@@ -86,36 +84,47 @@ export function Generate() {
   }, [user]);
 
   
-
-
-  async function addToHistory(exercise: MusicInfo) {
+  const addToHistory = useCallback(async (exercise: MusicInfo) => {
     try {
       if (!user) return;
       const token = await user.getIdToken();
       const res = await fetch(`${import.meta.env.VITE_API_URL}/api/history`, {
-        method:"POST",
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           notes: exercise.notes,
-          timeSig, 
-          musicKey: exercise.musicKey, 
-          noteRange: exercise.range, 
+          timeSig,
+          musicKey: exercise.musicKey,
+          noteRange: exercise.range,
           difficulty,
-          generationNum: exercise.generationNum
-        })
+          generationNum: exercise.generationNum,
+        }),
       });
       if (!res.ok) {
         throw new Error(`Request failed: ${res.status}`);
       }
-      setHistory({ ...history, [exercise.generationNum]: exercise });
-
+      setHistory((prev) => ({ ...prev, [exercise.generationNum]: exercise }));
     } catch (error) {
       console.log("update history error: ", error);
     }
-  }
+  }, [user, timeSig, difficulty]);
+
+  const generatedRef = useRef(generated);
+  const addToHistoryRef = useRef(addToHistory);
+
+  useEffect(() => { generatedRef.current = generated; }, [generated]);
+  useEffect(() => { addToHistoryRef.current = addToHistory; }, [addToHistory]);
+
+  useEffect(() => {
+    return () => {
+      if (generatedRef.current.notes) {
+        addToHistoryRef.current(generatedRef.current);
+      }
+    };
+  }, []); 
 
   const handleGenerateClick = () => {
     const newGenCount = genCount + 1;
