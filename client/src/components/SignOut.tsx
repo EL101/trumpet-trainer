@@ -13,7 +13,7 @@ export default function SignOut() {
     }
   };
   return (
-    <Button onClick={handleClick} p="1rem 2rem">
+    <Button onClick={handleClick} p="1rem 2rem" width="100px" borderWidth={2} borderColor="black">
       Sign Out
     </Button>
   );

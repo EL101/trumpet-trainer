@@ -32,7 +32,7 @@ export default function Metronome() {
     <DashboardTemplate>
       <Heading size="2xl">Metronome</Heading>
       
-      <TempoSlider min={0} max={240} defaultVal={100} alignSelf="center"/>
+      <TempoSlider min={0} max={240} defaultVal={100} tempo={bpm} setTempo={setBpm} alignSelf="center"/>
       <Dropdown
         collection={timeSigSelect}
         label="TIME SIGNATURE"

@@ -10,12 +10,8 @@ export default function Profile() {
 
   return (
     <DashboardTemplate>
-      <Box height="100%" minW="0" flex="1" p={DASHBOARD_PADDING}>
-        <Flex height="100%" direction="column" gap={5}>
-          <Heading size="2xl">{user ? user.displayName : "Guest"}</Heading>
-          <SignOut />
-        </Flex>
-      </Box>
+      <Heading size="2xl">{user ? user.displayName : "Guest"}</Heading>
+      <SignOut />
     </DashboardTemplate>
   );
 }
