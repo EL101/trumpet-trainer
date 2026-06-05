@@ -9,8 +9,7 @@ import {
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import DashboardTemplate from "../components/DashBoardTemplate";
 import { SheetMusic } from "../components/SheetMusic";
-import { Box, Button, createListCollection, Flex, Heading } from "@chakra-ui/react";
-import { DASHBOARD_PADDING } from "../constants/layout";
+import { Button, createListCollection, Flex, Heading } from "@chakra-ui/react";
 import Dropdown from "../components/Dropdown";
 import HistoryCard from "../components/HistoryCard";
 import SaveButton from "@/components/SaveButton";
@@ -147,8 +146,6 @@ export function Generate() {
 
   return (
     <DashboardTemplate>
-      <Box height="100%" minW="0" flex="1" p={DASHBOARD_PADDING}>
-        <Flex height="100%" direction="column" gap={5}>
           <Flex
             flex="1"
             gap={2}
@@ -257,8 +254,6 @@ export function Generate() {
                 ))}
             </Flex>
           </Flex>
-        </Flex>
-      </Box>
     </DashboardTemplate>
   );
 }
