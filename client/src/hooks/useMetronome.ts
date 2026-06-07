@@ -2,23 +2,33 @@ import { useEffect, useState } from "react";
 
 type useMetronomeProps = {
   tempo: number;
-  timeSig: string;
   subdivision: number;
-  playing: boolean;
+  isPlaying: boolean;
+  beats: number;
 };
 
-export default function useMetronome({ tempo, timeSig, subdivision, playing }: useMetronomeProps) {
+export default function useMetronome({ tempo, beats, subdivision, isPlaying }: useMetronomeProps) {
   const [currBeat, setCurrBeat] = useState<number>(-1);
-  const [measureBeats, noteVal] = timeSig.split("/").map((e: string) => parseInt(e));
+
   useEffect(() => {
-    const delay = ((60 * 1000) / tempo) * ((subdivision * noteVal) / 4);
-    const beats = measureBeats / ((subdivision * noteVal) / 4);
-    setInterval(() => {
-      if (playing) {
-        setCurrBeat((currBeat + 1) % beats);
+    const delay = (60 * 1000) / tempo;
+    if (!isPlaying) {
+      return;
+    }
+
+    const firstId = setTimeout(() => setCurrBeat(0), 0);
+    let tick = 0;
+    const id = setInterval(() => {
+      if (isPlaying) {
+        tick += 1;
+        setCurrBeat(tick % beats);
       }
     }, delay);
-  }, [tempo, timeSig, subdivision, playing, currBeat, measureBeats, noteVal]);
+    return () => {
+      clearInterval(id);
+      clearTimeout(firstId);
+    };
+  }, [tempo, subdivision, isPlaying, beats]);
 
-  return currBeat;
+  return isPlaying ? currBeat : -1;
 }
