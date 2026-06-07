@@ -14,7 +14,8 @@ export default function SaveButton({ disabled, generated, ...props }: SaveButton
   if (!user) console.log("no user");
   if (!generated) console.log("no generated");
   const [saved, setSaved] = useState<MusicInfo[]>([]);
-  const newDisabled = disabled || saved.some(item => item.generationNum === generated.generationNum);
+  const newDisabled =
+    disabled || saved.some((item) => item.generationNum === generated.generationNum);
 
   const handleSaveClick = async () => {
     try {

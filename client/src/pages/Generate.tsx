@@ -52,16 +52,22 @@ export function Generate() {
     getInitialHistory(user, setHistory, setGenCount);
   }, [user]);
 
-  
-  const addToHistory = useCallback((exercise: MusicInfo) => {
-    insertToHistory(exercise, user, setHistory);
-  }, [user]);
+  const addToHistory = useCallback(
+    (exercise: MusicInfo) => {
+      insertToHistory(exercise, user, setHistory);
+    },
+    [user],
+  );
 
   const generatedRef = useRef(generated);
   const addToHistoryRef = useRef(addToHistory);
 
-  useEffect(() => { generatedRef.current = generated; }, [generated]);
-  useEffect(() => { addToHistoryRef.current = addToHistory; }, [addToHistory]);
+  useEffect(() => {
+    generatedRef.current = generated;
+  }, [generated]);
+  useEffect(() => {
+    addToHistoryRef.current = addToHistory;
+  }, [addToHistory]);
 
   useEffect(() => {
     return () => {
@@ -69,7 +75,7 @@ export function Generate() {
         addToHistoryRef.current(generatedRef.current);
       }
     };
-  }, []); 
+  }, []);
 
   const handleGenerateClick = () => {
     const newGenCount = genCount + 1;
@@ -146,114 +152,114 @@ export function Generate() {
 
   return (
     <DashboardTemplate>
-          <Flex
-            flex="1"
-            gap={2}
-            height="100%"
-            // borderRightWidth={{ base: 0, lg: 2 }}
-            direction="column"
+      <Flex
+        flex="1"
+        gap={2}
+        height="100%"
+        // borderRightWidth={{ base: 0, lg: 2 }}
+        direction="column"
+      >
+        <Heading size="2xl">Generate An Exercise</Heading>
+        <Dropdown
+          collection={keySelect}
+          label="KEY / SCALE"
+          defaultVal="C major"
+          onValueChange={(e) => setKey(e.value[0] as Key)}
+        />
+        <Dropdown
+          collection={lengthSelect}
+          label="LENGTH"
+          defaultVal="2"
+          onValueChange={(e) => setMeasures(parseInt(e.value[0]))}
+        />
+        <Dropdown
+          collection={rangeSelect}
+          label="RANGE"
+          defaultVal="MED"
+          onValueChange={(e) => setRange(e.value[0] as Range)}
+        />
+        <Dropdown
+          collection={difficultySelect}
+          label="DIFFICULTY"
+          defaultVal="LOW"
+          onValueChange={(e) => setDifficulty(e.value[0] as Difficulty)}
+        />
+        <Dropdown
+          collection={timeSigSelect}
+          label="TIME SIGNATURE"
+          defaultVal="4/4"
+          onValueChange={(e) => setTimeSig(e.value[0])}
+        />
+        <Flex gap={2}>
+          <Button
+            bgColor="black"
+            color="white"
+            fontWeight="600"
+            width="8rem"
+            _hover={{ opacity: 0.85 }}
+            transition="opacity"
+            onClick={handleGenerateClick}
           >
-            <Heading size="2xl">Generate An Exercise</Heading>
-            <Dropdown
-              collection={keySelect}
-              label="KEY / SCALE"
-              defaultVal="C major"
-              onValueChange={(e) => setKey(e.value[0] as Key)}
-            />
-            <Dropdown
-              collection={lengthSelect}
-              label="LENGTH"
-              defaultVal="2"
-              onValueChange={(e) => setMeasures(parseInt(e.value[0]))}
-            />
-            <Dropdown
-              collection={rangeSelect}
-              label="RANGE"
-              defaultVal="MED"
-              onValueChange={(e) => setRange(e.value[0] as Range)}
-            />
-            <Dropdown
-              collection={difficultySelect}
-              label="DIFFICULTY"
-              defaultVal="LOW"
-              onValueChange={(e) => setDifficulty(e.value[0] as Difficulty)}
-            />
-            <Dropdown
-              collection={timeSigSelect}
-              label="TIME SIGNATURE"
-              defaultVal="4/4"
-              onValueChange={(e) => setTimeSig(e.value[0])}
-            />
-            <Flex gap={2}>
-              <Button
-                bgColor="black"
-                color="white"
-                fontWeight="600"
-                width="8rem"
-                _hover={{ opacity: 0.85 }}
-                transition="opacity"
-                onClick={handleGenerateClick}
-              >
-                Generate
-              </Button>
-              <SaveButton disabled={!generated.notes} generated={generated} />
-            </Flex>
-          </Flex>
-          <Flex minW="0" flex="1" direction="column">
-            <Heading size="xl">{generated.notes ? `GEN #${generated.generationNum}` : ""}</Heading>
-            <SheetMusic
-              notes={generated.notes}
-              timeSig={generated.timeSig}
-              musicKey={generated.musicKey}
-              minW="0"
-              height="150px"
-              overflowX="auto"
-            />
-            <Flex gap={2} align="center" justify="space-between" mt={2}>
-              <Heading size="lg">HISTORY</Heading>
-              <ClearHistory onClear={handleClearClick}></ClearHistory>
-            </Flex>
-            <Flex
-              minW="0"
-              overflowX="auto"
-              gap={2}
-              py={2}
-              css={{
-                // Make the scrollbar always visible (default macOS hides it)
-                "&::-webkit-scrollbar": {
-                  height: "8px",
-                },
-                "&::-webkit-scrollbar-track": {
-                  // background: "gray",
-                  background: "var(--chakra-colors-gray-400)",
-                },
-                "&::-webkit-scrollbar-thumb": {
-                  background: "var(--chakra-colors-gray-400)",
-                  borderRadius: "4px",
-                },
-                "&::-webkit-scrollbar-thumb:hover": {
-                  background: "var(--chakra-colors-gray-500)",
-                },
-                // Firefox
-                scrollbarWidth: "thin",
-                scrollbarColor: "var(--chakra-colors-gray-400) transparent",
-              }}
-            >
-              {Object.entries(history)
-                .sort(([a], [b]) => Number(b) - Number(a))
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                .map(([_, exercise]) => (
-                  <HistoryCard
-                    key={exercise.generationNum}
-                    musicInfo={exercise}
-                    generated={generated}
-                    setGenerated={setGenerated}
-                    history={history}
-                    setHistory={setHistory}
-                  />
-                ))}
-            </Flex>
-          </Flex>
+            Generate
+          </Button>
+          <SaveButton disabled={!generated.notes} generated={generated} />
+        </Flex>
+      </Flex>
+      <Flex minW="0" flex="1" direction="column">
+        <Heading size="xl">{generated.notes ? `GEN #${generated.generationNum}` : ""}</Heading>
+        <SheetMusic
+          notes={generated.notes}
+          timeSig={generated.timeSig}
+          musicKey={generated.musicKey}
+          minW="0"
+          height="150px"
+          overflowX="auto"
+        />
+        <Flex gap={2} align="center" justify="space-between" mt={2}>
+          <Heading size="lg">HISTORY</Heading>
+          <ClearHistory onClear={handleClearClick}></ClearHistory>
+        </Flex>
+        <Flex
+          minW="0"
+          overflowX="auto"
+          gap={2}
+          py={2}
+          css={{
+            // Make the scrollbar always visible (default macOS hides it)
+            "&::-webkit-scrollbar": {
+              height: "8px",
+            },
+            "&::-webkit-scrollbar-track": {
+              // background: "gray",
+              background: "var(--chakra-colors-gray-400)",
+            },
+            "&::-webkit-scrollbar-thumb": {
+              background: "var(--chakra-colors-gray-400)",
+              borderRadius: "4px",
+            },
+            "&::-webkit-scrollbar-thumb:hover": {
+              background: "var(--chakra-colors-gray-500)",
+            },
+            // Firefox
+            scrollbarWidth: "thin",
+            scrollbarColor: "var(--chakra-colors-gray-400) transparent",
+          }}
+        >
+          {Object.entries(history)
+            .sort(([a], [b]) => Number(b) - Number(a))
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            .map(([_, exercise]) => (
+              <HistoryCard
+                key={exercise.generationNum}
+                musicInfo={exercise}
+                generated={generated}
+                setGenerated={setGenerated}
+                history={history}
+                setHistory={setHistory}
+              />
+            ))}
+        </Flex>
+      </Flex>
     </DashboardTemplate>
   );
 }

@@ -16,11 +16,14 @@ export default function SavedSection() {
   console.log("Saved data: ", saved);
   return (
     <Grid templateColumns="repeat(auto-fit, minmax(400px, 1fr))" gap={2}>
-      {
-        saved.map((item) => (
-          <SheetMusic key={item.id} notes={item.notes} timeSig={item.timeSig} musicKey={item.musicKey} />
-        ))
-      }
+      {saved.map((item) => (
+        <SheetMusic
+          key={item.id}
+          notes={item.notes}
+          timeSig={item.timeSig}
+          musicKey={item.musicKey}
+        />
+      ))}
     </Grid>
   );
 }

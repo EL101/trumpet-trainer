@@ -22,7 +22,7 @@ export function Library() {
         <FilterButton name="Scales" active={active} setActive={setActive} id="scales" />
       </Flex>
       <Box>
-        <SavedSection/>
+        <SavedSection />
       </Box>
     </DashboardTemplate>
   );

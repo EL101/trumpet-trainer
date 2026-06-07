@@ -2,7 +2,10 @@ import type { MusicInfo } from "@/pages/Generate";
 import type { User } from "firebase/auth";
 import type { Dispatch, SetStateAction } from "react";
 
-export async function getInitialLibrary(user: User | undefined | null, setSaved: Dispatch<SetStateAction<MusicInfo[]>>) {
+export async function getInitialLibrary(
+  user: User | undefined | null,
+  setSaved: Dispatch<SetStateAction<MusicInfo[]>>,
+) {
   const controller = new AbortController();
   async function loadSaved() {
     try {

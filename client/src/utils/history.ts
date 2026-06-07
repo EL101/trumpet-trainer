@@ -2,7 +2,11 @@ import type { MusicInfo } from "@/pages/Generate";
 import type { User } from "firebase/auth";
 import type { Dispatch, SetStateAction } from "react";
 
-export async function getInitialHistory(user: User | undefined | null, setHistory: Dispatch<SetStateAction<Record<number, MusicInfo>>>, setGenCount: Dispatch<SetStateAction<number>>) {
+export async function getInitialHistory(
+  user: User | undefined | null,
+  setHistory: Dispatch<SetStateAction<Record<number, MusicInfo>>>,
+  setGenCount: Dispatch<SetStateAction<number>>,
+) {
   const controller = new AbortController();
   async function loadHistory() {
     try {
@@ -37,7 +41,11 @@ export async function getInitialHistory(user: User | undefined | null, setHistor
   return () => controller.abort();
 }
 
-export async function insertToHistory(exercise: MusicInfo, user: User | undefined | null, setHistory: Dispatch<SetStateAction<Record<number, MusicInfo>>>) {
+export async function insertToHistory(
+  exercise: MusicInfo,
+  user: User | undefined | null,
+  setHistory: Dispatch<SetStateAction<Record<number, MusicInfo>>>,
+) {
   try {
     if (!user) return;
     const token = await user.getIdToken();
@@ -65,7 +73,10 @@ export async function insertToHistory(exercise: MusicInfo, user: User | undefine
   }
 }
 
-export async function clearHistory(user: User | undefined | null, setHistory: Dispatch<SetStateAction<Record<number, MusicInfo>>>) {
+export async function clearHistory(
+  user: User | undefined | null,
+  setHistory: Dispatch<SetStateAction<Record<number, MusicInfo>>>,
+) {
   try {
     if (!user) return;
     const token = await user.getIdToken();
