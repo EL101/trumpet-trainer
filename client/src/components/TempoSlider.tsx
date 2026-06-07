@@ -22,8 +22,9 @@ function TempoButton({ children, tempo, setTempo, increment }: TempoButtonProps)
       minW={0}
       boxSize={30}
       p={0}
-      border="1px solid black"
-      _hover={{ bgColor: "gray.100" }}
+      border="2px solid black"
+      _hover={{ bgColor: "gray.500/20" }}
+      bgColor="transparent"
       onClick={() => setTempo(tempo + increment)}
     >
       {children}
@@ -55,6 +56,7 @@ export default function TempoSlider({
             defaultValue={[defaultVal]}
             value={[tempo]}
             onValueChange={(details) => setTempo(details.value[0])}
+            cursor="pointer"
           >
             <Slider.Label />
             {/* <HStack 

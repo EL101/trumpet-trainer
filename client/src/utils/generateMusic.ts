@@ -84,11 +84,9 @@ export type Difficulty = "LOW" | "MED" | "HIGH";
 
 const DIFFUCULTY_TO_DURATIONS = {
   LOW: Object.fromEntries(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     Object.entries(DURATION_TO_BEATS).filter(([_, v]) => v >= 0.5 && v <= 4 && v !== 0.75),
   ),
   MED: Object.fromEntries(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     Object.entries(DURATION_TO_BEATS).filter(([_, v]) => v >= 0.25 && v <= 2),
   ),
   HIGH: DURATION_TO_BEATS,
@@ -144,7 +142,6 @@ export function generateMusic(
   while (currBeats < bars * mBeats) {
     const remaining = mBeats - (currBeats % mBeats);
     const validDurations = Object.entries(durations).filter(
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       ([_, dur]) => dur / (4 / noteVal) <= remaining,
     );
     // console.log(validDurations);
@@ -152,7 +149,6 @@ export function generateMusic(
 
     const nextBeats = currBeats + dur / (4 / noteVal);
     const nextValidDurations = Object.entries(durations).filter(
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       ([_, dur]) => dur / (4 / noteVal) <= mBeats - (nextBeats % mBeats),
     );
     // console.log(nextValidDurations);

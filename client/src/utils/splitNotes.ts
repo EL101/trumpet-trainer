@@ -57,7 +57,7 @@ export function splitNotes(notes: string, timeSig: string): string[] {
   }
   if (currMeasureDur !== 0) {
     let restBeats = (4 / noteValue) * (measureLength - currMeasureDur);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
     const beatKeys = Object.entries(BEATS_TO_DURATION).map(([k, _v]) => parseFloat(k));
     while (!beatKeys.includes(restBeats) && restBeats > 0) {
       let noteDurToAdd = 4 / noteValue;

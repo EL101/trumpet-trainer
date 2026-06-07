@@ -12,9 +12,9 @@ router.get("/", requireAuth, async (req: Request, res: Response) => {
       FROM history
       WHERE user_id = $1
       ORDER BY generation_num DESC`,
-    [req.user!.uid]
+    [req.user!.uid],
   );
-  res.json(camelcaseKeys(rows, {deep: true}));
+  res.json(camelcaseKeys(rows, { deep: true }));
 });
 
 const UpdateHistorySchema = z.object({
@@ -32,13 +32,22 @@ router.post("/", requireAuth, async (req: Request, res: Response) => {
     return res.status(400).json({ error: parsed.error });
   }
 
-  const { notes, timeSig, musicKey, noteRange, difficulty, generationNum} = parsed.data;
+  const { notes, timeSig, musicKey, noteRange, difficulty, generationNum } = parsed.data;
   try {
     const { rows } = await pool.query(
       `INSERT INTO history (id, user_id, notes, time_sig, music_key, note_range, difficulty, generation_num)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING id, notes, time_sig, music_key, note_range, difficulty, generation_num, created_at`,
-      [crypto.randomUUID(), req.user!.uid, notes, timeSig, musicKey, noteRange, difficulty, generationNum]
+      [
+        crypto.randomUUID(),
+        req.user!.uid,
+        notes,
+        timeSig,
+        musicKey,
+        noteRange,
+        difficulty,
+        generationNum,
+      ],
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -49,10 +58,8 @@ router.post("/", requireAuth, async (req: Request, res: Response) => {
 
 router.delete("/", requireAuth, async (req: Request, res: Response) => {
   try {
-    const { rows } = await pool.query(
-      `TRUNCATE TABLE history`
-    );
-    res.status(201).json(camelcaseKeys(rows, {deep: true}));
+    const { rows } = await pool.query(`TRUNCATE TABLE history`);
+    res.status(201).json(camelcaseKeys(rows, { deep: true }));
   } catch (err) {
     console.error("Failed to clear history:", err);
     res.status(500).json({ error: "Failed to clear history" });

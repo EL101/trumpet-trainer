@@ -1,7 +1,7 @@
-import { Box, Flex, Heading } from "@chakra-ui/react";
-import Sidebar from "./Sidebar";
-import type { ReactNode } from "react";
 import { DASHBOARD_PADDING } from "@/constants/layout";
+import { Box, Flex } from "@chakra-ui/react";
+import type { ReactNode } from "react";
+import Sidebar from "./Sidebar";
 
 export default function DashboardTemplate({ children }: { children: ReactNode }) {
   return (

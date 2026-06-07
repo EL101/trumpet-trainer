@@ -12,9 +12,9 @@ router.get("/", requireAuth, async (req: Request, res: Response) => {
       FROM library
       WHERE user_id = $1
       ORDER BY created_at DESC`,
-    [req.user!.uid]
+    [req.user!.uid],
   );
-  res.json(camelcaseKeys(rows, {deep: true}));
+  res.json(camelcaseKeys(rows, { deep: true }));
 });
 
 const UpdateLibrarySchema = z.object({
@@ -32,13 +32,22 @@ router.post("/", requireAuth, async (req: Request, res: Response) => {
     return res.status(400).json({ error: parsed.error });
   }
 
-  const { notes, timeSig, musicKey, noteRange, difficulty, generationNum} = parsed.data;
+  const { notes, timeSig, musicKey, noteRange, difficulty, generationNum } = parsed.data;
   try {
     const { rows } = await pool.query(
       `INSERT INTO library (id, user_id, notes, time_sig, music_key, note_range, difficulty, generation_num)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING id, notes, time_sig, music_key, note_range, difficulty, generation_num, created_at`,
-      [crypto.randomUUID(), req.user!.uid, notes, timeSig, musicKey, noteRange, difficulty, generationNum]
+      [
+        crypto.randomUUID(),
+        req.user!.uid,
+        notes,
+        timeSig,
+        musicKey,
+        noteRange,
+        difficulty,
+        generationNum,
+      ],
     );
     res.status(201).json(rows[0]);
   } catch (err) {

@@ -247,7 +247,7 @@ export function Generate() {
         >
           {Object.entries(history)
             .sort(([a], [b]) => Number(b) - Number(a))
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
             .map(([_, exercise]) => (
               <HistoryCard
                 key={exercise.generationNum}

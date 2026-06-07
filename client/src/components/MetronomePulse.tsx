@@ -1,7 +1,7 @@
-import { Box, Circle, HStack, VStack, type StackProps, Text, Heading } from "@chakra-ui/react";
+import { Box, HStack, VStack, type StackProps, Text, Heading } from "@chakra-ui/react";
 
 type MetronomePulseProps = StackProps & {
-  timeSig: string;
+  beats: number;
   tempo: number;
   subdivision: number;
 };
@@ -16,9 +16,13 @@ function BeatCircle({ large = false }: { large?: boolean }) {
     ></Box>
   );
 }
-export default function MetronomePulse({ timeSig, tempo, subdivision, ...props }: MetronomePulseProps) {
-  const [beats, noteVal] = timeSig.split("/").map((e: string) => parseInt(e));
-  console.log(subdivision, beats / (subdivision * noteVal / 4))
+
+export default function MetronomePulse({
+  beats,
+  tempo,
+  subdivision,
+  ...props
+}: MetronomePulseProps) {
   return (
     <VStack
       border="2px solid black"
@@ -38,7 +42,7 @@ export default function MetronomePulse({ timeSig, tempo, subdivision, ...props }
         </Text>
       </VStack>
       <HStack align="center">
-        {Array.from({ length: beats / (subdivision * noteVal / 4) }, (_, i) => (
+        {Array.from({ length: beats }, (_, i) => (
           <BeatCircle key={i} large={i === 0} />
         ))}
       </HStack>
