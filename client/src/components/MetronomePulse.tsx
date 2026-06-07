@@ -52,22 +52,41 @@ export default function MetronomePulse({
       {...props}
       gap={8}
     >
-      <VStack
-        border="2px solid black"
-        boxSize="200px"
-        borderRadius="100%"
-        justify="center"
-        animation={
-          currentBeat >= 0
-            ? `${currentBeat === 0 ? "pulseAccent" : "pulse"} 200ms ease-out`
-            : undefined
-        }
-      >
-        <Heading size="4xl">{tempo}</Heading>
-        <Text fontWeight={500} fontSize="lg">
-          BPM
-        </Text>
-      </VStack>
+      <Box position="relative" boxSize="200px">
+        <Box
+          opacity={currentBeat >= 0 ? "1" : "0"}
+          width="100%"
+          position="absolute"
+          inset={0}
+          borderRadius="100%"
+          border="2px solid black"
+          bgColor="black"
+          animation={
+            currentBeat >= 0
+              ? `ripple ${Math.min(600, (60 * 1000) / tempo)}ms ease-out forwards`
+              : undefined
+          }
+          pointerEvents="none"
+        />
+        <VStack
+          border="2px solid black"
+          boxSize="200px"
+          borderRadius="100%"
+          justify="center"
+          animation={
+            currentBeat >= 0
+              ? `${currentBeat === 0 ? "pulseAccent" : "pulse"} 200ms ease-out`
+              : undefined
+          }
+          position="relative"
+          bgColor="var(--bg-color)"
+        >
+          <Heading size="4xl">{tempo}</Heading>
+          <Text fontWeight={500} fontSize="lg">
+            BPM
+          </Text>
+        </VStack>
+      </Box>
       <HStack align="center">
         {Array.from({ length: beats }, (_, i) => (
           <BeatCircle

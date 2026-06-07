@@ -32,7 +32,7 @@ export default function Metronome() {
         isPlaying={isPlaying}
       />
       <TempoSlider
-        min={0}
+        min={1}
         max={240}
         defaultVal={100}
         tempo={bpm}

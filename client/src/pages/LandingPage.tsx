@@ -12,7 +12,6 @@ function LeftPanel() {
     <Box
       p={{ base: "2rem 1.5rem", md: "3rem 4rem 1rem 3rem" }}
       flex={{ base: "0 1 auto", md: "1" }}
-      bgColor="white"
       color="black"
       height="100%"
       borderRightWidth={{ base: "none", md: "2px" }}
@@ -54,7 +53,6 @@ function RightPanel() {
   return (
     <Box
       flex={{ base: "0 1 auto", md: "1" }}
-      bgColor="white"
       color="black"
       height="100%"
       p={{ base: "0 4rem 1rem 3rem", md: "3rem 4rem 1rem 3rem" }}
@@ -87,7 +85,7 @@ export default function LandingPage() {
   if (loading) return <Spinner />;
   if (user) return <Navigate to="/today" replace />;
   return (
-    <Flex height="100vh" direction={{ base: "column", md: "row" }}>
+    <Flex bgColor="var(--bg-color)" height="100vh" direction={{ base: "column", md: "row" }}>
       <LeftPanel />
       <RightPanel />
     </Flex>

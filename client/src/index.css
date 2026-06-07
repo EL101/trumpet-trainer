@@ -4,6 +4,10 @@
   box-sizing: border-box;
 }
 
+:root {
+  --bg-color: #f5f1e8;
+}
+
 html,
 body {
   height: 100%;

@@ -15,8 +15,10 @@ type TempoButtonProps = {
   tempo: number;
   setTempo: Dispatch<SetStateAction<number>>;
   increment: number;
+  min: number;
+  max: number;
 };
-function TempoButton({ children, tempo, setTempo, increment }: TempoButtonProps) {
+function TempoButton({ children, tempo, setTempo, increment, min, max }: TempoButtonProps) {
   return (
     <Button
       minW={0}
@@ -25,7 +27,7 @@ function TempoButton({ children, tempo, setTempo, increment }: TempoButtonProps)
       border="2px solid black"
       _hover={{ bgColor: "gray.500/20" }}
       bgColor="transparent"
-      onClick={() => setTempo(tempo + increment)}
+      onClick={() => setTempo(Math.min(max, Math.max(min, tempo + increment)))}
     >
       {children}
     </Button>
@@ -45,7 +47,7 @@ export default function TempoSlider({
         TEMPO
       </Text>
       <HStack width="100%">
-        <TempoButton tempo={tempo} setTempo={setTempo} increment={-1}>
+        <TempoButton tempo={tempo} setTempo={setTempo} increment={-1} max={max} min={min}>
           <LuMinus size={5} />
         </TempoButton>
         <VStack width="100%">
@@ -84,11 +86,11 @@ export default function TempoSlider({
             </Slider.Control>
           </Slider.Root>
           <Flex width="100%" justify="space-between" mt="-5px" fontSize="xs" color="gray.600">
-            <Text>0</Text>
-            <Text>240</Text>
+            <Text>{min}</Text>
+            <Text>{max}</Text>
           </Flex>
         </VStack>
-        <TempoButton tempo={tempo} setTempo={setTempo} increment={1}>
+        <TempoButton tempo={tempo} setTempo={setTempo} increment={1} max={max} min={min}>
           <LuPlus size={10} />
         </TempoButton>
       </HStack>
