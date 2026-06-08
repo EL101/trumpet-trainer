@@ -15,6 +15,7 @@ export default function SegmentInput({ setSubdivision, items }: SegmentInputProp
         bg="transparent"
         border="2px solid black"
         onValueChange={(details) => setSubdivision(parseFloat(details.value ?? "1"))}
+        defaultValue={`${items[0].value}`}
       >
         <SegmentGroup.Indicator bgColor="black" boxShadow="none" height="100%" borderRadius="0" />
         {items.map((item) => (

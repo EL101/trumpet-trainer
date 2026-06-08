@@ -8,6 +8,7 @@ interface SliderInputProps extends StackProps {
   defaultVal: number;
   tempo: number;
   setTempo: Dispatch<SetStateAction<number>>;
+  setIsPlaying: Dispatch<SetStateAction<boolean>>;
 }
 
 type TempoButtonProps = {
@@ -39,6 +40,7 @@ export default function TempoSlider({
   defaultVal,
   tempo,
   setTempo,
+  setIsPlaying,
   ...props
 }: SliderInputProps) {
   return (
@@ -57,7 +59,10 @@ export default function TempoSlider({
             max={max}
             defaultValue={[defaultVal]}
             value={[tempo]}
-            onValueChange={(details) => setTempo(details.value[0])}
+            onValueChange={(details) => {
+              setTempo(details.value[0]);
+              setIsPlaying(false);
+            }}
             cursor="pointer"
           >
             <Slider.Label />

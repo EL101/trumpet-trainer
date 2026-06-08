@@ -33,10 +33,11 @@ export default function Metronome() {
       />
       <TempoSlider
         min={1}
-        max={240}
+        max={250}
         defaultVal={100}
         tempo={bpm}
         setTempo={setBpm}
+        setIsPlaying={setIsPlaying}
         alignSelf="center"
         width={width}
         maxW={maxW}

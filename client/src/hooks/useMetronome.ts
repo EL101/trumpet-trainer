@@ -1,3 +1,4 @@
+import { getCtx, scheduleClick } from "@/utils/click";
 import { useEffect, useState } from "react";
 
 type useMetronomeProps = {
@@ -8,27 +9,43 @@ type useMetronomeProps = {
 };
 
 export default function useMetronome({ tempo, beats, subdivision, isPlaying }: useMetronomeProps) {
-  const [currBeat, setCurrBeat] = useState<number>(-1);
+  const [currTick, setCurrTick] = useState<number>(-1);
 
   useEffect(() => {
-    const delay = (60 * 1000) / tempo;
     if (!isPlaying) {
       return;
     }
 
-    const firstId = setTimeout(() => setCurrBeat(0), 0);
     let tick = 0;
-    const id = setInterval(() => {
-      if (isPlaying) {
+
+    const ctx = getCtx();
+    let nextBeatTime = ctx.currentTime;
+    const tickAhead = 0.1;
+    const timeouts: number[] = [];
+    const scheduler = () => {
+      while (nextBeatTime < ctx.currentTime + tickAhead) {
+        const beat = Math.floor(tick * subdivision) % beats;
+        const isWholeBeat = tick % (1 / subdivision) === 0;
+        scheduleClick(nextBeatTime, beat === 0 && isWholeBeat, ctx);
+
+        const delayMs = (nextBeatTime - ctx.currentTime) * 1000;
+        const thisTick = tick;
+        const id = setTimeout(() => setCurrTick(thisTick), Math.max(0, delayMs));
+        timeouts.push(id);
+        nextBeatTime += 60 / (tempo / subdivision);
+
         tick += 1;
-        setCurrBeat(tick % beats);
+        tick %= beats / subdivision;
       }
-    }, delay);
+    };
+    scheduler();
+    const id = setInterval(scheduler, 25);
+
     return () => {
       clearInterval(id);
-      clearTimeout(firstId);
+      timeouts.forEach((timeout) => clearTimeout(timeout));
     };
   }, [tempo, subdivision, isPlaying, beats]);
 
-  return isPlaying ? currBeat : -1;
+  return isPlaying ? currTick : -1;
 }

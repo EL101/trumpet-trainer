@@ -38,10 +38,9 @@ export default function MetronomePulse({
   isPlaying,
   ...props
 }: MetronomePulseProps) {
-  const currentBeat = useMetronome({ tempo, beats, subdivision, isPlaying });
+  const currentTick = useMetronome({ tempo, beats, subdivision, isPlaying });
   return (
     <VStack
-      key={currentBeat}
       border="2px solid black"
       height="400px"
       minW="400px"
@@ -54,7 +53,7 @@ export default function MetronomePulse({
     >
       <Box position="relative" boxSize="200px">
         <Box
-          opacity={currentBeat >= 0 ? "1" : "0"}
+          key={currentTick}
           width="100%"
           position="absolute"
           inset={0}
@@ -62,20 +61,25 @@ export default function MetronomePulse({
           border="2px solid black"
           bgColor="black"
           animation={
-            currentBeat >= 0
-              ? `ripple ${Math.min(600, (60 * 1000) / tempo)}ms ease-out forwards`
+            currentTick >= 0
+              ? currentTick % (1 / subdivision) === 0
+                ? `ripple ${Math.min(600, ((60 * 1000) / tempo) * subdivision)}ms ease-out forwards`
+                : `smallRipple ${Math.min(600, ((60 * 1000) / tempo) * subdivision)}ms ease-out forwards`
               : undefined
           }
           pointerEvents="none"
         />
         <VStack
+          key={currentTick}
           border="2px solid black"
           boxSize="200px"
           borderRadius="100%"
           justify="center"
           animation={
-            currentBeat >= 0
-              ? `${currentBeat === 0 ? "pulseAccent" : "pulse"} 200ms ease-out`
+            currentTick >= 0
+              ? currentTick % (1 / subdivision) === 0
+                ? `${currentTick % (beats / subdivision) === 0 ? "pulseAccent" : "pulse"} ${Math.min(600, (60 * 1000) / tempo)}ms ease-out`
+                : `smallPulse ${Math.min(600, ((60 * 1000) / tempo) * subdivision)}ms ease-out forwards`
               : undefined
           }
           position="relative"
@@ -92,7 +96,7 @@ export default function MetronomePulse({
           <BeatCircle
             key={i}
             large={i === 0}
-            bgColor={currentBeat === i ? "black" : "transparent"}
+            bgColor={Math.floor(currentTick * subdivision) === i ? "gray.600" : "transparent"}
             transition="background-color 80ms ease-out"
           />
         ))}
