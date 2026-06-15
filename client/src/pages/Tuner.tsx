@@ -1,8 +1,9 @@
-import { Circle, Heading, HStack, Text, VStack } from "@chakra-ui/react";
+import { Button, Circle, Heading, HStack, Text, VStack } from "@chakra-ui/react";
 import DashboardTemplate from "../components/DashBoardTemplate";
 import TunerPendulum from "@/components/TunerPendulum";
 import usePitch from "@/hooks/usePitch";
 import { Note } from "tonal";
+import { useState } from "react";
 
 const A4_MIDI = 69;
 
@@ -15,7 +16,9 @@ function getNoteInfo(hz: number) {
 }
 
 export default function Tuner() {
-  const [pitch, clar] = usePitch();
+  const { pitch, clarity, start, stop } = usePitch();
+  const note = Note.fromMidi(getNoteInfo(pitch).midiNumber);
+  const [listening, setListening] = useState<boolean>(false);
 
   return (
     <DashboardTemplate>
@@ -28,15 +31,35 @@ export default function Tuner() {
         <TunerPendulum cents={getNoteInfo(pitch).cents} />
         <HStack alignItems="baseline-start">
           <Text fontSize="5xl" fontWeight={600}>
-            {Note.fromMidi(getNoteInfo(pitch).midiNumber).slice(0, -1)}
+            {note ? note.slice(0, -1) : "-"}
           </Text>
           <Text color="#8A8170" fontSize="lg">
-            {Note.fromMidi(getNoteInfo(pitch).midiNumber).at(-1)}
+            {note.at(-1)}
           </Text>
         </HStack>
         <Text>{pitch}Hz</Text>
-        <Text>Clarity: {clar}</Text>
+        <Text>Clarity: {clarity * 100}%</Text>
       </VStack>
+      <Button
+        borderColor="black"
+        bg={listening ? "black" : "none"}
+        w="fit-content"
+        px={3}
+        onClick={
+          listening
+            ? () => {
+                stop();
+                setListening(false);
+              }
+            : () => {
+                start();
+                setListening(true);
+              }
+        }
+      >
+        <Circle bgColor="green.600" size="8px" animation="livePulse 2500ms ease-out infinite" />
+        <Text color={listening ? "white" : "black"}>{listening ? "Stop" : "Start"} Listening</Text>
+      </Button>
     </DashboardTemplate>
   );
 }
