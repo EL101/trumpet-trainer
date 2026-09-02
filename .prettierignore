@@ -5,3 +5,4 @@ build
 coverage
 *.min.js
 package-lock.json
+server/src/generated

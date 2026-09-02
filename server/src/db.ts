@@ -1,12 +1,15 @@
-import { Pool } from "pg";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "./generated/prisma/client.js";
 
-export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error("DATABASE_URL is not set");
+}
+
+const adapter = new PrismaPg({
+  connectionString,
   // Neon requires SSL in production; local Docker doesn't.
-  ssl: process.env.DATABASE_URL?.includes("neon.tech") ? { rejectUnauthorized: false } : false,
+  ssl: connectionString.includes("neon.tech") ? { rejectUnauthorized: false } : false,
 });
 
-// Optional: log connection errors so you notice them
-pool.on("error", (err) => {
-  console.error("Unexpected database error", err);
-});
+export const prisma = new PrismaClient({ adapter });

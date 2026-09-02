@@ -1,0 +1,47 @@
+// Prisma models mirror the tables created by the SQL in migrations/.
+// The DB is snake_case; @map keeps the generated client camelCase.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+
+  // Emit ESM with explicit .js specifiers so the tsc output resolves under Node.
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// One generated exercise, recorded as the user generates it.
+model History {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  notes         String
+  timeSig       String   @map("time_sig")
+  musicKey      String   @map("music_key")
+  noteRange     String   @map("note_range")
+  difficulty    String
+  generationNum Int      @map("generation_num")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([userId, generationNum(sort: Desc)], map: "idx_history_user_generation")
+  @@map("history")
+}
+
+/// An exercise the user explicitly saved.
+model Library {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  notes         String
+  timeSig       String   @map("time_sig")
+  musicKey      String   @map("music_key")
+  noteRange     String   @map("note_range")
+  difficulty    String
+  generationNum Int      @map("generation_num")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([userId, createdAt(sort: Desc)], map: "idx_library_user_created")
+  @@map("library")
+}

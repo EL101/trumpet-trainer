@@ -53,7 +53,7 @@ export default function HistoryCard({
         onClick={handleClick}
       />
       <Text fontSize="0.7rem" color="gray.500" fontWeight="500">
-        {keyToShorthand(musicInfo.musicKey)} • {musicInfo.range[0]} Range •{" "}
+        {keyToShorthand(musicInfo.musicKey)} • {musicInfo.noteRange[0]} Range •{" "}
         {musicInfo.difficulty[0]} Diff
       </Text>
     </Box>

@@ -24,7 +24,7 @@ const EMPTY_EXERCISE: MusicInfo = {
   notes: "",
   timeSig: "4/4",
   musicKey: "C major",
-  range: "MED",
+  noteRange: "MED",
   difficulty: "LOW",
   generationNum: 0,
 };
@@ -83,7 +83,7 @@ export function Generate() {
       notes: generateMusic(measures, timeSig, key, range, difficulty),
       timeSig,
       musicKey: key,
-      range,
+      noteRange: range,
       difficulty,
       generationNum: newGenCount,
     };

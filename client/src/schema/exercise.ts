@@ -7,7 +7,7 @@ export type MusicInfo = {
   notes: string;
   timeSig: string;
   musicKey: Key;
-  range: Range;
+  noteRange: Range;
   difficulty: Difficulty;
   generationNum: number;
 };
@@ -22,7 +22,7 @@ export type ExerciseParams = {
   timeSig: string;
   measures: number;
   musicKey: Key;
-  range: Range;
+  noteRange: Range;
   difficulty: Difficulty;
 };
 
@@ -50,7 +50,7 @@ export function toExerciseInput(exercise: MusicInfo): ExerciseInput {
     notes: exercise.notes,
     timeSig: exercise.timeSig,
     musicKey: exercise.musicKey,
-    noteRange: exercise.range,
+    noteRange: exercise.noteRange,
     difficulty: exercise.difficulty,
     generationNum: exercise.generationNum,
   };
