@@ -1,27 +1,6 @@
 import { Note, Scale } from "tonal";
 import { DURATION_TO_BEATS } from "./splitNotes";
-
-export const PITCH_CLASSES = [
-  "C",
-  "C#",
-  "Db",
-  "D",
-  "D#",
-  "Eb",
-  "E",
-  "F",
-  "F#",
-  "Gb",
-  "G",
-  "G#",
-  "Ab",
-  "A",
-  "A#",
-  "Bb",
-  "B",
-] as const;
-
-export type PitchClass = (typeof PITCH_CLASSES)[number];
+import type { Difficulty, Key, Range } from "@/schema";
 
 export const PRACTICAL_MAJOR = [
   "C",
@@ -77,12 +56,7 @@ const MINOR_TO_MAJOR: Record<string, string> = {
   Gb: "A", // Bbb → A (enharmonic)
 };
 
-export type KeyQuality = "major" | "minor";
-export type Key = `${PitchClass} ${KeyQuality}`;
-export type Range = "LOW" | "MED" | "HIGH" | "ANY";
-export type Difficulty = "LOW" | "MED" | "HIGH";
-
-const DIFFUCULTY_TO_DURATIONS = {
+const DIFFICULTY_TO_DURATIONS = {
   LOW: Object.fromEntries(
     Object.entries(DURATION_TO_BEATS).filter(([_, v]) => v >= 0.5 && v <= 4 && v !== 0.75),
   ),
@@ -92,7 +66,7 @@ const DIFFUCULTY_TO_DURATIONS = {
   HIGH: DURATION_TO_BEATS,
 };
 
-const threshold = {
+const RANGE_THRESHOLDS = {
   LOW: [Note.midi("F#3"), Note.midi("C5")],
   MED: [Note.midi("C4"), Note.midi("C6")],
   HIGH: [Note.midi("C5"), Note.midi("G6")],
@@ -122,10 +96,10 @@ export function generateMusic(
   range: Range = "MED",
   difficulty: Difficulty = "LOW",
 ) {
-  const durations = DIFFUCULTY_TO_DURATIONS[difficulty];
+  const durations = DIFFICULTY_TO_DURATIONS[difficulty];
   const rawScale = generateScale(key);
   const rangedScale: string[] = [];
-  const [low, high] = threshold[range];
+  const [low, high] = RANGE_THRESHOLDS[range];
   rawScale.forEach((note) => {
     for (let i = 3; i <= 6; i++) {
       const currNote = `${note}${i}`;
@@ -138,21 +112,17 @@ export function generateMusic(
   let currBeats = 0;
   const [mBeats, noteVal] = timeSig.split("/").map((s) => parseInt(s));
   let notes = "";
-  // console.log(bars * mBeats)
   while (currBeats < bars * mBeats) {
     const remaining = mBeats - (currBeats % mBeats);
     const validDurations = Object.entries(durations).filter(
       ([_, dur]) => dur / (4 / noteVal) <= remaining,
     );
-    // console.log(validDurations);
     const [val, dur] = randomElement(validDurations);
 
     const nextBeats = currBeats + dur / (4 / noteVal);
     const nextValidDurations = Object.entries(durations).filter(
       ([_, dur]) => dur / (4 / noteVal) <= mBeats - (nextBeats % mBeats),
     );
-    // console.log(nextValidDurations);
-    // console.log(remaining);
     if (nextValidDurations.length === 0 && nextBeats !== bars * mBeats) continue;
     currBeats += dur / (4 / noteVal);
     const note = randomElement([...rangedScale, "r"]);
@@ -166,6 +136,5 @@ export function generateMusic(
       notes += notes ? `, ${note}/${val}` : `${note}/${val}`;
     }
   }
-  // console.log(notes);
   return notes;
 }

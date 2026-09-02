@@ -1,8 +1,7 @@
 import { Box, Heading, Text } from "@chakra-ui/react";
 import { SheetMusic } from "./SheetMusic";
-import type { MusicInfo } from "@/pages/Generate";
+import type { Key, MusicInfo } from "@/schema";
 import type { Dispatch, SetStateAction } from "react";
-import type { Key } from "@/utils/generateMusic";
 
 type HistoryCardProps = {
   musicInfo: MusicInfo;

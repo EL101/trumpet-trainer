@@ -1,18 +1,10 @@
 import DashboardTemplate from "../components/DashBoardTemplate";
 import { Box, Flex, Heading } from "@chakra-ui/react";
-import { useContext, useState } from "react";
-import type { MusicInfo } from "./Generate";
-import { AuthUserContext } from "@/auth/AuthUserContext";
+import { useState } from "react";
 import FilterButton from "@/components/FilterButton";
 import SavedSection from "@/components/SavedSection";
 
-export type LibraryEntry = MusicInfo & {
-  createdAt: string;
-};
-
 export function Library() {
-  const { user } = useContext(AuthUserContext);
-  console.log(user?.displayName);
   const [active, setActive] = useState<string>("saved");
   return (
     <DashboardTemplate>

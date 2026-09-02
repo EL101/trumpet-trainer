@@ -76,7 +76,6 @@ export function splitNotes(notes: string, timeSig: string): string[] {
     const restDur = BEATS_TO_DURATION[restBeats];
     const dotted = restDur.includes(".");
     const strToAdd = dotted ? `, B4/${restDur.split(".")[0]}/r.` : `, B4/${restDur}/r`;
-    // console.log(strToAdd)
     measures.push(currMeasureNotes + strToAdd);
   }
   return measures;

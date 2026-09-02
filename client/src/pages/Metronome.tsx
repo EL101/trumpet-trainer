@@ -26,6 +26,7 @@ export default function Metronome() {
       <Heading size="2xl">Metronome</Heading>
       <MetronomePulse
         alignSelf="center"
+        bgColor="#FBF8F0"
         beats={beats}
         tempo={bpm}
         subdivision={subdivision}
@@ -44,7 +45,7 @@ export default function Metronome() {
       />
       <HStack gap="2rem" align="end" maxW={maxW} width={width} alignSelf="center">
         <StepperInput min={1} max={16} initialVal={4} setBeats={setBeats} />
-        <SegmentInput items={subdivisionOptions} setSubdivision={setSubdivision} />
+        <SegmentInput items={subdivisionOptions} setValue={setSubdivision} parse={parseFloat} />
       </HStack>
       <Button
         width={width}

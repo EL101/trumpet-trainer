@@ -17,7 +17,7 @@ export const signIn = async () => {
     const message = err.message;
     const email = err.customData.email;
 
-    console.log(
+    console.error(
       `An error ${code} occurred when logging user with email: ${email} with message: ${message}`,
     );
     return null;

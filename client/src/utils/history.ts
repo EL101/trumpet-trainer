@@ -1,42 +1,29 @@
-import type { MusicInfo } from "@/pages/Generate";
-import type { User } from "firebase/auth";
 import type { Dispatch, SetStateAction } from "react";
+import type { User } from "firebase/auth";
+import { toExerciseInput, type MusicInfo } from "@/schema";
+import { authedFetch } from "./api";
 
-export async function getInitialHistory(
+export function getInitialHistory(
   user: User | undefined | null,
   setHistory: Dispatch<SetStateAction<Record<number, MusicInfo>>>,
   setGenCount: Dispatch<SetStateAction<number>>,
 ) {
   const controller = new AbortController();
-  async function loadHistory() {
+
+  (async () => {
     try {
-      if (!user) return;
-      const token = await user.getIdToken();
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/history`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        signal: controller.signal,
-      });
-      if (!res.ok) {
-        throw new Error(`Request failed: ${res.status}`);
-      }
+      const res = await authedFetch("/api/history", user, { signal: controller.signal });
+      if (!res) return;
+
       const data: MusicInfo[] = await res.json();
-      console.log("data:", data);
-
       setHistory(Object.fromEntries(data.map((item) => [item.generationNum, item])));
-      setGenCount(data[0].generationNum);
-      // setGenerated(data[0]);
+      // The list comes back newest-first, so the first row holds the highest gen number.
+      setGenCount(data[0]?.generationNum ?? 0);
     } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        return;
-      }
-      console.log("fetch history error: ", error);
+      if (error instanceof Error && error.name === "AbortError") return;
+      console.error("fetch history error:", error);
     }
-  }
-
-  loadHistory();
+  })();
 
   return () => controller.abort();
 }
@@ -47,29 +34,14 @@ export async function insertToHistory(
   setHistory: Dispatch<SetStateAction<Record<number, MusicInfo>>>,
 ) {
   try {
-    if (!user) return;
-    const token = await user.getIdToken();
-    const res = await fetch(`${import.meta.env.VITE_API_URL}/api/history`, {
+    const res = await authedFetch("/api/history", user, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        notes: exercise.notes,
-        timeSig: exercise.timeSig,
-        musicKey: exercise.musicKey,
-        noteRange: exercise.range,
-        difficulty: exercise.difficulty,
-        generationNum: exercise.generationNum,
-      }),
+      body: JSON.stringify(toExerciseInput(exercise)),
     });
-    if (!res.ok) {
-      throw new Error(`Request failed: ${res.status}`);
-    }
+    if (!res) return;
     setHistory((prev) => ({ ...prev, [exercise.generationNum]: exercise }));
   } catch (error) {
-    console.log("update history error: ", error);
+    console.error("update history error:", error);
   }
 }
 
@@ -78,20 +50,10 @@ export async function clearHistory(
   setHistory: Dispatch<SetStateAction<Record<number, MusicInfo>>>,
 ) {
   try {
-    if (!user) return;
-    const token = await user.getIdToken();
-    const res = await fetch(`${import.meta.env.VITE_API_URL}/api/history`, {
-      method: "DELETE",
-      headers: {
-        // "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-    });
-    if (!res.ok) {
-      throw new Error(`Request failed: ${res.status}`);
-    }
+    const res = await authedFetch("/api/history", user, { method: "DELETE" });
+    if (!res) return;
     setHistory({});
   } catch (error) {
-    console.log("clear history error: ", error);
+    console.error("clear history error:", error);
   }
 }

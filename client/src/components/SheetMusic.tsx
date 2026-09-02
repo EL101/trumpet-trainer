@@ -2,7 +2,8 @@ import { useEffect, useRef } from "react";
 import { Factory, Barline, Accidental } from "vexflow";
 import { Box, type BoxProps } from "@chakra-ui/react";
 import { splitNotes } from "../utils/splitNotes";
-import { getKeySig, type Key } from "@/utils/generateMusic";
+import { getKeySig } from "@/utils/generateMusic";
+import type { Key } from "@/schema";
 
 type SheetMusicProps = BoxProps & {
   notes: string;

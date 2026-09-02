@@ -1,5 +1,5 @@
 import { AuthUserContext } from "@/auth/AuthUserContext";
-import type { MusicInfo } from "@/pages/Generate";
+import type { MusicInfo } from "@/schema";
 import { useState, useContext, useEffect } from "react";
 import { SheetMusic } from "./SheetMusic";
 import { getInitialLibrary } from "@/utils/library";
@@ -9,11 +9,8 @@ export default function SavedSection() {
   const [saved, setSaved] = useState<MusicInfo[]>([]);
   const { user } = useContext(AuthUserContext);
 
-  useEffect(() => {
-    getInitialLibrary(user, setSaved);
-  }, [user]);
+  useEffect(() => getInitialLibrary(user, setSaved), [user]);
 
-  console.log("Saved data: ", saved);
   return (
     <Grid templateColumns="repeat(auto-fit, minmax(400px, 1fr))" gap={2}>
       {saved.map((item) => (

@@ -1,37 +1,32 @@
-import type { MusicInfo } from "@/pages/Generate";
-import type { User } from "firebase/auth";
 import type { Dispatch, SetStateAction } from "react";
+import type { User } from "firebase/auth";
+import { toExerciseInput, type MusicInfo } from "@/schema";
+import { authedFetch } from "./api";
 
-export async function getInitialLibrary(
+export function getInitialLibrary(
   user: User | undefined | null,
   setSaved: Dispatch<SetStateAction<MusicInfo[]>>,
 ) {
   const controller = new AbortController();
-  async function loadSaved() {
-    try {
-      if (!user) return;
-      const token = await user.getIdToken();
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/library`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        signal: controller.signal,
-      });
-      if (!res.ok) {
-        throw new Error(`Request failed: ${res.status}`);
-      }
-      const data: MusicInfo[] = await res.json();
-      console.log("data:", data);
 
-      setSaved(data);
+  (async () => {
+    try {
+      const res = await authedFetch("/api/library", user, { signal: controller.signal });
+      if (!res) return;
+      setSaved(await res.json());
     } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        return;
-      }
-      console.log("fetch library error: ", error);
+      if (error instanceof Error && error.name === "AbortError") return;
+      console.error("fetch library error:", error);
     }
-  }
-  loadSaved();
+  })();
+
   return () => controller.abort();
+}
+
+export async function saveToLibrary(exercise: MusicInfo, user: User | undefined | null) {
+  const res = await authedFetch("/api/library", user, {
+    method: "POST",
+    body: JSON.stringify(toExerciseInput(exercise)),
+  });
+  return res !== null;
 }

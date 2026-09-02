@@ -14,7 +14,7 @@ export default function SidebarTab({ to, name }: { to: string; name: string }) {
           _hover={!isActive ? { bg: "gray.200" } : {}}
           fontSize="lg"
           cursor="pointer"
-          transition="backgrounds"
+          transition="background 150ms ease, color 150ms ease"
         >
           {name}
         </Box>

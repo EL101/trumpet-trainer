@@ -22,9 +22,12 @@
     "prettier": "^3.8.3",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
+    "react-icons": "^5.6.0",
     "react-router-dom": "^7.15.1",
     "recharts": "^3.8.1",
-    "tone": "^15.1.22"
+    "tonal": "^6.4.3",
+    "tone": "^15.1.22",
+    "vexflow": "^4.2.5"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -37,13 +40,9 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "eslint-plugin-unused-imports": "^4.4.1",
     "globals": "^17.6.0",
-    "react-icons": "^5.6.0",
-    "tonal": "^6.4.3",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.59.2",
-    "vexflow": "^4.2.5",
     "vite": "^8.0.12",
-    "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^4.1.7"
   }
 }

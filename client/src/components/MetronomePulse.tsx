@@ -83,7 +83,7 @@ export default function MetronomePulse({
               : undefined
           }
           position="relative"
-          bgColor="var(--bg-color)"
+          bgColor="#FBF8F0"
         >
           <Heading size="4xl">{tempo}</Heading>
           <Text fontWeight={500} fontSize="lg">

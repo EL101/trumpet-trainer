@@ -14,9 +14,7 @@ export default function SignInWithGoogle() {
   const handleGoogleSignIn = async () => {
     const provider = new GoogleAuthProvider();
     try {
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
-      console.log("Signed in:", user.displayName, user.email);
+      await signInWithPopup(auth, provider);
       navigate(from, { replace: true });
     } catch (error) {
       if (error instanceof FirebaseError && error.code === "auth/popup-closed-by-user") {

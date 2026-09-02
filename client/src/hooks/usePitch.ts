@@ -63,7 +63,6 @@ export default function usePitch() {
   }, []);
 
   useEffect(() => {
-    start();
     return () => {
       stop();
     };

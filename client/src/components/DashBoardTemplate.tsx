@@ -8,7 +8,7 @@ export default function DashboardTemplate({ children }: { children: ReactNode })
     <Box height="100vh" bgColor="var(--bg-color)" color="black">
       <Flex height="100%" width="100%">
         <Sidebar></Sidebar>
-        <Box height="100%" minW="0" flex="1" p={DASHBOARD_PADDING}>
+        <Box height="100%" minW="0" flex="1" p={DASHBOARD_PADDING} overflowY="auto">
           <Flex height="100%" direction="column" gap={5}>
             {children}
           </Flex>
