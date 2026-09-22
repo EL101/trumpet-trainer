@@ -22,13 +22,26 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
   let decoded: admin.auth.DecodedIdToken;
   try {
-    decoded = await admin.auth().verifyIdToken(token);
-  } catch {
+    // checkRevoked costs a lookup against Firebase per request, but it is what
+    // makes a disabled, deleted or signed-out-everywhere account stop working
+    // before its token expires -- including guests the sweep has just removed,
+    // whose still-valid tokens would otherwise recreate the row we deleted.
+    decoded = await admin.auth().verifyIdToken(token, true);
+  } catch (err) {
+    const code = err instanceof Error && "code" in err ? String(err.code) : "";
+    if (code === "auth/user-disabled") {
+      return res.status(403).json({ error: "Account disabled" });
+    }
+    // Revoked and deleted both mean "sign in again", unlike a malformed token.
+    if (code === "auth/id-token-revoked" || code === "auth/user-not-found") {
+      return res.status(401).json({ error: "Session expired", reauth: true });
+    }
     return res.status(401).json({ error: "Invalid or expired token" });
   }
 
   // Exercise rows point at `users` by foreign key, so the row has to exist
-  // before any route writes one. Cached, so this is one INSERT per uid per boot.
+  // before any route writes one. This also keeps lastSeenAt current for the
+  // guest sweep. Throttled per process, so most requests skip it entirely.
   // Kept out of the block above so a DB outage isn't reported as a bad token.
   try {
     await ensureUserExists(decoded);

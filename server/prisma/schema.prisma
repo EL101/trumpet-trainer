@@ -57,6 +57,8 @@ model User {
   email       String?
   displayName String?  @map("display_name")
   isAnonymous Boolean  @default(false) @map("is_anonymous")
+  /// Refreshed at most hourly by ensureUserExists; drives the guest sweep.
+  lastSeenAt  DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -64,6 +66,7 @@ model User {
   history History[]
   library Library[]
 
+  @@index([isAnonymous, lastSeenAt], map: "idx_users_anonymous_last_seen")
   @@map("users")
 }
 

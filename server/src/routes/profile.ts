@@ -1,0 +1,68 @@
+import { Router, Request, Response } from "express";
+import admin from "firebase-admin";
+import { requireAuth } from "../middleware/requireAuth.js";
+import { MergeGuestSchema } from "../schema/index.js";
+import { mergeGuestData, syncUserFromClaims } from "../queries/users.js";
+
+const router = Router();
+
+/**
+ * Re-mirror the caller's profile fields from their current token claims.
+ * The client calls this after linking a Google account, which leaves the uid
+ * alone but turns a nameless guest row into a real profile.
+ */
+router.post("/sync", requireAuth, async (req: Request, res: Response) => {
+  try {
+    res.json(await syncUserFromClaims(req.user!));
+  } catch (err) {
+    console.error("Failed to sync profile:", err);
+    res.status(500).json({ error: "Failed to sync profile" });
+  }
+});
+
+/**
+ * Move a guest account's exercises onto the caller's account.
+ *
+ * Used when linkWithPopup reports auth/credential-already-in-use: the Google
+ * account already exists, so the guest uid can't be upgraded in place and the
+ * rows have to be carried across by hand.
+ */
+router.post("/merge-guest", requireAuth, async (req: Request, res: Response) => {
+  const parsed = MergeGuestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error });
+  }
+
+  let guest: admin.auth.DecodedIdToken;
+  try {
+    guest = await admin.auth().verifyIdToken(parsed.data.guestToken);
+  } catch {
+    return res.status(401).json({ error: "Invalid guest token" });
+  }
+
+  // Without this, any token would let its holder vacuum up another account's
+  // exercises. Only a genuine anonymous account can be merged away.
+  if (guest.firebase?.sign_in_provider !== "anonymous") {
+    return res.status(400).json({ error: "Not a guest account" });
+  }
+  if (guest.uid === req.user!.uid) {
+    return res.status(400).json({ error: "Cannot merge an account into itself" });
+  }
+
+  try {
+    const moved = await mergeGuestData(guest.uid, req.user!.uid);
+    // The guest account is empty now, so retire it instead of leaving it for
+    // the sweep. Failure here is not fatal -- the sweep collects it later.
+    try {
+      await admin.auth().deleteUser(guest.uid);
+    } catch (err) {
+      console.error(`Merged guest ${guest.uid} but could not delete it:`, err);
+    }
+    res.json(moved);
+  } catch (err) {
+    console.error("Failed to merge guest data:", err);
+    res.status(500).json({ error: "Failed to merge guest data" });
+  }
+});
+
+export default router;
