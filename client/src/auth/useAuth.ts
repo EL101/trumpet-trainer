@@ -8,5 +8,3 @@ export const useAuth = () => {
   }
   return context;
 };
-
-export const loading = () => {};
