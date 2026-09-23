@@ -1,28 +1,52 @@
 import { auth } from "../firebase.ts";
-import { signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+import { GoogleAuthProvider, linkWithPopup, signInWithCredential, type User } from "firebase/auth";
+import { FirebaseError } from "firebase/app";
 
-const provider = new GoogleAuthProvider();
+export type LinkResult =
+  /** The popup was dismissed; nothing changed. */
+  | { status: "cancelled" }
+  /** The guest uid was upgraded in place, so its rows already belong to it. */
+  | { status: "linked"; user: User }
+  /** Signed in as a pre-existing Google account; the guest's rows must follow. */
+  | { status: "merged"; user: User; guestToken: string };
 
-export const signIn = async () => {
+/**
+ * Turn a guest into a real account without losing their exercises.
+ *
+ * linkWithPopup keeps the same uid, so every history and library row follows
+ * automatically. That fails when the Google account is already a Firebase user,
+ * since a uid can't absorb another -- then the only option is to sign in as the
+ * real account and hand the server the guest's token so it can move the rows.
+ */
+export async function linkGoogleAccount(user: User): Promise<LinkResult> {
+  // Read this before anything can swap the current user out. On the merge path
+  // it is the caller's only remaining proof that they controlled the guest.
+  const guestToken = await user.getIdToken();
+  const provider = new GoogleAuthProvider();
+
   try {
-    const result = await signInWithPopup(auth, provider);
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    const token = credential?.accessToken;
-    const user = result.user;
+    const result = await linkWithPopup(user, provider);
+    // Force a fresh token so the linked identity reaches onIdTokenChanged and
+    // the rest of the app stops treating this session as a guest.
+    await result.user.getIdToken(true);
+    return { status: "linked", user: result.user };
+  } catch (err) {
+    if (!(err instanceof FirebaseError)) throw err;
 
-    return { token, user };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } catch (err: any) {
-    const code = err.code;
-    const message = err.message;
-    const email = err.customData.email;
+    if (err.code === "auth/popup-closed-by-user" || err.code === "auth/cancelled-popup-request") {
+      return { status: "cancelled" };
+    }
 
-    console.error(
-      `An error ${code} occurred when logging user with email: ${email} with message: ${message}`,
-    );
-    return null;
+    if (err.code === "auth/credential-already-in-use" || err.code === "auth/email-already-in-use") {
+      const credential = GoogleAuthProvider.credentialFromError(err);
+      if (!credential) throw err;
+      const result = await signInWithCredential(auth, credential);
+      return { status: "merged", user: result.user, guestToken };
+    }
+
+    throw err;
   }
-};
+}
 
 export const signOut = async () => {
   await auth.signOut();

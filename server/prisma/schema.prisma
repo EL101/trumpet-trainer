@@ -26,6 +26,8 @@ model History {
   generationNum Int      @map("generation_num")
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId, generationNum(sort: Desc)], map: "idx_history_user_generation")
   @@map("history")
 }
@@ -42,6 +44,40 @@ model Library {
   generationNum Int      @map("generation_num")
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId, createdAt(sort: Desc)], map: "idx_library_user_created")
   @@map("library")
+}
+
+/// Profile data. Identity still lives in Firebase Auth; email/displayName are
+/// mirrored here from the ID token so exercise rows have something to point at.
+model User {
+  id          String   @id
+  email       String?
+  displayName String?  @map("display_name")
+  isAnonymous Boolean  @default(false) @map("is_anonymous")
+  /// Refreshed at most hourly by ensureUserExists; drives the guest sweep.
+  lastSeenAt  DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  avatar  UserAvatar?
+  history History[]
+  library Library[]
+
+  @@index([isAnonymous, lastSeenAt], map: "idx_users_anonymous_last_seen")
+  @@map("users")
+}
+
+/// Uploaded avatar bytes, split out so the hot users row stays small.
+model UserAvatar {
+  userId    String   @id @map("user_id")
+  mimeType  String   @map("mime_type")
+  data      Bytes
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_avatars")
 }
