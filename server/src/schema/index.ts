@@ -4,4 +4,10 @@ export {
   type ExerciseInput,
   type ExerciseTable,
 } from "./exercise.js";
-export { MergeGuestSchema, type MergeGuestInput } from "./profile.js";
+export {
+  MergeGuestSchema,
+  AvatarUploadSchema,
+  type MergeGuestInput,
+  type AvatarUpload,
+  type Profile,
+} from "./profile.js";

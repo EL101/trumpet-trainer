@@ -64,6 +64,11 @@ export async function ensureUserExists(claims: admin.auth.DecodedIdToken) {
   rememberTouch(claims.uid, now);
 }
 
+/** The user row plus their avatar, for GET /api/profile. */
+export function getUserWithAvatar(uid: string) {
+  return prisma.user.findUnique({ where: { id: uid }, include: { avatar: true } });
+}
+
 /** Refresh the mirrored profile fields from the caller's current token claims. */
 export async function syncUserFromClaims(claims: admin.auth.DecodedIdToken) {
   const isAnonymous = claims.firebase?.sign_in_provider === "anonymous";
