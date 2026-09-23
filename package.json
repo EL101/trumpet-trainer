@@ -5,6 +5,9 @@
   "main": "index.js",
   "scripts": {
     "dev": "concurrently \"npm run dev --prefix client\" \"npm run dev --prefix server\"",
+    "db:up": "docker compose up -d --wait postgres && npm run db:migrate",
+    "db:migrate": "docker compose run --rm migrate",
+    "db:down": "docker compose down",
     "test": "vitest",
     "format": "eslint --fix . && prettier --write .",
     "format:check": "prettier --check ."
