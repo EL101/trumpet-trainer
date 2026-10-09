@@ -214,3 +214,65 @@ describe("POST /api/profile/merge-guest", () => {
     expect(res.status).toBe(200);
   });
 });
+
+describe("POST /api/profile/discard-guest", () => {
+  const discard = (callerToken: string, guestToken: string) =>
+    request(app).post("/api/profile/discard-guest").set(bearer(callerToken)).send({ guestToken });
+
+  it("deletes the guest and its exercises, leaving the caller's alone", async () => {
+    const guest = newUid("guest");
+    const target = newUid();
+    await createUser(guest, { isAnonymous: true });
+    await createUser(target);
+    await addHistory(guest, 1, 2);
+    await addLibrary(guest, 1);
+    await addHistory(target, 1);
+    await setAvatar(guest, "image/png", PNG);
+
+    const res = await discard(tokenFor(googleClaims(target)), tokenFor(guestClaims(guest)));
+
+    expect(res.status).toBe(204);
+    expect(await prisma.user.findUnique({ where: { id: guest } })).toBeNull();
+    expect(await prisma.history.count({ where: { userId: guest } })).toBe(0);
+    expect(await prisma.library.count({ where: { userId: guest } })).toBe(0);
+    expect(await prisma.userAvatar.findUnique({ where: { userId: guest } })).toBeNull();
+    expect(await prisma.history.count({ where: { userId: target } })).toBe(1);
+    expect(auth.deleteUser).toHaveBeenCalledWith(guest);
+  });
+
+  it("refuses to discard an account that isn't a guest", async () => {
+    const victim = newUid("victim");
+    await createUser(victim);
+    await addHistory(victim, 1);
+
+    const res = await discard(tokenFor(googleClaims(newUid())), tokenFor(googleClaims(victim)));
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Not a guest account");
+    expect(await prisma.history.count({ where: { userId: victim } })).toBe(1);
+    expect(auth.deleteUser).not.toHaveBeenCalled();
+  });
+
+  it("refuses to discard the caller's own account", async () => {
+    const uid = newUid();
+    await createUser(uid, { isAnonymous: true });
+    const res = await discard(tokenFor(guestClaims(uid)), tokenFor(guestClaims(uid)));
+    expect(res.status).toBe(400);
+    expect(await prisma.user.findUnique({ where: { id: uid } })).not.toBeNull();
+  });
+
+  it("rejects a guest token that doesn't verify", async () => {
+    const res = await discard(tokenFor(googleClaims(newUid())), "forged");
+    expect(res.status).toBe(401);
+  });
+
+  it("still succeeds when Firebase can't delete the guest", async () => {
+    const guest = newUid("guest");
+    await createUser(guest, { isAnonymous: true });
+    auth.deleteUser.mockRejectedValueOnce(firebaseError("auth/internal-error"));
+
+    const res = await discard(tokenFor(googleClaims(newUid())), tokenFor(guestClaims(guest)));
+    expect(res.status).toBe(204);
+    expect(await prisma.user.findUnique({ where: { id: guest } })).toBeNull();
+  });
+});

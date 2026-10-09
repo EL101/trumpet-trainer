@@ -1,8 +1,13 @@
 import { Router, Request, Response } from "express";
 import admin from "firebase-admin";
 import { requireAuth } from "../middleware/requireAuth.js";
-import { AvatarUploadSchema, MergeGuestSchema, type Profile } from "../schema/index.js";
-import { getUserWithAvatar, mergeGuestData, syncUserFromClaims } from "../queries/users.js";
+import { AvatarUploadSchema, GuestTokenSchema, type Profile } from "../schema/index.js";
+import {
+  discardGuest,
+  getUserWithAvatar,
+  mergeGuestData,
+  syncUserFromClaims,
+} from "../queries/users.js";
 import { deleteAvatar, setAvatar } from "../queries/avatars.js";
 import { AvatarError, decodeAvatarDataUrl, toDataUrl } from "../avatar.js";
 
@@ -91,47 +96,84 @@ router.post("/sync", requireAuth, async (req: Request, res: Response) => {
 });
 
 /**
- * Move a guest account's exercises onto the caller's account.
- *
- * Used when linkWithPopup reports auth/credential-already-in-use: the Google
- * account already exists, so the guest uid can't be upgraded in place and the
- * rows have to be carried across by hand.
+ * Verify the guest token in the body against the caller, or send the error.
+ * Shared by merge-guest and discard-guest: both act on an account other than
+ * the caller's, so both need the same proof that the caller controls it.
  */
-router.post("/merge-guest", requireAuth, async (req: Request, res: Response) => {
-  const parsed = MergeGuestSchema.safeParse(req.body);
+async function verifyGuest(req: Request, res: Response) {
+  const parsed = GuestTokenSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error });
+    res.status(400).json({ error: parsed.error });
+    return null;
   }
 
   let guest: admin.auth.DecodedIdToken;
   try {
     guest = await admin.auth().verifyIdToken(parsed.data.guestToken);
   } catch {
-    return res.status(401).json({ error: "Invalid guest token" });
+    res.status(401).json({ error: "Invalid guest token" });
+    return null;
   }
 
-  // Without this, any token would let its holder vacuum up another account's
-  // exercises. Only a genuine anonymous account can be merged away.
+  // Without this, any token would let its holder vacuum up -- or wipe out --
+  // another account's exercises. Only a genuine anonymous account qualifies.
   if (guest.firebase?.sign_in_provider !== "anonymous") {
-    return res.status(400).json({ error: "Not a guest account" });
+    res.status(400).json({ error: "Not a guest account" });
+    return null;
   }
   if (guest.uid === req.user!.uid) {
-    return res.status(400).json({ error: "Cannot merge an account into itself" });
+    res.status(400).json({ error: "Cannot act on your own account" });
+    return null;
   }
+  return guest;
+}
+
+/** Retire the emptied guest. Not fatal on failure -- the sweep collects it later. */
+async function deleteFirebaseGuest(uid: string) {
+  try {
+    await admin.auth().deleteUser(uid);
+  } catch (err) {
+    console.error(`Could not delete guest ${uid} from Firebase:`, err);
+  }
+}
+
+/**
+ * Move a guest account's exercises onto the caller's account.
+ *
+ * Used when linkWithPopup reports auth/credential-already-in-use and the user
+ * chooses to bring their guest exercises with them: the Google account already
+ * exists, so the guest uid can't be upgraded in place and the rows have to be
+ * carried across by hand.
+ */
+router.post("/merge-guest", requireAuth, async (req: Request, res: Response) => {
+  const guest = await verifyGuest(req, res);
+  if (!guest) return;
 
   try {
     const moved = await mergeGuestData(guest.uid, req.user!.uid);
-    // The guest account is empty now, so retire it instead of leaving it for
-    // the sweep. Failure here is not fatal -- the sweep collects it later.
-    try {
-      await admin.auth().deleteUser(guest.uid);
-    } catch (err) {
-      console.error(`Merged guest ${guest.uid} but could not delete it:`, err);
-    }
+    await deleteFirebaseGuest(guest.uid);
     res.json(moved);
   } catch (err) {
     console.error("Failed to merge guest data:", err);
     res.status(500).json({ error: "Failed to merge guest data" });
+  }
+});
+
+/**
+ * Delete a guest account and everything it owns. The other half of the choice
+ * offered when linking lands on an existing Google account.
+ */
+router.post("/discard-guest", requireAuth, async (req: Request, res: Response) => {
+  const guest = await verifyGuest(req, res);
+  if (!guest) return;
+
+  try {
+    await discardGuest(guest.uid);
+    await deleteFirebaseGuest(guest.uid);
+    res.status(204).end();
+  } catch (err) {
+    console.error("Failed to discard guest data:", err);
+    res.status(500).json({ error: "Failed to discard guest data" });
   }
 });
 

@@ -145,6 +145,15 @@ export async function mergeGuestData(guestUid: string, targetUid: string) {
 }
 
 /**
+ * Delete a guest's row; history, library and avatar go with it by cascade.
+ * Scoped to anonymous rows so a mistaken uid can never wipe a real account.
+ */
+export async function discardGuest(guestUid: string) {
+  await prisma.user.deleteMany({ where: { id: guestUid, isAnonymous: true } });
+  touched.delete(guestUid);
+}
+
+/**
  * Delete anonymous users that have been idle for longer than the TTL, from both
  * Firebase Auth and Postgres.
  *

@@ -1,5 +1,11 @@
 import { auth } from "../firebase.ts";
-import { GoogleAuthProvider, linkWithPopup, signInWithCredential, type User } from "firebase/auth";
+import {
+  GoogleAuthProvider,
+  linkWithPopup,
+  signInWithCredential,
+  type OAuthCredential,
+  type User,
+} from "firebase/auth";
 import { FirebaseError } from "firebase/app";
 
 export type LinkResult =
@@ -7,21 +13,22 @@ export type LinkResult =
   | { status: "cancelled" }
   /** The guest uid was upgraded in place, so its rows already belong to it. */
   | { status: "linked"; user: User }
-  /** Signed in as a pre-existing Google account; the guest's rows must follow. */
-  | { status: "merged"; user: User; guestToken: string };
+  /**
+   * The Google account already exists, so the guest can't be upgraded in place.
+   * Nothing has changed yet: the guest is still signed in, and the caller decides
+   * what happens to their exercises before calling switchToExistingAccount.
+   */
+  | { status: "conflict"; credential: OAuthCredential };
 
 /**
  * Turn a guest into a real account without losing their exercises.
  *
  * linkWithPopup keeps the same uid, so every history and library row follows
  * automatically. That fails when the Google account is already a Firebase user,
- * since a uid can't absorb another -- then the only option is to sign in as the
- * real account and hand the server the guest's token so it can move the rows.
+ * since a uid can't absorb another -- then the guest's rows have to be merged or
+ * discarded by hand, which is the user's call (see switchToExistingAccount).
  */
 export async function linkGoogleAccount(user: User): Promise<LinkResult> {
-  // Read this before anything can swap the current user out. On the merge path
-  // it is the caller's only remaining proof that they controlled the guest.
-  const guestToken = await user.getIdToken();
   const provider = new GoogleAuthProvider();
 
   try {
@@ -40,12 +47,26 @@ export async function linkGoogleAccount(user: User): Promise<LinkResult> {
     if (err.code === "auth/credential-already-in-use" || err.code === "auth/email-already-in-use") {
       const credential = GoogleAuthProvider.credentialFromError(err);
       if (!credential) throw err;
-      const result = await signInWithCredential(auth, credential);
-      return { status: "merged", user: result.user, guestToken };
+      return { status: "conflict", credential };
     }
 
     throw err;
   }
+}
+
+/**
+ * Leave the guest for the existing Google account behind `credential`.
+ *
+ * Returns the new user plus the guest's ID token, read while the guest is still
+ * signed in: after the switch it is the only proof the caller controlled the
+ * guest, which the server needs to merge or discard its rows. Reading it here,
+ * rather than when the popup closed, keeps it fresh however long the user spent
+ * deciding.
+ */
+export async function switchToExistingAccount(guest: User, credential: OAuthCredential) {
+  const guestToken = await guest.getIdToken();
+  const result = await signInWithCredential(auth, credential);
+  return { user: result.user, guestToken };
 }
 
 export const signOut = async () => {

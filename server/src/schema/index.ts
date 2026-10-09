@@ -5,9 +5,9 @@ export {
   type ExerciseTable,
 } from "./exercise.js";
 export {
-  MergeGuestSchema,
+  GuestTokenSchema,
   AvatarUploadSchema,
-  type MergeGuestInput,
+  type GuestTokenInput,
   type AvatarUpload,
   type Profile,
 } from "./profile.js";

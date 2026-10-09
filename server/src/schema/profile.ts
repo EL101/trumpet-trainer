@@ -1,17 +1,17 @@
 import { z } from "zod";
 
 /**
- * Body of POST /api/profile/merge-guest.
+ * Body of POST /api/profile/merge-guest and /api/profile/discard-guest.
  *
- * The caller is authenticated as the account keeping the data; this token is
- * the guest account they are merging *from*. Holding both is the proof that the
- * same person controls both accounts.
+ * The caller is authenticated as the account they are keeping; this token is
+ * the guest account being merged or discarded. Holding both is the proof that
+ * the same person controls both accounts.
  */
-export const MergeGuestSchema = z.object({
+export const GuestTokenSchema = z.object({
   guestToken: z.string().min(1),
 });
 
-export type MergeGuestInput = z.infer<typeof MergeGuestSchema>;
+export type GuestTokenInput = z.infer<typeof GuestTokenSchema>;
 
 /** Body of PUT /api/profile/avatar. The data URL is validated in avatar.ts. */
 export const AvatarUploadSchema = z.object({

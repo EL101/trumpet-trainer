@@ -3,6 +3,7 @@ import { prisma } from "../src/db.js";
 import { setAvatar } from "../src/queries/avatars.js";
 import {
   GUEST_TTL_MS,
+  discardGuest,
   ensureUserExists,
   mergeGuestData,
   sweepAbandonedGuests,
@@ -232,5 +233,31 @@ describe("sweepAbandonedGuests", () => {
 
     await ensureUserExists({ uid, firebase: { sign_in_provider: "anonymous" } } as never);
     expect(await prisma.user.findUnique({ where: { id: uid } })).not.toBeNull();
+  });
+});
+
+describe("discardGuest", () => {
+  it("deletes a guest row and everything it owns", async () => {
+    const guest = newUid("guest");
+    await createUser(guest, { isAnonymous: true });
+    await addHistory(guest, 1);
+    await addLibrary(guest, 1);
+
+    await discardGuest(guest);
+
+    expect(await prisma.user.findUnique({ where: { id: guest } })).toBeNull();
+    expect(await prisma.history.count({ where: { userId: guest } })).toBe(0);
+    expect(await prisma.library.count({ where: { userId: guest } })).toBe(0);
+  });
+
+  it("never deletes a non-anonymous user", async () => {
+    const uid = newUid();
+    await createUser(uid);
+    await addHistory(uid, 1);
+
+    await discardGuest(uid);
+
+    expect(await prisma.user.findUnique({ where: { id: uid } })).not.toBeNull();
+    expect(await prisma.history.count({ where: { userId: uid } })).toBe(1);
   });
 });
