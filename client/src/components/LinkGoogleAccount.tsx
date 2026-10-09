@@ -55,7 +55,7 @@ export default function LinkGoogleAccount({ user }: { readonly user: User }) {
   return (
     <Flex direction="column" gap={2} align="flex-start">
       <Text color="gray.600">
-        You're practising as a guest. Link a Google account to keep your history.
+        You're practicing as a guest. Link a Google account to keep your history.
       </Text>
       <Button
         onClick={handleLink}
