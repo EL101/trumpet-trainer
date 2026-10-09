@@ -38,6 +38,10 @@ router.get("/", requireAuth, async (req: Request, res: Response) => {
 
 /** Replace the caller's avatar. Body is a base64 image data URL. */
 router.put("/avatar", requireAuth, async (req: Request, res: Response) => {
+  if (req.user!.firebase?.sign_in_provider === "anonymous") {
+    return res.status(403).json({ error: "Sign in to upload a profile picture" });
+  }
+
   const parsed = AvatarUploadSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error });

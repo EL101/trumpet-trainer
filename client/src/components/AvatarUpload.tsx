@@ -52,6 +52,10 @@ export default function AvatarUpload({ user }: { readonly user: User }) {
     }
   };
 
+  if (profile?.isAnonymous) {
+    return <UserAvatar size={120} isGuest />;
+  }
+
   return (
     <Flex direction="column" gap={2} align="flex-start">
       <Box position="relative">
