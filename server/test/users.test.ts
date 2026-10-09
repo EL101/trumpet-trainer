@@ -136,81 +136,86 @@ describe("sweepAbandonedGuests", () => {
   const old = new Date(now - GUEST_TTL_MS - HOUR);
   const recent = new Date(now - HOUR);
 
-  const firebaseUser = (uid: string, created: Date, providers: string[] = []) => ({
-    uid,
-    providerData: providers.map((providerId) => ({ providerId })),
-    metadata: { creationTime: created.toUTCString() },
+  it("treats 48 hours of inactivity as abandoned", () => {
+    expect(GUEST_TTL_MS).toBe(48 * HOUR);
   });
 
-  it("deletes old, idle guests from Postgres and Firebase", async () => {
+  it("deletes idle guests from Postgres and Firebase", async () => {
     const uid = newUid("guest");
     await createUser(uid, { isAnonymous: true, lastSeenAt: old });
     await addHistory(uid, 1);
-    auth.listUsers.mockResolvedValueOnce({ users: [firebaseUser(uid, old)] });
+    await addLibrary(uid, 1);
 
     expect(await sweepAbandonedGuests(now)).toEqual({ deleted: 1, scanned: 1 });
     expect(await prisma.user.findUnique({ where: { id: uid } })).toBeNull();
     expect(await prisma.history.count({ where: { userId: uid } })).toBe(0);
+    expect(await prisma.library.count({ where: { userId: uid } })).toBe(0);
     expect(auth.deleteUsers).toHaveBeenCalledWith([uid]);
   });
 
-  it("keeps guests created within the TTL", async () => {
-    const uid = newUid("guest");
-    auth.listUsers.mockResolvedValueOnce({ users: [firebaseUser(uid, recent)] });
-
-    expect(await sweepAbandonedGuests(now)).toEqual({ deleted: 0, scanned: 1 });
-    expect(auth.deleteUsers).not.toHaveBeenCalled();
-  });
-
-  it("keeps old guests who are still active", async () => {
+  it("keeps guests seen within the TTL", async () => {
     const uid = newUid("guest");
     await createUser(uid, { isAnonymous: true, lastSeenAt: recent });
-    auth.listUsers.mockResolvedValueOnce({ users: [firebaseUser(uid, old)] });
 
-    await sweepAbandonedGuests(now);
+    expect(await sweepAbandonedGuests(now)).toEqual({ deleted: 0, scanned: 0 });
     expect(await prisma.user.findUnique({ where: { id: uid } })).not.toBeNull();
     expect(auth.deleteUsers).not.toHaveBeenCalled();
   });
 
-  it("never touches accounts with a linked provider", async () => {
+  it("keeps a guest seen 47 hours ago", async () => {
+    const uid = newUid("guest");
+    await createUser(uid, { isAnonymous: true, lastSeenAt: new Date(now - 47 * HOUR) });
+
+    await sweepAbandonedGuests(now);
+    expect(await prisma.user.findUnique({ where: { id: uid } })).not.toBeNull();
+  });
+
+  it("never touches idle non-guest rows", async () => {
     const uid = newUid();
     await createUser(uid, { lastSeenAt: old });
-    auth.listUsers.mockResolvedValueOnce({ users: [firebaseUser(uid, old, ["google.com"])] });
 
-    await sweepAbandonedGuests(now);
+    expect(await sweepAbandonedGuests(now)).toEqual({ deleted: 0, scanned: 0 });
     expect(await prisma.user.findUnique({ where: { id: uid } })).not.toBeNull();
+  });
+
+  it("repairs, rather than deletes, a row whose guest has since linked Google", async () => {
+    const uid = newUid("linked");
+    await createUser(uid, { isAnonymous: true, lastSeenAt: old });
+    await addHistory(uid, 1);
+    auth.getUsers.mockResolvedValueOnce({
+      users: [{ uid, providerData: [{ providerId: "google.com" }] }],
+      notFound: [],
+    });
+
+    expect(await sweepAbandonedGuests(now)).toEqual({ deleted: 0, scanned: 1 });
+    const row = await prisma.user.findUniqueOrThrow({ where: { id: uid } });
+    expect(row.isAnonymous).toBe(false);
+    expect(await prisma.history.count({ where: { userId: uid } })).toBe(1);
     expect(auth.deleteUsers).not.toHaveBeenCalled();
   });
 
-  it("deletes guests who never reached the API and have no row", async () => {
+  it("deletes a row whose Firebase account is already gone", async () => {
     const uid = newUid("guest");
-    auth.listUsers.mockResolvedValueOnce({ users: [firebaseUser(uid, old)] });
+    await createUser(uid, { isAnonymous: true, lastSeenAt: old });
+    auth.getUsers.mockResolvedValueOnce({ users: [], notFound: [{ uid }] });
 
     expect(await sweepAbandonedGuests(now)).toEqual({ deleted: 1, scanned: 1 });
-    expect(auth.deleteUsers).toHaveBeenCalledWith([uid]);
+    expect(await prisma.user.findUnique({ where: { id: uid } })).toBeNull();
   });
 
-  it("reads every page of Firebase users", async () => {
-    const [a, b] = [newUid("guest"), newUid("guest")];
-    auth.listUsers
-      .mockResolvedValueOnce({ users: [firebaseUser(a, old)], pageToken: "next" })
-      .mockResolvedValueOnce({ users: [firebaseUser(b, old)] });
+  it("works through more guests than one batch holds", async () => {
+    const uids = Array.from({ length: 250 }, () => newUid("guest"));
+    for (const uid of uids) await createUser(uid, { isAnonymous: true, lastSeenAt: old });
 
-    expect(await sweepAbandonedGuests(now)).toEqual({ deleted: 2, scanned: 2 });
-    expect(auth.listUsers).toHaveBeenLastCalledWith(1000, "next");
+    expect(await sweepAbandonedGuests(now)).toEqual({ deleted: 250, scanned: 250 });
+    expect(auth.getUsers.mock.calls.map(([ids]) => ids.length)).toEqual([100, 100, 50]);
+    expect(await prisma.user.count({ where: { id: { in: uids } } })).toBe(0);
   });
 
-  it("deletes in batches of 1000", async () => {
-    const users = Array.from({ length: 1500 }, () => firebaseUser(newUid("guest"), old));
-    auth.listUsers.mockResolvedValueOnce({ users });
-
-    expect(await sweepAbandonedGuests(now)).toEqual({ deleted: 1500, scanned: 1500 });
-    expect(auth.deleteUsers.mock.calls.map(([uids]) => uids.length)).toEqual([1000, 500]);
-  });
-
-  it("counts only the Firebase deletes that succeeded", async () => {
-    const [a, b] = [newUid("guest"), newUid("guest")];
-    auth.listUsers.mockResolvedValueOnce({ users: [firebaseUser(a, old), firebaseUser(b, old)] });
+  it("keeps the row when its Firebase delete fails, and moves on", async () => {
+    const [a, b] = [newUid("guest-a"), newUid("guest-b")];
+    await createUser(a, { isAnonymous: true, lastSeenAt: old });
+    await createUser(b, { isAnonymous: true, lastSeenAt: old });
     auth.deleteUsers.mockResolvedValueOnce({
       successCount: 1,
       failureCount: 1,
@@ -219,7 +224,22 @@ describe("sweepAbandonedGuests", () => {
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
 
     expect(await sweepAbandonedGuests(now)).toEqual({ deleted: 1, scanned: 2 });
+    expect(await prisma.user.findUnique({ where: { id: a } })).toBeNull();
+    // Still there, so the next sweep retries it.
+    expect(await prisma.user.findUnique({ where: { id: b } })).not.toBeNull();
     expect(log).toHaveBeenCalledWith(expect.stringContaining(b), "boom");
+  });
+
+  it("spares a guest who comes back between the scan and the delete", async () => {
+    const uid = newUid("guest");
+    await createUser(uid, { isAnonymous: true, lastSeenAt: old });
+    auth.deleteUsers.mockImplementationOnce(async (uids: string[]) => {
+      await prisma.user.update({ where: { id: uid }, data: { lastSeenAt: new Date(now) } });
+      return { successCount: uids.length, failureCount: 0, errors: [] };
+    });
+
+    expect(await sweepAbandonedGuests(now)).toEqual({ deleted: 0, scanned: 1 });
+    expect(await prisma.user.findUnique({ where: { id: uid } })).not.toBeNull();
   });
 
   it("recreates a swept guest's row if they come back", async () => {
@@ -228,8 +248,8 @@ describe("sweepAbandonedGuests", () => {
     await ensureUserExists({ uid, firebase: { sign_in_provider: "anonymous" } } as never);
     vi.restoreAllMocks();
 
-    auth.listUsers.mockResolvedValueOnce({ users: [firebaseUser(uid, old)] });
     await sweepAbandonedGuests(now);
+    expect(await prisma.user.findUnique({ where: { id: uid } })).toBeNull();
 
     await ensureUserExists({ uid, firebase: { sign_in_provider: "anonymous" } } as never);
     expect(await prisma.user.findUnique({ where: { id: uid } })).not.toBeNull();

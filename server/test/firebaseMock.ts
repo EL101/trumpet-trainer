@@ -8,7 +8,7 @@ const tokens = new Map<string, Claims>();
 
 export const auth = {
   verifyIdToken: vi.fn(),
-  listUsers: vi.fn(),
+  getUsers: vi.fn(),
   deleteUsers: vi.fn(),
   deleteUser: vi.fn(),
 };
@@ -31,7 +31,11 @@ export function resetFirebase() {
     if (!claims) throw firebaseError("auth/argument-error");
     return claims;
   });
-  auth.listUsers.mockReset().mockResolvedValue({ users: [], pageToken: undefined });
+  // By default every uid asked about exists and is still a guest.
+  auth.getUsers.mockReset().mockImplementation(async (ids: { uid: string }[]) => ({
+    users: ids.map(({ uid }) => ({ uid, providerData: [] })),
+    notFound: [],
+  }));
   auth.deleteUsers.mockReset().mockImplementation(async (uids: string[]) => ({
     successCount: uids.length,
     failureCount: 0,

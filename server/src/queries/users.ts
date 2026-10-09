@@ -2,16 +2,13 @@ import admin from "firebase-admin";
 import { prisma } from "../db.js";
 
 /** A guest untouched for this long is considered abandoned. */
-export const GUEST_TTL_MS = 24 * 60 * 60 * 1000;
+export const GUEST_TTL_MS = 48 * 60 * 60 * 1000;
 
 /** How stale lastSeenAt may get before the next request refreshes it. */
 const LAST_SEEN_THROTTLE_MS = 60 * 60 * 1000;
 
-/** Stop paging Firebase after this many users, so one sweep can't run away. */
-const SWEEP_MAX_USERS = 10_000;
-
-/** deleteUsers() takes at most 1000 uids per call. */
-const DELETE_BATCH = 1000;
+/** Guests checked per round trip. getUsers() takes at most 100 identifiers. */
+const SWEEP_BATCH = 100;
 
 /**
  * uid -> when we last wrote lastSeenAt for it. Purely an optimisation: a missing
@@ -154,57 +151,73 @@ export async function discardGuest(guestUid: string) {
 }
 
 /**
- * Delete anonymous users that have been idle for longer than the TTL, from both
- * Firebase Auth and Postgres.
+ * Delete guests idle for longer than the TTL, from both Postgres and Firebase.
  *
- * Candidates come from Firebase rather than from `users`, so a guest who signed
- * in but never reached the API -- and therefore has no row -- is still cleaned up.
+ * Candidates come from Postgres -- anonymous rows with a stale lastSeenAt, which
+ * idx_users_anonymous_last_seen serves directly -- so the cost scales with the
+ * number of abandoned guests, not with every account in Firebase.
+ *
+ * Firebase is still the authority on whether an account is a guest. A guest who
+ * linked Google keeps their uid, and if the follow-up /sync failed their row
+ * still says isAnonymous. Each candidate is checked against Firebase first, and
+ * any that turn out to be linked get their row corrected instead of deleted.
+ *
+ * Not covered: a guest whose Firebase account has no row at all (signed in but
+ * never reached the API). They own nothing here, so they cost no space.
  */
 export async function sweepAbandonedGuests(now = Date.now()) {
   const cutoff = new Date(now - GUEST_TTL_MS);
-  const candidates: string[] = [];
-
-  let pageToken: string | undefined;
-  let scanned = 0;
-  do {
-    const page = await admin.auth().listUsers(1000, pageToken);
-    for (const user of page.users) {
-      // An anonymous user is one with no linked identity provider. A guest who
-      // has since linked Google has providerData, so they are skipped here.
-      if (user.providerData.length > 0) continue;
-      if (new Date(user.metadata.creationTime) >= cutoff) continue;
-      candidates.push(user.uid);
-    }
-    scanned += page.users.length;
-    pageToken = page.pageToken;
-  } while (pageToken && scanned < SWEEP_MAX_USERS);
-
-  if (candidates.length === 0) return { deleted: 0, scanned };
-
-  // Creation time only says the account is old. Keep anyone still using it.
-  const active = await prisma.user.findMany({
-    where: { id: { in: candidates }, lastSeenAt: { gte: cutoff } },
-    select: { id: true },
-  });
-  const activeUids = new Set(active.map((row) => row.id));
-  const doomed = candidates.filter((uid) => !activeUids.has(uid));
-  if (doomed.length === 0) return { deleted: 0, scanned };
-
-  // Postgres first. If the Firebase delete then fails, the next sweep still
-  // finds the account (candidates come from Firebase) and retries. Doing it the
-  // other way round would strand the Postgres row where no sweep looks again.
-  await prisma.user.deleteMany({ where: { id: { in: doomed } } });
-
+  const stale = { isAnonymous: true, lastSeenAt: { lt: cutoff } };
   let deleted = 0;
-  for (let i = 0; i < doomed.length; i += DELETE_BATCH) {
-    const batch = doomed.slice(i, i + DELETE_BATCH);
-    const result = await admin.auth().deleteUsers(batch);
-    deleted += result.successCount;
-    for (const err of result.errors) {
-      console.error(`Guest sweep: failed to delete ${batch[err.index]}:`, err.error.message);
+  let scanned = 0;
+
+  // Keyset pagination on id rather than re-querying from the top: a guest whose
+  // Firebase delete fails stays a candidate, and must not be fetched forever.
+  let after = "";
+  for (;;) {
+    const batch = await prisma.user.findMany({
+      where: { ...stale, id: { gt: after } },
+      select: { id: true },
+      orderBy: { id: "asc" },
+      take: SWEEP_BATCH,
+    });
+    if (batch.length === 0) break;
+    after = batch[batch.length - 1].id;
+    scanned += batch.length;
+
+    const uids = batch.map((row) => row.id);
+    const { users } = await admin.auth().getUsers(uids.map((uid) => ({ uid })));
+
+    // An anonymous user is one with no linked identity provider.
+    const linked = users.filter((user) => user.providerData.length > 0).map((user) => user.uid);
+    if (linked.length > 0) {
+      await prisma.user.updateMany({ where: { id: { in: linked } }, data: { isAnonymous: false } });
     }
+
+    // Uids Firebase doesn't know are doomed too: their row is all that's left.
+    const linkedSet = new Set(linked);
+    const doomed = uids.filter((uid) => !linkedSet.has(uid));
+    if (doomed.length === 0) continue;
+
+    // Firebase first. If the row delete then fails, the row is still a candidate
+    // next time, and deleting an already-deleted Firebase user is a no-op. The
+    // other order would strand Firebase accounts that no Postgres scan can find.
+    const result = await admin.auth().deleteUsers(doomed);
+    const failed = new Set<string>();
+    for (const err of result.errors) {
+      failed.add(doomed[err.index]);
+      console.error(`Guest sweep: failed to delete ${doomed[err.index]}:`, err.error.message);
+    }
+
+    // Re-check staleness so a guest who came back mid-sweep keeps their row.
+    const removed = await prisma.user.deleteMany({
+      where: { ...stale, id: { in: doomed.filter((uid) => !failed.has(uid)) } },
+    });
+    deleted += removed.count;
+    for (const uid of doomed) touched.delete(uid);
+
+    if (batch.length < SWEEP_BATCH) break;
   }
 
-  for (const uid of doomed) touched.delete(uid);
   return { deleted, scanned };
 }
