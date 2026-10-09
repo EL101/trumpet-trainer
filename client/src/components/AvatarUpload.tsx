@@ -58,11 +58,16 @@ export default function AvatarUpload({ user }: { readonly user: User }) {
 
   return (
     <Flex direction="column" gap={2} align="flex-start">
-      <Box position="relative">
+      <Box>
+        {/* The overlay is positioned against the button, not the Box: the button
+            is inline by default, so the Box's line box adds a few pixels of
+            descender space below it and an `inset: 0` overlay spills out there. */}
         <chakra.button
           type="button"
           onClick={() => inputRef.current?.click()}
           disabled={busy}
+          position="relative"
+          display="block"
           borderRadius="100%"
           cursor={busy ? "default" : "pointer"}
           aria-label="Change profile picture"
