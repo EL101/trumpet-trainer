@@ -26,7 +26,7 @@ export default function Metronome() {
       <Heading size="2xl">Metronome</Heading>
       <MetronomePulse
         alignSelf="center"
-        bgColor="#FBF8F0"
+        bgColor="bg.subtle"
         beats={beats}
         tempo={bpm}
         subdivision={subdivision}

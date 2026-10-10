@@ -32,9 +32,9 @@ export default function UserAvatar({ size, src, name, isGuest }: UserAvatarProps
       width={`${size}px`}
       height={`${size}px`}
       borderRadius="100%"
-      borderWidth={2}
-      borderColor="gray.700"
-      bg="gray.100"
+      borderWidth="1px"
+      borderColor="border.strong"
+      bg="bg.subtle"
       overflow="hidden"
       flexShrink={0}
       display="flex"
@@ -51,7 +51,7 @@ export default function UserAvatar({ size, src, name, isGuest }: UserAvatarProps
           onError={() => setFailedSrc(src)}
         />
       ) : (
-        <Text fontSize={`${Math.round(size * 0.4)}px`} fontWeight="bold" color="gray.700">
+        <Text fontFamily="heading" fontSize={`${Math.round(size * 0.44)}px`} color="fg">
           {initials(name, isGuest)}
         </Text>
       )}
