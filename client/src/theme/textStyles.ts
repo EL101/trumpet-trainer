@@ -9,6 +9,16 @@ const tabular = { fontVariantNumeric: "tabular-nums" } as const;
  */
 export const textStyles = defineTextStyles({
   display: {
+    /** Title-page headline (the landing page). */
+    xl: {
+      value: {
+        ...heading,
+        fontSize: "68px",
+        fontWeight: 400,
+        lineHeight: 1.06,
+        letterSpacing: "-0.015em",
+      },
+    },
     lg: {
       value: {
         ...heading,

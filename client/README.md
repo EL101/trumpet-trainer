@@ -5,8 +5,8 @@ React 19 + Vite + TypeScript, styled with Chakra UI v3. The look comes from the
 brass accent, hairline borders, and outlined buttons (never filled).
 
 > The frontend is mid-rehaul. The new design system and shared components are in
-> place; pages are being rebuilt on top of them one at a time. See
-> [Old vs new](#old-vs-new) for what to use and what to avoid.
+> place; pages are being rebuilt on top of them one at a time (done so far: the
+> landing page). See [Old vs new](#old-vs-new) for what to use and what to avoid.
 
 ## Running it
 
@@ -79,7 +79,8 @@ src/
 ├── utils/                 App logic: music generation, API calls, history, library,
 │                          profile, image handling.
 ├── hooks/                 usePitch (microphone), useMetronome, usePersistedState
-├── auth/                  Firebase sign-in state: useAuth()
+├── auth/                  Firebase sign-in: useAuth() for state; auth.ts signs in, links
+│                          a guest to Google, and signs out
 ├── profile/               The signed-in user's profile: useProfile()
 ├── schema/                Shared TypeScript types (exercises, music, profile)
 └── constants/             Old layout constants
@@ -103,6 +104,7 @@ The roles you'll use most:
 | ------------------------------------------- | ----------------------------------------------------- |
 | `bg`, `bg.panel`, `bg.subtle`               | Page background, raised surfaces, light fills         |
 | `fg`, `fg.muted`, `fg.subtle`               | Body text, secondary text, tertiary labels            |
+| `fg.error`                                  | Error messages                                        |
 | `border`, `border.emphasized`               | Hairlines and dividers, hovered borders               |
 | `accent.solid`                              | The brass accent for strokes, icons and large text    |
 | `accent.fg`                                 | Accent-coloured text at small sizes (better contrast) |
@@ -130,6 +132,9 @@ prop automatically.
 
 A component built for a single page can live inside that page file. Move it into
 `components/` once a second page needs it.
+
+The signed-out landing page (`pages/LandingPage.tsx`) is the one screen without a
+shell: it has no sidebar and nothing to go back to.
 
 ## Writing styles
 

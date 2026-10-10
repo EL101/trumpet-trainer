@@ -35,6 +35,8 @@ export const roles = {
     faint: neutral[600],
     /** The design system's 55% ink, used for captions and `.text-muted`. */
     soft: tint(ink, 55),
+    /** Error messages. The design system has no error colour, so this borrows its red. */
+    error: pitch.red,
   },
   border: {
     DEFAULT: tint(ink, 16),
