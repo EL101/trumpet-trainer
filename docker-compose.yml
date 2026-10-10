@@ -1,0 +1,62 @@
+# Local Postgres for development. Production is Neon; see NEON_DATABASE_URL.
+#
+#   npm run db:up       start it and apply migrations
+#   npm run db:migrate  apply migrations only
+#   npm run db:down     stop it (data survives in the named volume)
+#
+# Authoring a NEW migration stays on the host: `npm run migrate:dev --prefix
+# server`. migrate dev is interactive, needs a shadow database, and writes new
+# files into prisma/migrations -- none of which a throwaway container should do.
+#
+services:
+  postgres:
+    # Same registry as elsewhere on this machine, so pulls don't hit Docker Hub
+    # rate limits. 16.x matches what Neon runs.
+    image: public.ecr.aws/docker/library/postgres:16.8
+    container_name: trumpet-trainer-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: trumpet
+      POSTGRES_PASSWORD: trumpet
+      POSTGRES_DB: trumpet_trainer
+    # Host port 5433
+    ports:
+      - "5433:5432"
+    volumes:
+      - trumpet-trainer-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trumpet -d trumpet_trainer"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot: applies pending migrations, then exits. Profile-gated so it stays
+  # out of `docker compose up`; run it via `npm run db:migrate`.
+  migrate:
+    image: public.ecr.aws/docker/library/node:22-alpine
+    container_name: trumpet-trainer-migrate
+    working_dir: /app
+    profiles: ["tools"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Inside the compose network the database is `postgres:5432`. The 5433
+      # published on the host is irrelevant from in here.
+      DATABASE_URL: postgresql://trumpet:trumpet@postgres:5432/trumpet_trainer
+    volumes:
+      # Read-only, and only what Prisma reads, so the container can never write
+      # back into the host tree. node_modules lives in a volume instead: npm
+      # here installs Linux builds, which would break the host's `npm run dev`.
+      - ./server/package.json:/app/package.json:ro
+      - ./server/package-lock.json:/app/package-lock.json:ro
+      - ./server/prisma.config.ts:/app/prisma.config.ts:ro
+      - ./server/prisma:/app/prisma:ro
+      - trumpet-trainer-migrate-modules:/app/node_modules
+    # migrate deploy, not dev: non-interactive, no shadow database, applies only
+    # what is already committed. Same command that should run against Neon.
+    command: sh -c "npm ci --no-audit --no-fund && npx prisma migrate deploy"
+
+volumes:
+  trumpet-trainer-db:
+  trumpet-trainer-migrate-modules:

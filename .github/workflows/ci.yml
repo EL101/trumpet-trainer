@@ -27,3 +27,47 @@ jobs:
       - name: Run tests
         working-directory: client
         run: npm test -- --run
+
+  server-test:
+    name: Server tests
+    runs-on: ubuntu-latest
+    # npm ci runs dependency install scripts; keep the token they could see read-only.
+    permissions:
+      contents: read
+    env:
+      # prisma.config.ts requires it, even for the `prisma generate` run by npm ci.
+      DATABASE_URL: postgresql://trumpet:trumpet@localhost:5433/trumpet_trainer_test
+    services:
+      postgres:
+        image: public.ecr.aws/docker/library/postgres:16.8
+        env:
+          POSTGRES_USER: trumpet
+          POSTGRES_PASSWORD: trumpet
+          POSTGRES_DB: trumpet_trainer
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U trumpet"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Run tests
+        working-directory: server
+        run: npm test -- --run

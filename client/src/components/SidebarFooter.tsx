@@ -1,11 +1,11 @@
-import { AuthUserContext } from "@/auth/AuthUserContext";
-import { Box, Flex, Heading, Separator, type FlexProps } from "@chakra-ui/react";
-import { useContext } from "react";
+import { Flex, Heading, Separator, type FlexProps } from "@chakra-ui/react";
 import { NavLink } from "react-router-dom";
+import { useProfile } from "@/profile/useProfile";
+import UserAvatar from "./UserAvatar";
 
 export function SidebarFooter(props: FlexProps) {
-  const { user } = useContext(AuthUserContext);
-  const displayName = user?.isAnonymous ? "Guest" : user?.displayName;
+  const { profile } = useProfile();
+  const displayName = profile?.isAnonymous ? "Guest" : profile?.displayName;
 
   return (
     <Flex direction="column" gap={1} {...props}>
@@ -19,7 +19,12 @@ export function SidebarFooter(props: FlexProps) {
           transition="backgrounds"
           _hover={{ bg: "gray.200" }}
         >
-          <Box borderRadius="100%" borderWidth={2} borderColor="gray.700" width={35} height={35} />
+          <UserAvatar
+            size={35}
+            src={profile?.avatarUrl}
+            name={profile?.displayName}
+            isGuest={profile?.isAnonymous}
+          />
           <Flex direction="column" gap={2}>
             <Heading size="md">{displayName}</Heading>
           </Flex>
