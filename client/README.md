@@ -4,9 +4,10 @@ React 19 + Vite + TypeScript, styled with Chakra UI v3. The look comes from the
 **Classical** design system: Cormorant Garamond headings, Lora body text, a single
 brass accent, hairline borders, and outlined buttons (never filled).
 
-> The frontend is mid-rehaul. The new design system and shared components are in
-> place; pages are being rebuilt on top of them one at a time (done so far: the
-> landing page). See [Old vs new](#old-vs-new) for what to use and what to avoid.
+> The frontend is mid-rehaul. The new design system, shared components and app shell
+> (sidebar) are in place; page content is being rebuilt on top of them one screen at a
+> time (done so far: the landing page). See [Old vs new](#old-vs-new) for what to use
+> and what to avoid.
 
 ## Running it
 
@@ -83,8 +84,7 @@ src/
 ├── auth/                  Firebase sign-in: useAuth() for state; auth.ts signs in, links
 │                          a guest to Google, and signs out
 ├── profile/               The signed-in user's profile: useProfile()
-├── schema/                Shared TypeScript types (exercises, music, profile)
-└── constants/             Old layout constants
+└── schema/                Shared TypeScript types (exercises, music, profile)
 ```
 
 ## The colour rule
@@ -158,15 +158,13 @@ shell: it has no sidebar and nothing to go back to.
 The rehaul replaces the old components gradually. Until a page is rebuilt it keeps
 using the old ones, and both kinds live side by side.
 
-| Old (don't use in new code)                                   | New                                      |
-| ------------------------------------------------------------- | ---------------------------------------- |
-| `DashBoardTemplate`, `Sidebar`, `SidebarTab`, `SidebarFooter` | `layout/AppShell`, `layout/Sidebar`      |
-| `SheetMusic`                                                  | `music/Staff`                            |
-| `SegmentInput`                                                | `primitives/SegmentedControl`            |
-| `StepperInput`                                                | `primitives/Stepper`                     |
-| `Dropdown`, `inputs/*Select`                                  | `primitives/NativeSelect` inside `Field` |
-| Chakra `Button` / `Card` with stock variants                  | `primitives/Button` / `Card`             |
-| `constants/layout.ts`                                         | `AppShell` handles page padding          |
+| Old (don't use in new code)                  | New                                      |
+| -------------------------------------------- | ---------------------------------------- |
+| `SheetMusic`                                 | `music/Staff`                            |
+| `SegmentInput`                               | `primitives/SegmentedControl`            |
+| `StepperInput`                               | `primitives/Stepper`                     |
+| `Dropdown`, `inputs/*Select`                 | `primitives/NativeSelect` inside `Field` |
+| Chakra `Button` / `Card` with stock variants | `primitives/Button` / `Card`             |
 
 Once a page no longer uses an old component and nothing else imports it, delete it.
 

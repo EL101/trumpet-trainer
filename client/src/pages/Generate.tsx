@@ -1,7 +1,7 @@
 import { generateMusic } from "@/utils/generateMusic";
 import { useCallback, useContext, useEffect, useRef, useState, type ComponentType } from "react";
 import { Box, Button, Flex, Heading, HStack, Text } from "@chakra-ui/react";
-import DashboardTemplate from "../components/DashBoardTemplate";
+import { AppShell } from "@/components/layout";
 import { SheetMusic } from "../components/SheetMusic";
 import HistoryCard from "../components/HistoryCard";
 import SaveButton from "@/components/SaveButton";
@@ -100,7 +100,7 @@ export function Generate() {
   };
 
   return (
-    <DashboardTemplate>
+    <AppShell display="flex" flexDirection="column" gap="lg">
       <Flex flex="1" gap={2} height="100%" direction="column">
         <Heading size="2xl">Generate An Exercise</Heading>
         <Box>
@@ -193,6 +193,6 @@ export function Generate() {
             ))}
         </Flex>
       </Flex>
-    </DashboardTemplate>
+    </AppShell>
   );
 }

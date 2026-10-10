@@ -1,5 +1,5 @@
 import { Button, Circle, Heading, HStack, Text, VStack } from "@chakra-ui/react";
-import DashboardTemplate from "../components/DashBoardTemplate";
+import { AppShell } from "@/components/layout";
 import TunerPendulum from "@/components/TunerPendulum";
 import usePitch from "@/hooks/usePitch";
 import { Note } from "tonal";
@@ -30,7 +30,7 @@ export default function Tuner() {
   ];
 
   return (
-    <DashboardTemplate>
+    <AppShell display="flex" flexDirection="column" gap="lg">
       <Heading size="2xl">Tuner</Heading>
       <VStack bgColor="bg.subtle" borderWidth="2px" p={2}>
         <SegmentInput
@@ -78,6 +78,6 @@ export default function Tuner() {
         <Circle bgColor="green.600" size="8px" animation="livePulse 2500ms ease-out infinite" />
         <Text color={listening ? "white" : "black"}>{listening ? "Stop" : "Start"} Listening</Text>
       </Button>
-    </DashboardTemplate>
+    </AppShell>
   );
 }

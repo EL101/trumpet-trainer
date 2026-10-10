@@ -1,5 +1,5 @@
 import { useState } from "react";
-import DashboardTemplate from "../components/DashBoardTemplate";
+import { AppShell } from "@/components/layout";
 import { Button, Heading, HStack } from "@chakra-ui/react";
 import TempoSlider from "@/components/TempoSlider";
 import MetronomePulse from "@/components/MetronomePulse";
@@ -22,7 +22,7 @@ export default function Metronome() {
   const width = "70%";
   const maxW = "800px";
   return (
-    <DashboardTemplate>
+    <AppShell display="flex" flexDirection="column" gap="lg">
       <Heading size="2xl">Metronome</Heading>
       <MetronomePulse
         alignSelf="center"
@@ -67,6 +67,6 @@ export default function Metronome() {
           </>
         )}
       </Button>
-    </DashboardTemplate>
+    </AppShell>
   );
 }

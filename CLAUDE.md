@@ -61,8 +61,8 @@ README in the same change.
 ### Components
 
 - New pages must not use the old components listed in the README's "Old vs new" table
-  (`DashBoardTemplate`, `SheetMusic`, `SegmentInput`, Chakra's stock `Button`/`Card`
-  variants, …). Use the replacements.
+  (`SheetMusic`, `SegmentInput`, `Dropdown`, Chakra's stock `Button`/`Card` variants,
+  …). Use the replacements.
 - Component files export only components (React fast refresh requires it). Put helper
   functions and constants in `lib/` or in a sibling `.ts` file (e.g. `navItems.ts`).
 - Accessibility: `IconButton` requires `aria-label`. Choice controls are built on
