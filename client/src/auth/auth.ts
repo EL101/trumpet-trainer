@@ -2,11 +2,35 @@ import { auth } from "../firebase.ts";
 import {
   GoogleAuthProvider,
   linkWithPopup,
+  signInAnonymously,
   signInWithCredential,
+  signInWithPopup,
   type OAuthCredential,
   type User,
 } from "firebase/auth";
 import { FirebaseError } from "firebase/app";
+
+/** True when the user closed the Google popup or a second click superseded it. */
+const isPopupDismissed = (err: FirebaseError) =>
+  err.code === "auth/popup-closed-by-user" || err.code === "auth/cancelled-popup-request";
+
+/**
+ * Sign in with Google. A dismissed popup resolves quietly; any other failure throws.
+ * Nothing navigates here: the auth listener re-renders the app once the user changes.
+ */
+export async function signInWithGoogle() {
+  try {
+    await signInWithPopup(auth, new GoogleAuthProvider());
+  } catch (err) {
+    if (err instanceof FirebaseError && isPopupDismissed(err)) return;
+    throw err;
+  }
+}
+
+/** Start an anonymous guest session. Its exercises can later move to Google via linkGoogleAccount. */
+export async function signInAsGuest() {
+  await signInAnonymously(auth);
+}
 
 export type LinkResult =
   /** The popup was dismissed; nothing changed. */
@@ -40,9 +64,7 @@ export async function linkGoogleAccount(user: User): Promise<LinkResult> {
   } catch (err) {
     if (!(err instanceof FirebaseError)) throw err;
 
-    if (err.code === "auth/popup-closed-by-user" || err.code === "auth/cancelled-popup-request") {
-      return { status: "cancelled" };
-    }
+    if (isPopupDismissed(err)) return { status: "cancelled" };
 
     if (err.code === "auth/credential-already-in-use" || err.code === "auth/email-already-in-use") {
       const credential = GoogleAuthProvider.credentialFromError(err);

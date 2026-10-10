@@ -53,6 +53,7 @@ export default function DesignPreview() {
             "fg",
             "fg.muted",
             "fg.subtle",
+            "fg.error",
             "border",
             "border.strong",
             "accent.solid",
@@ -76,6 +77,7 @@ export default function DesignPreview() {
 
       <Section title="Type">
         <Flex direction="column" gap="sm">
+          <Text textStyle="display.xl">Display extra large — Live Feedback.</Text>
           <Text textStyle="display.lg">Display large — Today's session</Text>
           <Text textStyle="display.md">Display medium — Generate</Text>
           <Text textStyle="heading.lg">Heading large — Clarke Study No. 2 in G</Text>

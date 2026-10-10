@@ -1,5 +1,6 @@
 import { createSystem, defaultConfig, defineConfig } from "@chakra-ui/react";
 import { globalCss } from "./globalCss";
+import { keyframes } from "./keyframes";
 import { semanticTokens, tokens } from "./tokens";
 import { textStyles } from "./textStyles";
 
@@ -9,6 +10,7 @@ const config = defineConfig({
     tokens,
     semanticTokens,
     textStyles,
+    keyframes,
   },
 });
 
