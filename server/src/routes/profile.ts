@@ -109,7 +109,8 @@ async function verifyGuest(req: Request, res: Response) {
 
   let guest: admin.auth.DecodedIdToken;
   try {
-    guest = await admin.auth().verifyIdToken(parsed.data.guestToken);
+    // checkRevoked, matching requireAuth: a swept guest's token must not work.
+    guest = await admin.auth().verifyIdToken(parsed.data.guestToken, true);
   } catch {
     res.status(401).json({ error: "Invalid guest token" });
     return null;

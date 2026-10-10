@@ -56,7 +56,12 @@ export async function ensureUserExists(claims: admin.auth.DecodedIdToken) {
     },
     skipDuplicates: true,
   });
-  await prisma.user.updateMany({ where: { id: claims.uid }, data: { lastSeenAt } });
+  // Also correct isAnonymous: a guest who links Google keeps their uid, so the
+  // row above already exists and createMany leaves its stale value alone.
+  await prisma.user.updateMany({
+    where: { id: claims.uid },
+    data: { lastSeenAt, isAnonymous: claims.firebase?.sign_in_provider === "anonymous" },
+  });
 
   rememberTouch(claims.uid, now);
 }

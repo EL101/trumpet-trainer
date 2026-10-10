@@ -45,6 +45,14 @@ describe("ensureUserExists", () => {
       new Date(start + HOUR + 1),
     );
   });
+
+  it("clears isAnonymous once a guest's token shows a linked Google account", async () => {
+    const uid = newUid();
+    await createUser(uid, { isAnonymous: true });
+
+    await ensureUserExists(googleClaims(uid) as never);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: uid } })).isAnonymous).toBe(false);
+  });
 });
 
 describe("mergeGuestData", () => {

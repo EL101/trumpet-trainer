@@ -4,6 +4,7 @@ import { FcGoogle } from "react-icons/fc";
 import { FirebaseError } from "firebase/app";
 import type { OAuthCredential, User } from "firebase/auth";
 import { linkGoogleAccount, switchToExistingAccount } from "@/auth/auth";
+import { useProfile } from "@/profile/useProfile";
 import { countExercises, discardGuestData, mergeGuestData, syncProfile } from "@/utils/profile";
 
 /** A Google account that already exists, waiting on the user's choice. */
@@ -25,6 +26,7 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
  * guest's along or discard them.
  */
 export default function LinkGoogleAccount({ user }: { readonly user: User }) {
+  const { refresh } = useProfile();
   const [busy, setBusy] = useState(false);
   const [conflict, setConflict] = useState<Conflict | null>(null);
   const [choosing, setChoosing] = useState<Choice | null>(null);
@@ -43,6 +45,9 @@ export default function LinkGoogleAccount({ user }: { readonly user: User }) {
       if (result.status === "linked") {
         // Same uid, so the rows never moved -- only the profile fields changed.
         await syncProfile(result.user);
+        // linkWithPopup keeps the same User object, so the provider won't
+        // refetch on its own -- and its fetch would race the sync anyway.
+        await refresh(result.user);
         setMessage("Account linked. Your practice history came with you.");
         return;
       }
@@ -74,6 +79,8 @@ export default function LinkGoogleAccount({ user }: { readonly user: User }) {
         ? await mergeGuestData(next, guestToken)
         : await discardGuestData(next, guestToken);
     await syncProfile(next);
+    // Pass `next` explicitly: `refresh` still closes over the guest user.
+    await refresh(next);
     return moved;
   };
 

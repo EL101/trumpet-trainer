@@ -31,8 +31,17 @@ export default async function setup() {
     await client.end();
   }
 
-  execSync("npx prisma migrate deploy", {
-    env: { ...process.env, DATABASE_URL: TEST_DATABASE_URL },
-    stdio: "pipe",
-  });
+  try {
+    execSync("npx prisma migrate deploy", {
+      env: { ...process.env, DATABASE_URL: TEST_DATABASE_URL },
+      stdio: "pipe",
+    });
+  } catch (err) {
+    // The captured output is Buffers, which Vitest prints as byte arrays.
+    const { stdout, stderr } = err as { stdout?: Buffer; stderr?: Buffer };
+    throw new Error(
+      `prisma migrate deploy failed:\n${stdout?.toString() ?? ""}${stderr?.toString() ?? ""}`,
+      { cause: err },
+    );
+  }
 }

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { User } from "firebase/auth";
 import { useAuth } from "@/auth/useAuth";
 import type { Profile } from "@/schema";
 import { fetchProfile } from "@/utils/profile";
@@ -15,21 +16,26 @@ export default function ProfileProvider({ children }: { readonly children: React
   const { user, loading: authLoading } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  // Bumped by every fetch; a response is applied only if it is still the latest.
+  // Otherwise a slow automatic fetch (fired when the user changed, before a
+  // sync landed) could overwrite the result of a later explicit refresh.
+  const latest = useRef(0);
 
-  const refresh = useCallback(async () => {
-    if (!user) {
-      setProfile(null);
-      setLoading(false);
-      return;
-    }
-    try {
-      setProfile(await fetchProfile(user));
-    } catch (error) {
-      console.error("fetch profile error:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
+  const refresh = useCallback(
+    async (forUser?: User | null) => {
+      const target = forUser === undefined ? user : forUser;
+      const request = ++latest.current;
+      try {
+        const next = await fetchProfile(target);
+        if (request === latest.current) setProfile(next);
+      } catch (error) {
+        console.error("fetch profile error:", error);
+      } finally {
+        if (request === latest.current) setLoading(false);
+      }
+    },
+    [user],
+  );
 
   useEffect(() => {
     if (authLoading) return;
@@ -39,16 +45,18 @@ export default function ProfileProvider({ children }: { readonly children: React
     // happens in a promise callback: doing it in the effect body synchronously
     // triggers a second render pass before the browser paints.
     const controller = new AbortController();
+    const request = ++latest.current;
+    const isCurrent = () => !controller.signal.aborted && request === latest.current;
     fetchProfile(user, controller.signal)
       .then((next) => {
-        if (!controller.signal.aborted) setProfile(next);
+        if (isCurrent()) setProfile(next);
       })
       .catch((error) => {
         if (error instanceof Error && error.name === "AbortError") return;
         console.error("fetch profile error:", error);
       })
       .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
+        if (isCurrent()) setLoading(false);
       });
 
     return () => controller.abort();
