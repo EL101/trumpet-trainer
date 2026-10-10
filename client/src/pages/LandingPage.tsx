@@ -5,10 +5,11 @@ import {
   Spinner,
   Text,
   useBreakpointValue,
+  useMediaQuery,
   type FlexProps,
 } from "@chakra-ui/react";
 import { FirebaseError } from "firebase/app";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { signInAsGuest, signInWithGoogle } from "@/auth/auth";
 import { useAuth } from "@/auth/useAuth";
@@ -178,6 +179,13 @@ const MOUTH_X = 340;
 /** Length of the staff, from the middle of the bell to the far edge. */
 const FLOW = VIEW_W - MOUTH_X;
 const WAVELENGTH = 520;
+/** How fast the music drifts out of the bell, in drawing units per second. */
+const DRIFT_SPEED = 20;
+/** Distance over which notes fade in as they leave the bell. */
+const EMERGE = 80;
+const BAR = 230;
+/** The melody is seven bars long, a little longer than the staff, and loops back into the bell. */
+const LOOP = 7 * BAR;
 
 /** Pipes, as centrelines: the bell pipe, then the main tuning slide running into the lead pipe. */
 const TUBES = ["M-20 130 H160", "M-20 162 H185 A13 13 0 0 1 185 188 H-20"];
@@ -186,8 +194,8 @@ const VALVES = [20, 50, 80];
 type BackdropNote = { u: number; step: number; kind: "q" | "h" | "8" };
 
 /**
- * `u` is the distance along the staff, `step` counts half-spaces up from the middle line.
- * Eighths ("8") come in beamed pairs.
+ * `u` is the distance along the staff before any drift, `step` counts half-spaces up from
+ * the middle line. Eighths ("8") come in beamed pairs, never two pairs back to back.
  */
 const MELODY: BackdropNote[] = [
   { u: 60, step: -3, kind: "q" },
@@ -209,22 +217,54 @@ const MELODY: BackdropNote[] = [
   { u: 1125, step: 1, kind: "q" },
   { u: 1220, step: 3, kind: "h" },
   { u: 1320, step: -1, kind: "q" },
+  { u: 1445, step: 2, kind: "8" },
+  { u: 1485, step: 0, kind: "8" },
+  { u: 1535, step: -2, kind: "q" },
+  { u: 1585, step: -1, kind: "q" },
 ];
-const BARLINES = [250, 480, 710, 940, 1170, 1400];
+const BARLINES = Array.from({ length: LOOP / BAR }, (_, i) => 20 + i * BAR);
+
+/**
+ * Seconds of drift so far, ticking at about 30 fps. Holds still for viewers who ask for
+ * reduced motion, and picks up where it left off when a hidden tab comes back.
+ */
+function useDriftClock() {
+  const [reduceMotion] = useMediaQuery(["(prefers-reduced-motion: reduce)"], { ssr: false });
+  const [seconds, setSeconds] = useState(0);
+  const elapsed = useRef(0);
+
+  useEffect(() => {
+    if (reduceMotion) return;
+    let prev = performance.now();
+    let frame = requestAnimationFrame(function tick(now) {
+      frame = requestAnimationFrame(tick);
+      if (now - prev < 1000 / 30) return;
+      elapsed.current += Math.min(now - prev, 100) / 1000;
+      prev = now;
+      setSeconds(elapsed.current);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [reduceMotion]);
+
+  return seconds;
+}
 
 /**
  * Decorative band: a trumpet jutting in from `side`, playing a wavy staff across the page.
  * `phase` shifts the wave; pick one that keeps the staff away from the content mid-page.
  */
 function Fanfare({ side, phase, ...rest }: FlexProps & { side: "left" | "right"; phase: number }) {
+  const shift = useDriftClock() * DRIFT_SPEED;
   const x = (u: number) => (side === "left" ? MOUTH_X + u : VIEW_W - MOUTH_X - u);
   const staffAt = (u: number) => {
     const t = u / FLOW;
-    // Leaves the bell level, then swings wider and opens up the further it travels.
+    // Leaves the bell level, then swings wider and opens up the further it travels. The
+    // wave travels outward as fast as the notes, so they ride it out of the bell.
     const swing = 40 * (1 - Math.exp(-5 * t));
-    const mid = AXIS_Y + swing * Math.sin((2 * Math.PI * u) / WAVELENGTH + phase);
+    const mid = AXIS_Y + swing * Math.sin((2 * Math.PI * (u - shift)) / WAVELENGTH + phase);
     return { mid, gap: 7 + 7 * t };
   };
+  const drifted = (u: number) => (u + shift) % LOOP;
 
   const lines = [-2, -1, 0, 1, 2].map((k) => {
     const points: string[] = [];
@@ -235,9 +275,13 @@ function Fanfare({ side, phase, ...rest }: FlexProps & { side: "left" | "right";
     return `M${points.join("L")}`;
   });
 
-  const notes = MELODY.map((note) => {
-    const { mid, gap } = staffAt(note.u);
-    return { ...note, cx: x(note.u), cy: mid - (note.step * gap) / 2, gap };
+  const notes = MELODY.map((note, i) => {
+    // A beamed pair drifts as one, so it never splits across the loop.
+    const lead = note.kind === "8" && MELODY[i - 1]?.kind === "8" ? MELODY[i - 1] : note;
+    const u = drifted(lead.u) + note.u - lead.u;
+    const { mid, gap } = staffAt(u);
+    const opacity = Math.min(1, u / EMERGE);
+    return { ...note, cx: x(u), cy: mid - (note.step * gap) / 2, gap, opacity };
   });
 
   const fadeId = `tt-fanfare-${side}`;
@@ -277,12 +321,22 @@ function Fanfare({ side, phase, ...rest }: FlexProps & { side: "left" | "right";
         </g>
 
         <g stroke={ink} strokeWidth={1.1} fill="none">
-          {lines.map((d) => (
-            <path key={d} d={d} />
+          {lines.map((d, k) => (
+            <path key={k} d={d} />
           ))}
-          {BARLINES.map((u) => {
+          {BARLINES.map((bar) => {
+            const u = drifted(bar);
             const { mid, gap } = staffAt(u);
-            return <line key={u} x1={x(u)} x2={x(u)} y1={mid - 2 * gap} y2={mid + 2 * gap} />;
+            return (
+              <line
+                key={bar}
+                x1={x(u)}
+                x2={x(u)}
+                y1={mid - 2 * gap}
+                y2={mid + 2 * gap}
+                opacity={Math.min(1, u / EMERGE)}
+              />
+            );
           })}
         </g>
 
@@ -298,7 +352,7 @@ function Fanfare({ side, phase, ...rest }: FlexProps & { side: "left" | "right";
             const stemEnd = n.cy + (up ? -3.5 : 3.5) * n.gap;
             const beamTo = n.kind === "8" && pairedWith === i + 1 ? notes[i + 1] : undefined;
             return (
-              <g key={n.u}>
+              <g key={n.u} opacity={n.opacity}>
                 <ellipse
                   cx={n.cx}
                   cy={n.cy}
