@@ -56,6 +56,7 @@ src/
 │   ├── tokens.ts          Fonts, spacing, radii, shadows, sizes; registers the roles.
 │   ├── textStyles.ts      Type scale: display.*, heading.*, kicker, meta, figure.*
 │   ├── globalCss.ts       Page background, heading font, focus ring, text selection.
+│   ├── keyframes.ts       Entrance animations: rise-in, pop-in, wipe-in, draw-on, …
 │   ├── recipes/           Variant definitions per component (button primary/secondary/…)
 │   └── index.ts           Builds the Chakra `system` and re-exports everything.
 │
@@ -148,6 +149,9 @@ shell: it has no sidebar and nothing to go back to.
   variant; add the variant to the recipe instead.
 - **Icons:** use [Lucide](https://lucide.dev) (`lucide-react`), as the design system
   specifies. The old pages use `react-icons`.
+- **Motion:** use the keyframes in `theme/keyframes.ts` with fill-mode `backwards`, and
+  put the animation under `_motionSafe` so it's skipped for viewers who prefer reduced
+  motion: `_motionSafe={{ animation: "appear 400ms ease-out 200ms backwards" }}`.
 
 ## Old vs new
 

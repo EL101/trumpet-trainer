@@ -26,6 +26,32 @@ const EXAMPLE = {
   cursor: 9.3,
 };
 
+/**
+ * The entrance, in ms after the page appears. The brand and headline rise in while the
+ * trumpets spring in from the sides. The music is laid down (the centre staff, then its
+ * colour key, and each trumpet's staff out of its bell), then the sign-in choices pop in.
+ */
+const INTRO = {
+  brand: 0,
+  headline: 120,
+  textFor: 800,
+  leftFanfare: 150,
+  rightFanfare: 350,
+  music: 400,
+  musicFor: 1600,
+  /** The colour key fills in once the centre staff is down. */
+  legendFor: 600,
+  signInFor: 500,
+};
+const LEGEND_AT = INTRO.music + INTRO.musicFor;
+
+/** easeOutCubic. The fanfares rely on this exact curve to time their notes. */
+const EASE_OUT = "cubic-bezier(0.33, 1, 0.68, 1)";
+/** easeInOutSine, for left-to-right reveals that should read at an even pace. */
+const EASE_IN_OUT = "cubic-bezier(0.45, 0, 0.55, 1)";
+/** easeOutBack: overshoots a little, so things spring into place. */
+const POP_EASING = "cubic-bezier(0.34, 1.56, 0.64, 1)";
+
 /** Signed-out home (mockup 4b): a title page with the sign-in choices set like an imprint. */
 export default function LandingPage() {
   const { user, loading } = useAuth();
@@ -44,6 +70,16 @@ export default function LandingPage() {
     return <Navigate to={from ?? "/today"} replace />;
   }
 
+  // The sign-in choices wait until all the music and its colour key are down.
+  const signInAt = Math.max(
+    LEGEND_AT + INTRO.legendFor,
+    fanfareDrawnBy(INTRO.leftFanfare),
+    fanfareDrawnBy(INTRO.rightFanfare),
+  );
+  const riseIn = (delay: number) => ({
+    animation: `rise-in ${INTRO.textFor}ms ${EASE_OUT} ${delay}ms backwards`,
+  });
+
   return (
     <Flex
       direction="column"
@@ -54,7 +90,13 @@ export default function LandingPage() {
       pt={{ base: "xl", md: "2xl" }}
       pb={{ base: "lg", md: "xl" }}
     >
-      <Flex as="header" direction="column" align="center" gap="xs">
+      <Flex
+        as="header"
+        direction="column"
+        align="center"
+        gap="xs"
+        _motionSafe={riseIn(INTRO.brand)}
+      >
         <Text textStyle="heading.md" letterSpacing="0.02em">
           Trumpet Trainer
         </Text>
@@ -62,7 +104,7 @@ export default function LandingPage() {
       </Flex>
 
       {/* The trumpets bracket the content in-flow, so they can't end up behind it. */}
-      <Fanfare side="left" phase={-2.06} mt={{ base: "sm", md: 0 }} />
+      <Fanfare side="left" phase={-2.06} delay={INTRO.leftFanfare} mt={{ base: "sm", md: 0 }} />
 
       <Flex
         as="main"
@@ -82,14 +124,15 @@ export default function LandingPage() {
           maxWidth="900px"
           textWrap="balance"
           m={0}
+          _motionSafe={riseIn(INTRO.headline)}
         >
           Practice with Interactive Exercises and Live Feedback.
         </Heading>
         <ExamplePassage />
-        <SignInChoices />
+        <SignInChoices appearAt={signInAt} />
       </Flex>
 
-      <Fanfare side="right" phase={1.09} />
+      <Fanfare side="right" phase={1.09} delay={INTRO.rightFanfare} />
     </Flex>
   );
 }
@@ -111,15 +154,25 @@ function ExamplePassage() {
         measuresPerLine={perLine}
         scale={scale}
         maxWidth="1000px"
+        // Laid down left to right as the page arrives.
+        _motionSafe={{
+          animation: `wipe-in ${INTRO.musicFor}ms ${EASE_IN_OUT} ${INTRO.music}ms backwards`,
+        }}
         role="img"
         aria-label="An example exercise in C major. Each note played so far is coloured by how close it was to pitch."
       />
-      <IntonationLegend />
+      {/* "In tune", then the colour bar from green to red, then "35¢ off". */}
+      <IntonationLegend
+        _motionSafe={{
+          animation: `wipe-in ${INTRO.legendFor}ms ${EASE_IN_OUT} ${LEGEND_AT}ms backwards`,
+        }}
+      />
     </Flex>
   );
 }
 
-function SignInChoices() {
+/** The sign-in buttons. With motion allowed, they pop in at `appearAt` (ms after mount). */
+function SignInChoices({ appearAt }: { appearAt: number }) {
   const [error, setError] = useState<string | null>(null);
 
   // On success the auth listener re-renders LandingPage, which redirects.
@@ -143,6 +196,9 @@ function SignInChoices() {
         direction={{ base: "column", sm: "row" }}
         align={{ base: "stretch", sm: "center" }}
         gap="md"
+        _motionSafe={{
+          animation: `pop-in ${INTRO.signInFor}ms ${POP_EASING} ${appearAt}ms backwards`,
+        }}
       >
         <Button variant="primary" size="lg" onClick={() => signIn(signInWithGoogle)}>
           Sign in with Google
@@ -188,7 +244,8 @@ const BAR = 230;
 const LOOP = 7 * BAR;
 
 /** Pipes, as centrelines: the bell pipe, then the main tuning slide running into the lead pipe. */
-const TUBES = ["M-20 130 H160", "M-20 162 H185 A13 13 0 0 1 185 188 H-20"];
+// They start well off the edge so the trumpet's overshoot on entry never shows their ends.
+const TUBES = ["M-120 130 H160", "M-120 162 H185 A13 13 0 0 1 185 188 H-120"];
 const VALVES = [20, 50, 80];
 
 type BackdropNote = { u: number; step: number; kind: "q" | "h" | "8" };
@@ -249,11 +306,37 @@ function useDriftClock() {
   return seconds;
 }
 
+// Entrance: the trumpet springs in from its edge, then its staff draws out of the bell and
+// each note appears as the line reaches it.
+const POP_MS = 700;
+const DRAW_MS = 1800;
+
+/** When a fanfare whose entrance starts at `delay` begins drawing its staff. */
+function fanfareDrawsAt(delay: number) {
+  return delay + POP_MS * 0.8;
+}
+
+/** When that fanfare's staff is fully drawn. */
+function fanfareDrawnBy(delay: number) {
+  return fanfareDrawsAt(delay) + DRAW_MS;
+}
+
 /**
  * Decorative band: a trumpet jutting in from `side`, playing a wavy staff across the page.
  * `phase` shifts the wave; pick one that keeps the staff away from the content mid-page.
+ * `delay` (ms) is when its entrance starts.
  */
-function Fanfare({ side, phase, ...rest }: FlexProps & { side: "left" | "right"; phase: number }) {
+function Fanfare({
+  side,
+  phase,
+  delay = 0,
+  ...rest
+}: FlexProps & { side: "left" | "right"; phase: number; delay?: number }) {
+  const drawStart = fanfareDrawsAt(delay);
+  /** When the drawing staff reaches `u`: the inverse of EASE_OUT. */
+  const drawnAt = (u: number) =>
+    `${Math.round(drawStart + DRAW_MS * (1 - Math.cbrt(1 - Math.min(1, u / FLOW))))}ms`;
+
   const shift = useDriftClock() * DRIFT_SPEED;
   const x = (u: number) => (side === "left" ? MOUTH_X + u : VIEW_W - MOUTH_X - u);
   const staffAt = (u: number) => {
@@ -295,6 +378,18 @@ function Fanfare({ side, phase, ...rest }: FlexProps & { side: "left" | "right";
       pointerEvents="none"
       // Below the minimum width the drawing overflows; keep the trumpet's edge in view.
       justify={side === "left" ? "flex-start" : "flex-end"}
+      _motionSafe={{
+        "& .tt-trumpet": {
+          "--slide-from": side === "left" ? "-450px" : "450px",
+          animation: `slide-in ${POP_MS}ms ${POP_EASING} ${delay}ms backwards`,
+        },
+        "& .tt-staff-line": {
+          strokeDasharray: 1,
+          animation: `draw-on ${DRAW_MS}ms ${EASE_OUT} ${drawStart}ms backwards`,
+        },
+        // Each mark sets its own delay inline.
+        "& .tt-staff-mark": { animation: "appear 400ms ease-out backwards" },
+      }}
       {...rest}
     >
       <svg
@@ -316,13 +411,16 @@ function Fanfare({ side, phase, ...rest }: FlexProps & { side: "left" | "right";
           </linearGradient>
         </defs>
 
-        <g transform={side === "right" ? `translate(${VIEW_W} 0) scale(-1 1)` : undefined}>
-          <Trumpet />
+        {/* Separate groups: the entrance's CSS transform would replace the mirroring. */}
+        <g className="tt-trumpet">
+          <g transform={side === "right" ? `translate(${VIEW_W} 0) scale(-1 1)` : undefined}>
+            <Trumpet />
+          </g>
         </g>
 
         <g stroke={ink} strokeWidth={1.1} fill="none">
           {lines.map((d, k) => (
-            <path key={k} d={d} />
+            <path key={k} d={d} pathLength={1} className="tt-staff-line" />
           ))}
           {BARLINES.map((bar) => {
             const u = drifted(bar);
@@ -335,6 +433,8 @@ function Fanfare({ side, phase, ...rest }: FlexProps & { side: "left" | "right";
                 y1={mid - 2 * gap}
                 y2={mid + 2 * gap}
                 opacity={Math.min(1, u / EMERGE)}
+                className="tt-staff-mark"
+                style={{ animationDelay: drawnAt(bar) }}
               />
             );
           })}
@@ -352,7 +452,12 @@ function Fanfare({ side, phase, ...rest }: FlexProps & { side: "left" | "right";
             const stemEnd = n.cy + (up ? -3.5 : 3.5) * n.gap;
             const beamTo = n.kind === "8" && pairedWith === i + 1 ? notes[i + 1] : undefined;
             return (
-              <g key={n.u} opacity={n.opacity}>
+              <g
+                key={n.u}
+                opacity={n.opacity}
+                className="tt-staff-mark"
+                style={{ animationDelay: drawnAt(n.u) }}
+              >
                 <ellipse
                   cx={n.cx}
                   cy={n.cy}
