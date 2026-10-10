@@ -174,19 +174,32 @@ function ExamplePassage() {
 /** The sign-in buttons. With motion allowed, they pop in at `appearAt` (ms after mount). */
 function SignInChoices({ appearAt }: { appearAt: number }) {
   const [error, setError] = useState<string | null>(null);
+  // The sign-in under way, so two never race (a guest session starting while the Google
+  // popup is open, say). Clicking Google again is still allowed: Firebase closes the old
+  // popup and opens a new one, which matters because it only notices a popup was closed
+  // by hand 8–10 seconds later.
+  const [pending, setPending] = useState<"google" | "guest" | null>(null);
+  const latestAttempt = useRef(0);
 
   // On success the auth listener re-renders LandingPage, which redirects.
-  const signIn = async (method: () => Promise<void>) => {
+  const signIn = async (kind: "google" | "guest") => {
+    if (pending && !(pending === "google" && kind === "google")) return;
+    const attempt = ++latestAttempt.current;
+    setPending(kind);
     setError(null);
     try {
-      await method();
+      await (kind === "google" ? signInWithGoogle() : signInAsGuest());
     } catch (err) {
       console.error("Sign-in failed:", err);
+      if (attempt !== latestAttempt.current) return;
       setError(
         err instanceof FirebaseError && err.code === "auth/popup-blocked"
           ? "Your browser blocked the sign-in window. Allow pop-ups for this site and try again."
           : "Couldn't sign in. Check your connection and try again.",
       );
+    } finally {
+      // A newer attempt (a second Google click) owns the state now.
+      if (attempt === latestAttempt.current) setPending(null);
     }
   };
 
@@ -200,13 +213,23 @@ function SignInChoices({ appearAt }: { appearAt: number }) {
           animation: `pop-in ${INTRO.signInFor}ms ${POP_EASING} ${appearAt}ms backwards`,
         }}
       >
-        <Button variant="primary" size="lg" onClick={() => signIn(signInWithGoogle)}>
+        <Button
+          variant="primary"
+          size="lg"
+          disabled={pending === "guest"}
+          onClick={() => signIn("google")}
+        >
           Sign in with Google
         </Button>
         <Text as="span" textStyle="epigraph" color="fg.muted" textAlign="center">
           or
         </Text>
-        <Button variant="secondary" size="lg" onClick={() => signIn(signInAsGuest)}>
+        <Button
+          variant="secondary"
+          size="lg"
+          disabled={pending !== null}
+          onClick={() => signIn("guest")}
+        >
           Continue as guest
         </Button>
       </Flex>
