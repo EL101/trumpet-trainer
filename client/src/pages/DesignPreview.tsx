@@ -294,6 +294,17 @@ export default function DesignPreview() {
               scale={0.8}
             />
           </Box>
+          <Box>
+            <Text fontSize="12px" color="fg.muted" mb="xs">
+              Compound meter (6/8): eighths beamed in threes
+            </Text>
+            <Staff
+              notes="D4/8, E4, F#4, G4, A4, B4, A4/q., D5/8, C#5, B4"
+              timeSig="6/8"
+              musicKey="D major"
+              scale={0.8}
+            />
+          </Box>
         </Flex>
       </Section>
 

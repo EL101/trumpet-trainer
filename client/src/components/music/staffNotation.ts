@@ -29,8 +29,18 @@ export function parseMeasures(notes: string, timeSig: string): ParsedNote[][] {
   return splitNotes(notes, timeSig).map((measure) =>
     measure.split(",").map((tok) => {
       const n = parseNote(tok, carried);
-      carried = n.duration + (n.dotted && !n.rest ? "." : "");
+      // splitNotes carries the dot from a dotted rest too, so match it.
+      carried = n.duration + (n.dotted ? "." : "");
       return n;
     }),
   );
+}
+
+/**
+ * Bars per staff line. A missing value, or anything below 1, puts every bar on one line
+ * (a step of 0 or less would never advance through the bars).
+ */
+export function resolveMeasuresPerLine(requested: number | undefined, measureCount: number) {
+  if (requested != null && requested >= 1) return Math.floor(requested);
+  return Math.max(1, measureCount);
 }

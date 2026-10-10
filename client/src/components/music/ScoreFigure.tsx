@@ -9,13 +9,9 @@ type ScoreFigureProps = Omit<ComponentProps<typeof Stat>, "value" | "valueColor"
 
 /** A 0–100 score coloured by band (green ≥ 90, olive ≥ 75, …). */
 export function ScoreFigure({ score, label = "score", size = "sm", ...rest }: ScoreFigureProps) {
+  // Colour by the number shown, so a displayed 90 is always in the 90+ band.
+  const shown = Math.round(score);
   return (
-    <Stat
-      value={Math.round(score)}
-      label={label}
-      size={size}
-      valueColor={scoreColorToken(score)}
-      {...rest}
-    />
+    <Stat value={shown} label={label} size={size} valueColor={scoreColorToken(shown)} {...rest} />
   );
 }

@@ -16,7 +16,7 @@ import { centsColor, formatCents } from "@/lib/intonation";
 import { roles } from "@/theme";
 import { getKeySig } from "@/utils/generateMusic";
 import type { Key } from "@/schema";
-import { parseMeasures } from "./staffNotation";
+import { parseMeasures, resolveMeasuresPerLine } from "./staffNotation";
 
 export type StaffProps = Omit<BoxProps, "children" | "width" | "color"> & {
   /** App note format, e.g. "G4/8, A4, B4/q, C5/h". */
@@ -69,7 +69,7 @@ export function Staff({
   const W = width ?? measuredWidth;
 
   const measures = useMemo(() => parseMeasures(notes, timeSig), [notes, timeSig]);
-  const perLine = measuresPerLine ?? (measures.length || 1);
+  const perLine = resolveMeasuresPerLine(measuresPerLine, measures.length);
   const lineCount = Math.max(1, Math.ceil(measures.length / perLine));
   const showText = !!labels || !!annotate;
   const lineHeight = showText ? ANNOTATED_LINE_HEIGHT : LINE_HEIGHT;
@@ -168,6 +168,8 @@ function drawMeasures(
 ): Placed[] {
   const { measures, perLine, lineHeight, innerWidth, keySig, timeSig, barlines, colorFor } = opts;
   const [beats, beatValue] = timeSig.split("/").map(Number);
+  // Beam by the meter's beat (e.g. 3+3 in 6/8); VexFlow otherwise pairs eighths in every meter.
+  const beamGroups = Beam.getDefaultBeamGroups(timeSig);
   const staveOpts = { space_above_staff_ln: 3, space_below_staff_ln: 3 };
   const placed: Placed[] = [];
   let index = 0;
@@ -217,7 +219,7 @@ function drawMeasures(
       );
       voice.addTickables(staveNotes);
       Accidental.applyAccidentals([voice], keySig || "C");
-      const beams = barlines ? Beam.generateBeams(staveNotes) : [];
+      const beams = barlines ? Beam.generateBeams(staveNotes, { groups: beamGroups }) : [];
       new Formatter()
         .joinVoices([voice])
         .format([voice], Math.max(10, stave.getNoteEndX() - stave.getNoteStartX() - 14));
