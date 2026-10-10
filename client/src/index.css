@@ -1,13 +1,5 @@
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-:root {
-  --bg-color: #f5f1e8;
-}
-
+/* Resets come from Chakra's preflight (in a cascade layer); unlayered rules here would
+   override every Chakra style, so keep this file to fonts and keyframes. */
 html,
 body {
   height: 100%;

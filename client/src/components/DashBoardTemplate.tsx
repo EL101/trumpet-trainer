@@ -5,7 +5,7 @@ import Sidebar from "./Sidebar";
 
 export default function DashboardTemplate({ children }: { children: ReactNode }) {
   return (
-    <Box height="100vh" bgColor="var(--bg-color)" color="black">
+    <Box height="100vh" bgColor="bg" color="black">
       <Flex height="100%" width="100%">
         <Sidebar></Sidebar>
         <Box height="100%" minW="0" flex="1" p={DASHBOARD_PADDING} overflowY="auto">

@@ -85,7 +85,7 @@ export default function LandingPage() {
   if (loading) return <Spinner />;
   if (user) return <Navigate to="/today" replace />;
   return (
-    <Flex bgColor="var(--bg-color)" height="100vh" direction={{ base: "column", md: "row" }}>
+    <Flex bgColor="bg" height="100vh" direction={{ base: "column", md: "row" }}>
       <LeftPanel />
       <RightPanel />
     </Flex>

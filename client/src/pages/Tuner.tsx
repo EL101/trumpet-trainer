@@ -32,7 +32,7 @@ export default function Tuner() {
   return (
     <DashboardTemplate>
       <Heading size="2xl">Tuner</Heading>
-      <VStack bgColor="#FBF8F0" borderWidth="2px" p={2}>
+      <VStack bgColor="bg.subtle" borderWidth="2px" p={2}>
         <SegmentInput
           items={noteOptions}
           setValue={setNoteType}
@@ -50,7 +50,7 @@ export default function Tuner() {
           <Text fontSize="5xl" fontWeight={600}>
             {note ? note.slice(0, -1) : "-"}
           </Text>
-          <Text color="#8A8170" fontSize="lg">
+          <Text color="fg.muted" fontSize="lg">
             {note.at(-1)}
           </Text>
         </HStack>

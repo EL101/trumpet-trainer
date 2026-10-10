@@ -13,6 +13,7 @@ import { Library } from "./pages/Library";
 import Metronome from "./pages/Metronome";
 import Tuner from "./pages/Tuner";
 import Progress from "./pages/Progress";
+import DesignPreview from "./pages/DesignPreview";
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
           <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/test" element={<PitchTest />} />
+            {import.meta.env.DEV && <Route path="/design" element={<DesignPreview />} />}
             <Route
               path="/sheet-test"
               element={
