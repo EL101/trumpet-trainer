@@ -54,9 +54,24 @@ export async function insertHistory(userId: string, input: HistoryInput) {
   return { row, created: true };
 }
 
-/** Save an exercise to the library. Repeats are allowed: clearing history reuses numbers. */
-export function insertLibrary(userId: string, exercise: ExerciseInput) {
-  return prisma.library.create({ data: { userId, ...exercise } });
+/**
+ * Save an exercise to the library, once per exercise id: saving it again returns
+ * the row already there with `created: false`. Without an id (clients built
+ * before ids existed) every save adds a row.
+ */
+export async function insertLibrary(userId: string, input: ExerciseInput) {
+  const data = { userId, ...input };
+  if (input.exerciseId === undefined) {
+    return { row: await prisma.library.create({ data }), created: true };
+  }
+
+  // INSERT ... ON CONFLICT DO NOTHING RETURNING *: a conflict returns no row.
+  const [row] = await prisma.library.createManyAndReturn({ data, skipDuplicates: true });
+  if (row) return { row, created: true };
+  const existing = await prisma.library.findUniqueOrThrow({
+    where: { userId_exerciseId: { userId, exerciseId: input.exerciseId } },
+  });
+  return { row: existing, created: false };
 }
 
 export async function deleteExercises(table: ExerciseTable, userId: string) {

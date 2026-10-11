@@ -10,6 +10,11 @@ export const HISTORY_LIMIT = 100;
 /** A generated exercise, as stored in history and in the library. */
 export type MusicInfo = {
   id: string;
+  /**
+   * The exercise itself, made when it's generated and shared by its history and
+   * library rows, so it still matches its library row after history renumbers it.
+   */
+  exerciseId: string;
   exerciseType: ExerciseType;
   notes: string;
   timeSig: string;
@@ -36,6 +41,7 @@ export type ExerciseParams = {
 
 /** Body sent to POST /api/history, which picks the number. Mirrors the server's HistoryInputSchema. */
 export type HistoryInput = {
+  exerciseId: string;
   exerciseType: ExerciseType;
   notes: string;
   timeSig: string;
@@ -49,6 +55,7 @@ export type ExerciseInput = HistoryInput & { generationNum: number };
 
 export function toHistoryInput(exercise: MusicInfo): HistoryInput {
   return {
+    exerciseId: exercise.exerciseId,
     exerciseType: exercise.exerciseType,
     notes: exercise.notes,
     timeSig: exercise.timeSig,

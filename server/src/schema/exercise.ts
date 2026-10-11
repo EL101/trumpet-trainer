@@ -6,6 +6,9 @@ import { ExerciseType } from "../generated/prisma/enums.js";
  * takes the same, except that the server picks the generation number.
  */
 export const ExerciseInputSchema = z.object({
+  // The client's id for the exercise, shared by its history and library rows.
+  // Clients built before it existed don't send one, and the database makes one.
+  exerciseId: z.uuid().optional(),
   // Any value outside the database enum is a 400. A missing type is taken as
   // RANDOM: clients built before the column existed don't send one, and random
   // exercises were all they could make.

@@ -95,6 +95,11 @@ export function Generate() {
   const { user } = useContext(AuthUserContext);
   useEffect(() => getInitialHistory(user, setHistory), [user]);
 
+  const [library, setLibrary] = useState<MusicInfo[]>([]);
+  useEffect(() => getInitialLibrary(user, setLibrary), [user]);
+  const savedIds = new Set(library.map((entry) => entry.exerciseId));
+  const isSaved = (exercise: MusicInfo) => savedIds.has(exercise.exerciseId);
+
   // History requests go one at a time. The server numbers saves in the order they
   // arrive, so sent together (a double-click on Generate) they could be numbered out
   // of order, and a clear could land before a save made just ahead of it.
@@ -131,6 +136,7 @@ export function Generate() {
 
     const exercise: MusicInfo = {
       id: crypto.randomUUID(),
+      exerciseId: crypto.randomUUID(),
       exerciseType: type,
       notes: generateMusic(measures, timeSig, key, range, difficulty),
       timeSig,
@@ -199,6 +205,8 @@ export function Generate() {
           exercise={generated}
           pendingType={settings.type}
           perLine={perLine}
+          saved={!!generated && isSaved(generated)}
+          onSaved={(exercise) => setLibrary((prev) => [...prev, exercise])}
         />
 
         <Flex
@@ -230,6 +238,7 @@ export function Generate() {
                 key={exercise.generationNum}
                 exercise={exercise}
                 perLine={perLine}
+                saved={isSaved(exercise)}
                 onOpen={() => handleOpen(exercise)}
               />
             ))}
@@ -257,12 +266,17 @@ function CurrentExercise({
   exercise,
   pendingType,
   perLine,
+  saved,
+  onSaved,
   ref,
 }: {
   exercise: MusicInfo | null;
   /** The type Generate will make, titling the plate while it's empty. */
   pendingType: ExerciseType;
   perLine?: number;
+  /** Whether the exercise is already in the library. */
+  saved: boolean;
+  onSaved: (exercise: MusicInfo) => void;
   ref: Ref<HTMLDivElement>;
 }) {
   return (
@@ -308,7 +322,7 @@ function CurrentExercise({
             <Play />
             Practice with feedback
           </Button>
-          <SaveToLibraryButton exercise={exercise} />
+          <SaveToLibraryButton exercise={exercise} saved={saved} onSaved={onSaved} />
         </Flex>
       </Flex>
     </Grid>
@@ -319,10 +333,13 @@ function CurrentExercise({
 function EarlierExercise({
   exercise,
   perLine,
+  saved,
   onOpen,
 }: {
   exercise: MusicInfo;
   perLine?: number;
+  /** Whether the exercise is in the library, shown as a bookmark by its details. */
+  saved: boolean;
   onOpen: () => void;
 }) {
   const title = EXERCISE_TYPE_LABELS[exercise.exerciseType];
@@ -351,7 +368,16 @@ function EarlierExercise({
           >
             {title}
           </chakra.button>
-          <ExerciseDetails exercise={exercise} />
+          <Flex align="baseline" gap="xs">
+            {saved && (
+              // Centred on the details line; the text alone sets the row's baseline.
+              <chakra.span alignSelf="center" display="inline-flex" color="accent.solid">
+                <Bookmark size={12} fill="currentColor" aria-hidden />
+                <VisuallyHidden>Saved to library</VisuallyHidden>
+              </chakra.span>
+            )}
+            <ExerciseDetails exercise={exercise} />
+          </Flex>
         </Flex>
         <Staff
           notes={exercise.notes}
@@ -422,26 +448,23 @@ function Plate({ children }: { children: ReactNode }) {
 }
 
 /** Saves the exercise on the plate to the library, once. */
-function SaveToLibraryButton({ exercise }: { exercise: MusicInfo | null }) {
+function SaveToLibraryButton({
+  exercise,
+  saved,
+  onSaved,
+}: {
+  exercise: MusicInfo | null;
+  saved: boolean;
+  onSaved: (exercise: MusicInfo) => void;
+}) {
   const { user } = useContext(AuthUserContext);
-  const [saved, setSaved] = useState<MusicInfo[]>([]);
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => getInitialLibrary(user, setSaved), [user]);
-
-  const isSaved =
-    !!exercise &&
-    saved.some(
-      (item) => item.generationNum === exercise.generationNum && item.notes === exercise.notes,
-    );
 
   const handleSave = async () => {
     if (!exercise) return;
     setSaving(true);
     try {
-      if (await saveToLibrary(exercise, user)) {
-        setSaved((prev) => [...prev, exercise]);
-      }
+      if (await saveToLibrary(exercise, user)) onSaved(exercise);
     } catch (error) {
       console.error("update library error:", error);
     } finally {
@@ -451,9 +474,9 @@ function SaveToLibraryButton({ exercise }: { exercise: MusicInfo | null }) {
 
   return (
     // The library stores the generation number, so wait until history has given it one.
-    <Button disabled={!exercise?.generationNum || isSaved || saving} onClick={handleSave}>
-      {isSaved ? <BookmarkCheck /> : <Bookmark />}
-      {isSaved ? "Saved to library" : "Save to library"}
+    <Button disabled={!exercise?.generationNum || saved || saving} onClick={handleSave}>
+      {saved ? <BookmarkCheck /> : <Bookmark />}
+      {saved ? "Saved to library" : "Save to library"}
     </Button>
   );
 }

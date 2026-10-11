@@ -31,6 +31,9 @@ enum ExerciseType {
 model History {
   id            String       @id @default(uuid())
   userId        String       @map("user_id")
+  /// The exercise itself, shared with its library row. Made by the client when it
+  /// generates the exercise, so it survives renumbering; generated here otherwise.
+  exerciseId    String       @default(dbgenerated("gen_random_uuid()")) @map("exercise_id") @db.Uuid
   exerciseType  ExerciseType @default(RANDOM) @map("exercise_type")
   notes         String
   timeSig       String       @map("time_sig")
@@ -51,6 +54,8 @@ model History {
 model Library {
   id            String       @id @default(uuid())
   userId        String       @map("user_id")
+  /// The exercise saved, matching its history row's exerciseId.
+  exerciseId    String       @default(dbgenerated("gen_random_uuid()")) @map("exercise_id") @db.Uuid
   exerciseType  ExerciseType @default(RANDOM) @map("exercise_type")
   notes         String
   timeSig       String       @map("time_sig")
@@ -62,6 +67,8 @@ model Library {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  /// Each exercise once: saving it again is a no-op.
+  @@unique([userId, exerciseId], map: "uq_library_user_exercise")
   @@index([userId, createdAt(sort: Desc)], map: "idx_library_user_created")
   @@map("library")
 }

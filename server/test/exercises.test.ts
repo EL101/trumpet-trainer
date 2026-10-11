@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import request from "supertest";
 import { app } from "../src/app.js";
@@ -145,7 +146,7 @@ describe("saving a generation twice", () => {
     expect(await prisma.history.count({ where: { userId: uid } })).toBe(1);
   });
 
-  it("still adds a second library row", async () => {
+  it("still adds a second library row when no exercise id is sent", async () => {
     const uid = newUid();
     expect((await post("library", uid, exerciseBody(1))).status).toBe(201);
     expect((await post("library", uid, exerciseBody(1))).status).toBe(201);
@@ -161,6 +162,49 @@ describe("saving a generation twice", () => {
 
     await expect(addHistory(a, 1)).rejects.toThrow(/Unique constraint/);
     await expect(addHistory(b, 1)).resolves.toEqual({ count: 1 });
+  });
+});
+
+describe("exercise ids", () => {
+  const post = (table: "history" | "library", uid: string, body: object) =>
+    request(app).post(`/api/${table}`).set(bearer(uid)).send(body);
+  const id = () => randomUUID();
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+  it("stores the id sent with a history save, and makes one when none is", async () => {
+    const uid = newUid();
+    const exerciseId = id();
+
+    expect((await post("history", uid, { ...exerciseBody(1), exerciseId })).body.exerciseId).toBe(
+      exerciseId,
+    );
+    expect((await post("history", uid, exerciseBody(2))).body.exerciseId).toMatch(UUID);
+  });
+
+  it("saves an exercise to the library once, answering a repeat with the first row", async () => {
+    const uid = newUid();
+    const exerciseId = id();
+    const first = await post("library", uid, { ...exerciseBody(1), exerciseId });
+    const again = await post("library", uid, { ...exerciseBody(1), exerciseId });
+
+    expect(first.status).toBe(201);
+    expect(again.status).toBe(200);
+    expect(again.body.id).toBe(first.body.id);
+    expect(await prisma.library.count({ where: { userId: uid } })).toBe(1);
+  });
+
+  it("lets separate users save the same exercise id", async () => {
+    const exerciseId = id();
+    expect((await post("library", newUid(), { ...exerciseBody(1), exerciseId })).status).toBe(201);
+    expect((await post("library", newUid(), { ...exerciseBody(1), exerciseId })).status).toBe(201);
+  });
+
+  it("rejects an id that isn't a UUID", async () => {
+    const uid = newUid();
+    const res = await post("library", uid, { ...exerciseBody(1), exerciseId: "not-a-uuid" });
+
+    expect(res.status).toBe(400);
+    expect(await prisma.library.count({ where: { userId: uid } })).toBe(0);
   });
 });
 

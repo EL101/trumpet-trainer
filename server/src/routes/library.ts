@@ -21,7 +21,9 @@ router.post("/", requireAuth, async (req: Request, res: Response) => {
   }
 
   try {
-    res.status(201).json(await insertLibrary(req.user!.uid, parsed.data));
+    // Saving an exercise that's already in the library is a no-op, answered with 200.
+    const { row, created } = await insertLibrary(req.user!.uid, parsed.data);
+    res.status(created ? 201 : 200).json(row);
   } catch (err) {
     console.error("Failed to insert library row:", err);
     res.status(500).json({ error: "Failed to save library entry" });
