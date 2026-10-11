@@ -5,6 +5,7 @@ import {
   Barline,
   Beam,
   Dot,
+  Flow,
   Formatter,
   Renderer,
   Stave,
@@ -263,7 +264,7 @@ function drawMeasures(
         );
         voice.addTickables(staveNotes);
         Accidental.applyAccidentals([voice], keySig || "C");
-        const beams = barlines ? Beam.generateBeams(staveNotes, { groups: beamGroups }) : [];
+        const beams = barlines ? beamByGroup(staveNotes, beamGroups) : [];
         new Formatter()
           .joinVoices([voice])
           .format([voice], Math.max(10, stave.getNoteEndX() - stave.getNoteStartX() - 14));
@@ -304,6 +305,39 @@ function drawMeasures(
   });
   drawTies(ctx, placed);
   return placed;
+}
+
+/**
+ * Beams each run of eighths or shorter that falls within one beat group, breaking at
+ * rests and at notes that cross into the next group. (VexFlow's `Beam.generateBeams`
+ * loses its place after a note that crosses a group boundary and leaves the rest of
+ * the bar unbeamed.)
+ */
+function beamByGroup(notes: StaveNote[], groups: ReturnType<typeof Beam.getDefaultBeamGroups>) {
+  const sizes = groups.map((g) => g.clone().multiply(Flow.RESOLUTION, 1).value());
+  const beams: Beam[] = [];
+  let run: StaveNote[] = [];
+  const flush = () => {
+    if (run.length > 1) beams.push(new Beam(run, true));
+    run = [];
+  };
+  let pos = 0;
+  let group = 0;
+  let groupEnd = sizes[0];
+  for (const n of notes) {
+    while (pos >= groupEnd) {
+      flush();
+      group = (group + 1) % sizes.length;
+      groupEnd += sizes[group];
+    }
+    const end = pos + n.getTicks().value();
+    const beamable = !n.isRest() && n.getIntrinsicTicks() < Flow.durationToTicks("4");
+    if (beamable && end <= groupEnd) run.push(n);
+    else flush();
+    pos = end;
+  }
+  flush();
+  return beams;
 }
 
 /**
