@@ -16,6 +16,7 @@ export type MusicInfo = {
   musicKey: Key;
   noteRange: Range;
   difficulty: Difficulty;
+  /** Picked by the server when the exercise is saved to history; 0 until then. */
   generationNum: number;
 };
 
@@ -33,18 +34,20 @@ export type ExerciseParams = {
   difficulty: Difficulty;
 };
 
-/** Body sent to POST /api/history and POST /api/library. Mirrors the server's ExerciseInputSchema. */
-export type ExerciseInput = {
+/** Body sent to POST /api/history, which picks the number. Mirrors the server's HistoryInputSchema. */
+export type HistoryInput = {
   exerciseType: ExerciseType;
   notes: string;
   timeSig: string;
   musicKey: Key;
   noteRange: Range;
   difficulty: Difficulty;
-  generationNum: number;
 };
 
-export function toExerciseInput(exercise: MusicInfo): ExerciseInput {
+/** Body sent to POST /api/library. Mirrors the server's ExerciseInputSchema. */
+export type ExerciseInput = HistoryInput & { generationNum: number };
+
+export function toHistoryInput(exercise: MusicInfo): HistoryInput {
   return {
     exerciseType: exercise.exerciseType,
     notes: exercise.notes,
@@ -52,6 +55,9 @@ export function toExerciseInput(exercise: MusicInfo): ExerciseInput {
     musicKey: exercise.musicKey,
     noteRange: exercise.noteRange,
     difficulty: exercise.difficulty,
-    generationNum: exercise.generationNum,
   };
+}
+
+export function toExerciseInput(exercise: MusicInfo): ExerciseInput {
+  return { ...toHistoryInput(exercise), generationNum: exercise.generationNum };
 }

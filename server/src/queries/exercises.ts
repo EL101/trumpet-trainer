@@ -1,5 +1,6 @@
 import { prisma } from "../db.js";
-import type { ExerciseInput, ExerciseTable } from "../schema/index.js";
+import type { ExerciseInput, ExerciseTable, HistoryInput } from "../schema/index.js";
+import { retryOnConflict } from "./conflicts.js";
 
 /** History rows kept per user. The library has no limit. */
 export const HISTORY_LIMIT = 100;
@@ -17,27 +18,45 @@ export function listExercises(table: ExerciseTable, userId: string) {
 }
 
 /**
- * Save an exercise. `created` is false when nothing was added: a user has one
- * history row per generation number, and saving that generation again returns
- * the row already there (the first save wins). The library has no such limit.
+ * Save a history row, numbered by the server: one past the user's highest
+ * generation, so the first save after a clear is No. 1. Two saves that pick the
+ * same number collide on the unique index, and the loser picks again.
+ *
+ * Clients built before the server numbered history send their own number. It
+ * is stored as sent, and saving it again returns the row already there with
+ * `created: false`, so their repeat saves stay harmless until they reload.
  */
-export async function insertExercise(
-  table: ExerciseTable,
-  userId: string,
-  exercise: ExerciseInput,
-) {
-  const data = { userId, ...exercise };
-  if (table === "library") {
-    return { row: await prisma.library.create({ data }), created: true };
+export async function insertHistory(userId: string, input: HistoryInput) {
+  const { generationNum, ...exercise } = input;
+
+  if (generationNum !== undefined) {
+    // INSERT ... ON CONFLICT DO NOTHING RETURNING *: a conflict returns no row.
+    const [row] = await prisma.history.createManyAndReturn({
+      data: { userId, generationNum, ...exercise },
+      skipDuplicates: true,
+    });
+    if (row) return { row, created: true };
+    const existing = await prisma.history.findUniqueOrThrow({
+      where: { userId_generationNum: { userId, generationNum } },
+    });
+    return { row: existing, created: false };
   }
 
-  // INSERT ... ON CONFLICT DO NOTHING RETURNING *: a conflict returns no row.
-  const [row] = await prisma.history.createManyAndReturn({ data, skipDuplicates: true });
-  if (row) return { row, created: true };
-  const existing = await prisma.history.findUniqueOrThrow({
-    where: { userId_generationNum: { userId, generationNum: exercise.generationNum } },
+  const row = await retryOnConflict(async () => {
+    const { _max } = await prisma.history.aggregate({
+      where: { userId },
+      _max: { generationNum: true },
+    });
+    return prisma.history.create({
+      data: { userId, generationNum: (_max.generationNum ?? 0) + 1, ...exercise },
+    });
   });
-  return { row: existing, created: false };
+  return { row, created: true };
+}
+
+/** Save an exercise to the library. Repeats are allowed: clearing history reuses numbers. */
+export function insertLibrary(userId: string, exercise: ExerciseInput) {
+  return prisma.library.create({ data: { userId, ...exercise } });
 }
 
 export async function deleteExercises(table: ExerciseTable, userId: string) {

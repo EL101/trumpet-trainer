@@ -12,15 +12,7 @@ import {
   type FlexProps,
 } from "@chakra-ui/react";
 import { Bookmark, BookmarkCheck, ChevronDown, ChevronUp, Play } from "lucide-react";
-import {
-  useCallback,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-  type Ref,
-} from "react";
+import { useContext, useEffect, useRef, useState, type ReactNode, type Ref } from "react";
 import { AuthUserContext } from "@/auth/AuthUserContext";
 import { AppShell, PageHeader } from "@/components/layout";
 import { ExerciseMeta, PitchText, Staff } from "@/components/music";
@@ -96,20 +88,26 @@ export function Generate() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [history, setHistory] = useState<Record<number, MusicInfo>>({});
   const [generated, setGenerated] = useState<MusicInfo | null>(null);
-  const [genCount, setGenCount] = useState(0);
   const plateRef = useRef<HTMLDivElement>(null);
   // Four bars to a line once the page is wide enough to give each bar room.
   const perLine = useBreakpointValue({ base: 2, xl: 4 }, { ssr: false });
 
   const { user } = useContext(AuthUserContext);
-  useEffect(() => getInitialHistory(user, setHistory, setGenCount), [user]);
+  useEffect(() => getInitialHistory(user, setHistory), [user]);
 
-  const addToHistory = useCallback(
-    (exercise: MusicInfo) => {
-      insertToHistory(exercise, user, setHistory);
-    },
-    [user],
-  );
+  // Saves go one at a time. The server numbers them in the order they arrive, so
+  // sent together (a double-click on Generate) they could be numbered out of order.
+  const saveQueue = useRef<Promise<void>>(Promise.resolve());
+
+  /** Save the exercise, then number it on the plate once the server has. */
+  const saveToHistory = (exercise: MusicInfo) => {
+    saveQueue.current = saveQueue.current.then(async () => {
+      const saved = await insertToHistory(exercise, user, setHistory);
+      if (!saved) return;
+      // Only if it's still on the plate: a newer exercise may have replaced it.
+      setGenerated((current) => (current?.id === exercise.id ? saved : current));
+    });
+  };
 
   const showPlate = () => {
     plateRef.current?.scrollIntoView({
@@ -120,7 +118,6 @@ export function Generate() {
 
   const handleGenerate = () => {
     const { type, key, timeSig, measures, range, difficulty } = settings;
-    const generationNum = genCount + 1;
 
     const exercise: MusicInfo = {
       id: crypto.randomUUID(),
@@ -130,18 +127,17 @@ export function Generate() {
       musicKey: key,
       noteRange: range,
       difficulty,
-      generationNum,
+      generationNum: 0,
     };
 
     setGenerated(exercise);
-    addToHistory(exercise);
-    setGenCount(generationNum);
+    saveToHistory(exercise);
     showPlate();
   };
 
   const handleOpen = (exercise: MusicInfo) => {
-    // The exercise leaving the plate joins the list below it.
-    if (generated && !history[generated.generationNum]) {
+    // The exercise leaving the plate joins the list below it (once it's numbered).
+    if (generated?.generationNum && !history[generated.generationNum]) {
       setHistory((prev) => ({ ...prev, [generated.generationNum]: generated }));
     }
     setGenerated(exercise);
@@ -149,16 +145,11 @@ export function Generate() {
   };
 
   const handleClear = async () => {
-    if (!(await clearHistory(user, setHistory))) return;
-    if (!generated) {
-      setGenCount(0);
-      return;
-    }
-    // The exercise on the plate stays, and numbering starts again from it.
-    const kept = { ...generated, generationNum: 1 };
+    if (!(await clearHistory(user, setHistory)) || !generated) return;
+    // The exercise on the plate stays: saved again, it's the server's new No. 1.
+    const kept = { ...generated, generationNum: 0 };
     setGenerated(kept);
-    setGenCount(1);
-    addToHistory(kept);
+    saveToHistory(kept);
   };
 
   // The server keeps only the newest HISTORY_LIMIT; match it as the session adds more.
@@ -261,7 +252,9 @@ function CurrentExercise({
 }) {
   return (
     <Grid ref={ref} templateColumns={ENTRY_COLUMNS} gap="md" scrollMarginTop="2xl">
-      <Box>{exercise && <NumberMark n={exercise.generationNum} current />}</Box>
+      <Box>
+        {exercise?.generationNum ? <NumberMark n={exercise.generationNum} current /> : null}
+      </Box>
       <Flex direction="column" gap="md" minWidth={0}>
         <Flex justify="space-between" align="baseline" gap="md" wrap="wrap">
           <Heading as="h2" textStyle="heading.md" m={0}>
@@ -280,7 +273,11 @@ function CurrentExercise({
               scale={0.95}
               measuresPerLine={perLine}
               role="img"
-              aria-label={`Score of No. ${exercise.generationNum}`}
+              aria-label={
+                exercise.generationNum
+                  ? `Score of No. ${exercise.generationNum}`
+                  : "Score of the new exercise"
+              }
               _motionSafe={{ animation: "appear 400ms ease-out backwards" }}
             />
           ) : (
@@ -438,7 +435,8 @@ function SaveToLibraryButton({ exercise }: { exercise: MusicInfo | null }) {
   };
 
   return (
-    <Button disabled={!exercise || isSaved || saving} onClick={handleSave}>
+    // The library stores the generation number, so wait until history has given it one.
+    <Button disabled={!exercise?.generationNum || isSaved || saving} onClick={handleSave}>
       {isSaved ? <BookmarkCheck /> : <Bookmark />}
       {isSaved ? "Saved to library" : "Save to library"}
     </Button>

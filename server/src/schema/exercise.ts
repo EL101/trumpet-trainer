@@ -2,8 +2,8 @@ import { z } from "zod";
 import { ExerciseType } from "../generated/prisma/enums.js";
 
 /**
- * Shape of an exercise as accepted by POST /api/history and POST /api/library.
- * Both tables store the same columns, so both routes validate against this.
+ * Shape of an exercise as accepted by POST /api/library. POST /api/history
+ * takes the same, except that the server picks the generation number.
  */
 export const ExerciseInputSchema = z.object({
   // Any value outside the database enum is a 400. A missing type is taken as
@@ -19,6 +19,16 @@ export const ExerciseInputSchema = z.object({
 });
 
 export type ExerciseInput = z.infer<typeof ExerciseInputSchema>;
+
+/**
+ * POST /api/history. The server numbers new rows itself. A number in the body
+ * comes only from clients built before it did, and is stored as sent.
+ */
+export const HistoryInputSchema = ExerciseInputSchema.extend({
+  generationNum: ExerciseInputSchema.shape.generationNum.optional(),
+});
+
+export type HistoryInput = z.infer<typeof HistoryInputSchema>;
 
 /** Tables that hold exercise rows. Used to build table-scoped queries. */
 export const EXERCISE_TABLES = ["history", "library"] as const;

@@ -1,5 +1,6 @@
 import admin from "firebase-admin";
 import { prisma } from "../db.js";
+import { retryOnConflict } from "./conflicts.js";
 
 /** A guest untouched for this long is considered abandoned. */
 export const GUEST_TTL_MS = 48 * 60 * 60 * 1000;
@@ -106,6 +107,14 @@ export async function syncUserFromClaims(claims: admin.auth.DecodedIdToken) {
  * keeps the same uid and needs none of this.
  */
 export async function mergeGuestData(guestUid: string, targetUid: string) {
+  // The target can save a new generation between the read of its highest number
+  // and the renumbering below, taking a number the guest's rows were about to
+  // move to. The unique index fails the transaction instead, and the retry
+  // starts over with a fresh read.
+  return retryOnConflict(() => mergeOnce(guestUid, targetUid));
+}
+
+function mergeOnce(guestUid: string, targetUid: string) {
   return prisma.$transaction(async (tx) => {
     // Both users' generation numbers start at 1, and the client keys history by
     // generationNum -- so without an offset the guest's rows would silently

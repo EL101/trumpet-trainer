@@ -1,12 +1,11 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { User } from "firebase/auth";
-import { toExerciseInput, type MusicInfo } from "@/schema";
+import { toHistoryInput, type MusicInfo } from "@/schema";
 import { authedFetch } from "./api";
 
 export function getInitialHistory(
   user: User | undefined | null,
   setHistory: Dispatch<SetStateAction<Record<number, MusicInfo>>>,
-  setGenCount: Dispatch<SetStateAction<number>>,
 ) {
   const controller = new AbortController();
 
@@ -17,8 +16,6 @@ export function getInitialHistory(
 
       const data: MusicInfo[] = await res.json();
       setHistory(Object.fromEntries(data.map((item) => [item.generationNum, item])));
-      // The list comes back newest-first, so the first row holds the highest gen number.
-      setGenCount(data[0]?.generationNum ?? 0);
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") return;
       console.error("fetch history error:", error);
@@ -28,6 +25,10 @@ export function getInitialHistory(
   return () => controller.abort();
 }
 
+/**
+ * Save an exercise to history. Resolves to the exercise with the number the
+ * server gave it, or null if it couldn't be saved.
+ */
 export async function insertToHistory(
   exercise: MusicInfo,
   user: User | undefined | null,
@@ -36,12 +37,16 @@ export async function insertToHistory(
   try {
     const res = await authedFetch("/api/history", user, {
       method: "POST",
-      body: JSON.stringify(toExerciseInput(exercise)),
+      body: JSON.stringify(toHistoryInput(exercise)),
     });
-    if (!res) return;
-    setHistory((prev) => ({ ...prev, [exercise.generationNum]: exercise }));
+    if (!res) return null;
+    const row: MusicInfo = await res.json();
+    const saved = { ...exercise, generationNum: row.generationNum };
+    setHistory((prev) => ({ ...prev, [saved.generationNum]: saved }));
+    return saved;
   } catch (error) {
     console.error("update history error:", error);
+    return null;
   }
 }
 

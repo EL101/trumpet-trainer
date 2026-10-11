@@ -75,11 +75,66 @@ describe("GET /api/history", () => {
   });
 });
 
+describe("POST /api/history numbering", () => {
+  // What current clients send: everything but the number.
+  const unnumbered = (notes = "C4/w") => {
+    const { generationNum: _, ...body } = exerciseBody();
+    return { ...body, notes };
+  };
+  const save = (uid: string, body: object = unnumbered()) =>
+    request(app).post("/api/history").set(bearer(uid)).send(body);
+
+  it("numbers each save one past the user's highest", async () => {
+    const uid = newUid();
+    const numbers = [];
+    for (let i = 0; i < 3; i++) numbers.push((await save(uid)).body.generationNum);
+
+    expect(numbers).toEqual([1, 2, 3]);
+  });
+
+  it("numbers each user separately", async () => {
+    const a = newUid();
+    const b = newUid();
+    await save(a);
+    await save(a);
+
+    expect((await save(b)).body.generationNum).toBe(1);
+  });
+
+  it("starts again at 1 after history is cleared", async () => {
+    const uid = newUid();
+    await save(uid);
+    await save(uid);
+    await request(app).delete("/api/history").set(bearer(uid));
+
+    expect((await save(uid)).body.generationNum).toBe(1);
+  });
+
+  it("carries on past a number an older client sent", async () => {
+    const uid = newUid();
+    await save(uid, exerciseBody(7));
+
+    expect((await save(uid)).body.generationNum).toBe(8);
+  });
+
+  it("gives saves made at the same moment different numbers", async () => {
+    const uid = newUid();
+    await save(uid); // Create the user row first, so the race is only over numbers.
+
+    const results = await Promise.all(
+      ["D4/w", "E4/w", "F4/w", "G4/w"].map((n) => save(uid, unnumbered(n))),
+    );
+
+    expect(results.map((res) => res.status)).toEqual([201, 201, 201, 201]);
+    expect(results.map((res) => res.body.generationNum).sort()).toEqual([2, 3, 4, 5]);
+  });
+});
+
 describe("saving a generation twice", () => {
   const post = (table: "history" | "library", uid: string, body: object) =>
     request(app).post(`/api/${table}`).set(bearer(uid)).send(body);
 
-  it("keeps the first history save and answers the second with it", async () => {
+  it("keeps an older client's first save of a number and answers a repeat with it", async () => {
     const uid = newUid();
     const first = await post("history", uid, { ...exerciseBody(1), notes: "C4/w" });
     const again = await post("history", uid, { ...exerciseBody(1), notes: "G4/w" });
