@@ -2,10 +2,8 @@ import { Note } from "tonal";
 import { describe, expect, it } from "vitest";
 import { DIFFICULTIES, RANGES } from "@/schema";
 import { TIME_SIGNATURES } from "@/lib/generatorOptions";
-import { generateScaleExercise, RANGE_NOTES, scalePitches } from "./generateMusic";
+import { generateMusic, generateScaleExercise, RANGE_NOTES, scalePitches } from "./generateMusic";
 import { splitNotes } from "./splitNotes";
-
-const pitchesOf = (notes: string) => notes.split(", ").map((note) => note.split("/")[0]);
 
 describe("scalePitches", () => {
   it("climbs and comes back down when the range starts on the tonic", () => {
@@ -56,37 +54,84 @@ describe("scalePitches", () => {
   });
 });
 
+/** The notes fill whole bars with none crossing a bar line, and ties only join a pitch to itself. */
+function expectWellFormed(notes: string, timeSig: string) {
+  // splitNotes throws on a note that crosses a bar line, and keeps whole bars as given.
+  expect(splitNotes(notes, timeSig).join(", ")).toBe(notes);
+  const tokens = notes.split(", ");
+  tokens.forEach((token, i) => {
+    if (!token.endsWith("~")) return;
+    expect(token).not.toContain("/r");
+    expect(tokens[i + 1]?.split("/")[0]).toBe(token.split("/")[0]);
+  });
+}
+
+/** The pitch of each note as played: a tied note counts once, and rests are skipped. */
+function playedPitches(notes: string) {
+  const tokens = notes.split(", ");
+  return tokens
+    .filter((token, i) => !token.includes("/r") && !tokens[i - 1]?.endsWith("~"))
+    .map((token) => token.split("/")[0]);
+}
+
 describe("generateScaleExercise", () => {
-  it("plays exactly the scale's pitches", () => {
+  it("plays exactly the scale's pitches, with no rests", () => {
     const notes = generateScaleExercise("4/4", "D major", "MED", "HIGH");
-    const played = notes.split(", ").filter((note) => !note.includes("/r"));
-    expect(pitchesOf(played.join(", "))).toEqual(scalePitches("D major", "MED"));
+    expect(playedPitches(notes)).toEqual(scalePitches("D major", "MED"));
+    expect(notes).not.toContain("/r");
   });
 
-  it.each(TIME_SIGNATURES)("fills whole bars, with no note across a bar line, in %s", (timeSig) => {
+  it.each(TIME_SIGNATURES)("fills whole bars, tying notes across bar lines, in %s", (timeSig) => {
     for (const difficulty of DIFFICULTIES) {
       for (let run = 0; run < 50; run++) {
-        const notes = generateScaleExercise(timeSig, "Bb major", "ANY", difficulty);
-        // splitNotes throws on a note that crosses a bar line, and keeps whole bars as given.
-        expect(splitNotes(notes, timeSig).join(", ")).toBe(notes);
+        expectWellFormed(generateScaleExercise(timeSig, "Bb major", "ANY", difficulty), timeSig);
       }
     }
   });
 
-  it("ends on the held tonic, with only rests after it", () => {
+  it("ties notes across bar lines", () => {
+    const runs = Array.from({ length: 20 }, () =>
+      generateScaleExercise("4/4", "C major", "MED", "MED"),
+    );
+    expect(runs.some((notes) => notes.includes("~"))).toBe(true);
+  });
+
+  it("holds the last tonic through to the bar line", () => {
     for (let run = 0; run < 50; run++) {
-      const notes = generateScaleExercise("4/4", "C major", "MED", "HIGH");
-      const lastBar = splitNotes(notes, "4/4").at(-1)!.split(", ");
-      const tonic = lastBar.findIndex((note) => note.startsWith("C4/"));
-      expect(tonic).toBeGreaterThanOrEqual(0);
-      expect(lastBar.slice(tonic + 1).every((note) => note.includes("/r"))).toBe(true);
+      const notes = generateScaleExercise("3/4", "C major", "MED", "HIGH");
+      expect(notes.split(", ").at(-1)).toMatch(/^C4\/[^~]*$/);
     }
   });
 
-  it("only uses easy note values at low difficulty, apart from the held last note", () => {
-    const notes = generateScaleExercise("4/4", "C major", "ANY", "LOW").split(", ").slice(0, -1);
-    for (const note of notes) {
-      expect(["w", "h", "q", "8", "w.", "h.", "q."]).toContain(note.split("/")[1]);
+  it("only uses easy note values at low difficulty", () => {
+    for (const token of generateScaleExercise("4/4", "C major", "ANY", "LOW").split(", ")) {
+      expect(["w", "h", "q", "8", "h.", "q."]).toContain(token.split("/")[1].replace("~", ""));
+    }
+  });
+});
+
+describe("generateMusic", () => {
+  it.each(TIME_SIGNATURES)("fills exactly the bars asked for in %s", (timeSig) => {
+    for (const difficulty of DIFFICULTIES) {
+      for (let run = 0; run < 50; run++) {
+        const notes = generateMusic(5, timeSig, "F major", "MED", difficulty);
+        expectWellFormed(notes, timeSig);
+        expect(splitNotes(notes, timeSig)).toHaveLength(5);
+      }
+    }
+  });
+
+  it("ties notes across bar lines", () => {
+    const runs = Array.from({ length: 20 }, () => generateMusic(4, "4/4", "C major", "MED", "LOW"));
+    expect(runs.some((notes) => notes.includes("~"))).toBe(true);
+  });
+
+  it("keeps to the key and range", () => {
+    const [low, high] = RANGE_NOTES.LOW.map((n) => Note.midi(n)!);
+    for (const pitch of playedPitches(generateMusic(8, "4/4", "G major", "LOW", "MED"))) {
+      expect(Note.midi(pitch)).toBeGreaterThanOrEqual(low);
+      expect(Note.midi(pitch)).toBeLessThanOrEqual(high);
+      expect(["G", "A", "B", "C", "D", "E", "F#"]).toContain(Note.pitchClass(pitch));
     }
   });
 });

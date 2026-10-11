@@ -9,6 +9,7 @@ import {
   Renderer,
   Stave,
   StaveNote,
+  StaveTie,
   Voice,
   type RenderContext,
 } from "vexflow";
@@ -151,7 +152,7 @@ function useElementWidth(ref: React.RefObject<HTMLElement | null>, enabled: bool
   return w;
 }
 
-type Placed = { note: StaveNote; stave: Stave; color: string; rest: boolean };
+type Placed = { note: StaveNote; stave: Stave; color: string; rest: boolean; tied: boolean };
 
 function drawMeasures(
   ctx: RenderContext,
@@ -232,7 +233,7 @@ function drawMeasures(
         n.setFlagStyle(style);
         n.setLedgerLineStyle(style);
         n.getModifiers().forEach((m) => m.setStyle(style));
-        placed.push({ note: n, stave, color, rest: bar[k].rest });
+        placed.push({ note: n, stave, color, rest: bar[k].rest, tied: bar[k].tied });
       });
 
       voice.draw(ctx, stave);
@@ -243,7 +244,37 @@ function drawMeasures(
       });
     });
   }
+  drawTies(ctx, placed);
   return placed;
+}
+
+/**
+ * Ties each tied note to the one after it, in the first note's colour. A tie across a
+ * line break is drawn in two halves: off the end of one line, and into the next.
+ */
+function drawTies(ctx: RenderContext, placed: Placed[]) {
+  placed.forEach((p, i) => {
+    const next = placed[i + 1];
+    if (!p.tied || !next) return;
+    const halves =
+      next.stave.getY() === p.stave.getY()
+        ? [{ first_note: p.note, last_note: next.note }]
+        : [
+            { first_note: p.note, last_note: null },
+            { first_note: null, last_note: next.note },
+          ];
+    halves.forEach(({ first_note, last_note }) => {
+      const tie = new StaveTie({ first_note, last_note, first_indices: [0], last_indices: [0] });
+      // VexFlow bends every tie by the same amount, which leaves a long one nearly flat;
+      // bend it more the further it reaches, up to a limit.
+      const from = first_note?.getTieRightX() ?? next.stave.getTieStartX();
+      const to = last_note?.getTieLeftX() ?? p.stave.getTieEndX();
+      const bend = Math.min(22, 8 + Math.abs(to - from) * 0.03);
+      tie.render_options.cp1 = bend;
+      tie.render_options.cp2 = bend + 4;
+      tie.setStyle({ fillStyle: p.color, strokeStyle: p.color }).setContext(ctx).draw();
+    });
+  });
 }
 
 function svgEl(

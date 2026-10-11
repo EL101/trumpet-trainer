@@ -334,6 +334,18 @@ export default function DesignPreview() {
               scale={0.8}
             />
           </Box>
+          <Box>
+            <Text fontSize="12px" color="fg.muted" mb="xs">
+              Ties (a trailing ~): across a bar line, across a line break, and within a bar
+            </Text>
+            <Staff
+              notes="G4/w~, G4/h, A4/q, B4/q~, B4/h., C5/8~, C5/8, D5/w"
+              timeSig="4/4"
+              musicKey="G major"
+              measuresPerLine={2}
+              scale={0.8}
+            />
+          </Box>
         </Flex>
       </Section>
 

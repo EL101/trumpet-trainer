@@ -1,4 +1,5 @@
 import { Note, Scale } from "tonal";
+import { barLength, notate, type NoteEvent } from "./notate";
 import { DURATION_TO_BEATS } from "./splitNotes";
 import type { Difficulty, Key, Range } from "@/schema";
 
@@ -56,14 +57,13 @@ const MINOR_TO_MAJOR: Record<string, string> = {
   Gb: "A", // Bbb → A (enharmonic)
 };
 
-const DIFFICULTY_TO_DURATIONS = {
-  LOW: Object.fromEntries(
-    Object.entries(DURATION_TO_BEATS).filter(([_, v]) => v >= 0.5 && v <= 4 && v !== 0.75),
-  ),
-  MED: Object.fromEntries(
-    Object.entries(DURATION_TO_BEATS).filter(([_, v]) => v >= 0.25 && v <= 2),
-  ),
-  HIGH: DURATION_TO_BEATS,
+const NOTE_LENGTHS = Object.values(DURATION_TO_BEATS);
+
+/** The note lengths, in quarter notes, each difficulty draws its rhythm from. */
+const DIFFICULTY_TO_LENGTHS: Record<Difficulty, number[]> = {
+  LOW: NOTE_LENGTHS.filter((v) => v >= 0.5 && v <= 4 && v !== 0.75),
+  MED: NOTE_LENGTHS.filter((v) => v >= 0.25 && v <= 2),
+  HIGH: NOTE_LENGTHS,
 };
 
 /** Lowest and highest written note for each range. */
@@ -116,30 +116,20 @@ export function getKeySig(key: Key) {
   }
 }
 
-/** A time signature's bar length in its own beats, and the length of one beat in quarters. */
-function barShape(timeSig: string) {
-  const [mBeats, noteVal] = timeSig.split("/").map((s) => parseInt(s));
-  return { mBeats, beat: 4 / noteVal };
+/**
+ * A random length from `lengths` that fits in the `left` quarters still to fill, and
+ * doesn't leave a gap too short for any of them to fill.
+ */
+function randomLength(lengths: number[], left: number): number {
+  const fillable = (length: number) =>
+    length === left || lengths.some((other) => other <= left - length);
+  return randomElement(lengths.filter((length) => length <= left && fillable(length)));
 }
 
 /**
- * A random note value that fits in the `remaining` beats of the bar and doesn't leave
- * a gap too short for any other value to fill.
+ * Random notes and rests from the key's scale. They're laid end to end over the whole
+ * length, wherever the bar lines fall, so a note can be tied across one.
  */
-function randomDuration(
-  durations: Record<string, number>,
-  remaining: number,
-  beat: number,
-): [string, number] {
-  const values = Object.values(durations);
-  const fits = (dur: number) => dur / beat <= remaining;
-  const fillable = (dur: number) => {
-    const left = remaining - dur / beat;
-    return left === 0 || values.some((other) => other / beat <= left);
-  };
-  return randomElement(Object.entries(durations).filter(([_, dur]) => fits(dur) && fillable(dur)));
-}
-
 export function generateMusic(
   bars: number,
   timeSig: string,
@@ -147,30 +137,21 @@ export function generateMusic(
   range: Range = "MED",
   difficulty: Difficulty = "LOW",
 ) {
-  const durations = DIFFICULTY_TO_DURATIONS[difficulty];
-  const rangedScale = scaleNotesInRange(key, range);
-  let currBeats = 0;
-  const { mBeats, beat } = barShape(timeSig);
-  let notes = "";
-  while (currBeats < bars * mBeats) {
-    const [val, dur] = randomDuration(durations, mBeats - (currBeats % mBeats), beat);
-    currBeats += dur / beat;
-    const note = randomElement([...rangedScale, "r"]);
-    const next = note === "r" ? rest(val) : `${note}/${val}`;
-    notes += notes ? `, ${next}` : next;
+  const lengths = DIFFICULTY_TO_LENGTHS[difficulty];
+  const pitches = scaleNotesInRange(key, range);
+  const events: NoteEvent[] = [];
+  for (let left = bars * barLength(timeSig); left > 0; ) {
+    const quarters = randomLength(lengths, left);
+    events.push({ pitch: randomElement([...pitches, null]), quarters });
+    left -= quarters;
   }
-  return notes;
-}
-
-/** A rest of the given value, as the renderer spells it: `B4/q/r`, or `B4/q/r.` dotted. */
-function rest(val: string) {
-  return val.endsWith(".") ? `B4/${val.slice(0, -1)}/r.` : `B4/${val}/r`;
+  return notate(events, timeSig);
 }
 
 /**
  * A scale exercise: the pitches are set by the key and range (see `scalePitches`), and
- * only the rhythm is random, drawn from the difficulty's note values. The last tonic is
- * held for the longest value left in its bar, and rests fill whatever is left after it.
+ * only the rhythm is random, drawn from the difficulty's note lengths with no regard for
+ * bar lines. The last tonic is held through to the next bar line.
  */
 export function generateScaleExercise(
   timeSig: string,
@@ -178,32 +159,14 @@ export function generateScaleExercise(
   range: Range = "MED",
   difficulty: Difficulty = "LOW",
 ) {
-  const durations = DIFFICULTY_TO_DURATIONS[difficulty];
-  const { mBeats, beat } = barShape(timeSig);
-  const pitches = scalePitches(key, range);
-  const notes: string[] = [];
-  let remaining = mBeats;
-  pitches.forEach((pitch, i) => {
-    const last = i === pitches.length - 1;
-    const [val, dur] = last
-      ? longestDuration(remaining, beat)
-      : randomDuration(durations, remaining, beat);
-    notes.push(`${pitch}/${val}`);
-    remaining = remaining - dur / beat || mBeats;
-  });
-  // Close the last bar here rather than leave it to splitNotes, whose padding can't fill
-  // every gap (a 5/8-beat gap in 2/2 makes it throw).
-  while (remaining !== mBeats) {
-    const [val, dur] = longestDuration(remaining, beat);
-    notes.push(rest(val));
-    remaining = remaining - dur / beat || mBeats;
-  }
-  return notes.join(", ");
-}
-
-/** The longest single note value that fits in the `remaining` beats of the bar. */
-function longestDuration(remaining: number, beat: number): [string, number] {
-  return Object.entries(DURATION_TO_BEATS)
-    .filter(([_, dur]) => dur / beat <= remaining)
-    .reduce((longest, entry) => (entry[1] > longest[1] ? entry : longest));
+  const lengths = DIFFICULTY_TO_LENGTHS[difficulty];
+  const events: NoteEvent[] = scalePitches(key, range).map((pitch) => ({
+    pitch,
+    quarters: randomElement(lengths),
+  }));
+  const last = events[events.length - 1];
+  const bar = barLength(timeSig);
+  const before = events.slice(0, -1).reduce((sum, event) => sum + event.quarters, 0);
+  last.quarters = bar - (before % bar);
+  return notate(events, timeSig);
 }

@@ -23,7 +23,7 @@ export const BEATS_TO_DURATION = Object.fromEntries(
  *
  * Returns an array of strings, where each entry in the array represents the notes in
  * one measure. Notes that don't fill up a whole measure are padded at the end with
- * rests.
+ * rests. A trailing "~" (a note tied to the next) is kept on its note.
  */
 export function splitNotes(notes: string, timeSig: string): string[] {
   const measures = [];
@@ -35,19 +35,21 @@ export function splitNotes(notes: string, timeSig: string): string[] {
   let currMeasureDur = 0;
   let currMeasureNotes = "";
   for (const note of notesLst) {
-    if (note.includes("/")) {
-      if (note.includes("r") && note.includes(".")) {
-        currNoteVal = DURATION_TO_BEATS[(note.split("/")[1] + ".") as Durations];
+    const tie = note.endsWith("~") ? "~" : "";
+    const token = tie ? note.slice(0, -1) : note;
+    if (token.includes("/")) {
+      if (token.includes("r") && token.includes(".")) {
+        currNoteVal = DURATION_TO_BEATS[(token.split("/")[1] + ".") as Durations];
       } else {
-        currNoteVal = DURATION_TO_BEATS[note.split("/")[1] as Durations];
+        currNoteVal = DURATION_TO_BEATS[token.split("/")[1] as Durations];
       }
     }
     currMeasureDur += currNoteVal / (4 / noteValue);
     currMeasureNotes += currMeasureNotes
       ? `, ${note}`
-      : note.includes("/")
+      : token.includes("/")
         ? note
-        : note + `/${BEATS_TO_DURATION[currNoteVal]}`;
+        : `${token}/${BEATS_TO_DURATION[currNoteVal]}${tie}`;
     if (currMeasureDur > measureLength) throw new Error("Invalid note sequence");
     else if (currMeasureDur === measureLength) {
       measures.push(currMeasureNotes);

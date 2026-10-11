@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Factory, Barline, Accidental } from "vexflow";
+import { Factory, Barline, Accidental, StaveTie, type StemmableNote } from "vexflow";
 import { Box, type BoxProps } from "@chakra-ui/react";
 import { splitNotes } from "../utils/splitNotes";
 import { getKeySig } from "@/utils/generateMusic";
@@ -32,11 +32,16 @@ export function SheetMusic({ notes, timeSig, musicKey, ...rest }: SheetMusicProp
     const score = factory.EasyScore();
 
     const start = 0;
+    // Every note in order, with whether it's tied to the next, for drawing ties at the end.
+    const sequence: { note: StemmableNote; tied: boolean }[] = [];
     for (let i = 0; i < measures.length; i++) {
-      const measureNotes = measures[i];
+      // EasyScore can't read the "~" tie marks, so they're taken off here.
+      const tokens = measures[i].split(",").map((token) => token.trim());
+      const measureNotes = tokens.map((token) => token.replace(/~$/, "")).join(", ");
       const system = factory.System({ x: width * i + start, y: yOffset, width: width });
 
       const allNotes = score.notes(measureNotes);
+      allNotes.forEach((note, k) => sequence.push({ note, tied: tokens[k].endsWith("~") }));
       const beamGroups: (typeof allNotes)[] = [];
       let currentGroup: typeof allNotes = [];
 
@@ -76,6 +81,18 @@ export function SheetMusic({ notes, timeSig, musicKey, ...rest }: SheetMusicProp
     }
 
     factory.draw();
+    sequence.forEach(({ note, tied }, i) => {
+      const next = sequence[i + 1];
+      if (!tied || !next) return;
+      new StaveTie({
+        first_note: note,
+        last_note: next.note,
+        first_indices: [0],
+        last_indices: [0],
+      })
+        .setContext(factory.getContext())
+        .draw();
+    });
 
     if (!container) return;
     const svg = container.querySelector("svg");

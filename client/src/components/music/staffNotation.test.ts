@@ -8,23 +8,37 @@ describe("parseNote", () => {
       duration: "q",
       dotted: false,
       rest: false,
+      tied: false,
     });
     expect(parseNote("G4/16.", "q")).toEqual({
       key: "g/4",
       duration: "16",
       dotted: true,
       rest: false,
+      tied: false,
     });
     expect(parseNote("B4/8/r.", "q")).toEqual({
       key: "b/4",
       duration: "8",
       dotted: true,
       rest: true,
+      tied: false,
     });
   });
 
   it("carries the previous duration when omitted", () => {
     expect(parseNote(" A4", "8")).toMatchObject({ key: "a/4", duration: "8" });
+  });
+
+  it("reads a trailing ~ as a tie to the next note", () => {
+    expect(parseNote("C5/h.~", "q")).toEqual({
+      key: "c/5",
+      duration: "h",
+      dotted: true,
+      rest: false,
+      tied: true,
+    });
+    expect(parseNote("A4~", "8")).toMatchObject({ key: "a/4", duration: "8", tied: true });
   });
 });
 
@@ -38,13 +52,22 @@ describe("parseMeasures", () => {
   });
 });
 
+describe("parseMeasures with ties", () => {
+  it("keeps a tie on the last note of a bar, for the first note of the next", () => {
+    const bars = parseMeasures("C4/h, D4/h~, D4/q, E4/h.", "4/4");
+    expect(bars).toHaveLength(2);
+    expect(bars[0].map((n) => n.tied)).toEqual([false, true]);
+    expect(bars[1].map((n) => n.tied)).toEqual([false, false]);
+  });
+});
+
 describe("parseMeasures with dotted rests", () => {
   it("carries a dotted rest's duration, dot included, like splitNotes does", () => {
     const bars = parseMeasures("B4/8/r., C4", "3/8");
     expect(bars).toHaveLength(1);
     expect(bars[0]).toEqual([
-      { key: "b/4", duration: "8", dotted: true, rest: true },
-      { key: "c/4", duration: "8", dotted: true, rest: false },
+      { key: "b/4", duration: "8", dotted: true, rest: true, tied: false },
+      { key: "c/4", duration: "8", dotted: true, rest: false, tied: false },
     ]);
   });
 });
