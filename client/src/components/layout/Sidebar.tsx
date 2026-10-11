@@ -36,22 +36,31 @@ const SidebarLink = chakra(NavLink, {
   },
 });
 
-/** How the active tab's outline moves to a newly clicked tab. */
-const OUTLINE_SLIDE = { duration: 300, easing: "cubic-bezier(0.2, 0, 0, 1)" };
+const EASE_OUT = "cubic-bezier(0.2, 0, 0, 1)";
+/** The sidebar sliding in from the left when the viewer arrives. */
+const ENTRANCE = { duration: 600, easing: EASE_OUT };
+/** The active tab's outline moving to a newly clicked tab. */
+const OUTLINE_SLIDE = { duration: 300, easing: EASE_OUT };
+
+// Each page mounts its own AppShell, so every navigation swaps one sidebar for a new one
+// in a single commit. These carry what the new sidebar needs to know about the old one.
 
 /**
- * Where the active outline sat in the last sidebar on screen, measured from the top of
- * its nav. Each page mounts its own AppShell, so every navigation builds a new sidebar;
- * this is how the new one knows where to slide its outline in from.
+ * Sidebars on screen. An unmounting sidebar only counts itself out after the commit, so
+ * a new one that sees zero has no predecessor: the viewer has just arrived, by loading
+ * the page or signing in, rather than clicking a tab.
  */
-let lastOutline: { top: number } | null = null;
+let sidebarsOnScreen = 0;
+/** Where the last sidebar's active outline sat, from the top of its nav. */
+let lastOutlineTop: number | null = null;
 
 /** Left rail: brand, numbered nav, streak week and the profile link. */
 export function Sidebar({ items = NAV_ITEMS, streak }: SidebarProps) {
-  const outlineRef = useSlidingOutline();
+  const { asideRef, outlineRef } = useSidebarMotion();
   return (
     <Flex
       as="aside"
+      ref={asideRef}
       direction="column"
       gap="22px"
       width="sidebar"
@@ -134,41 +143,48 @@ export function Sidebar({ items = NAV_ITEMS, streak }: SidebarProps) {
 }
 
 /**
- * Slides the active tab's outline in from where the previous sidebar had it. The outline
- * lives inside the active link, so it only moves for the length of the animation and
- * always lines up with its tab afterwards.
+ * Slides the sidebar in from the left when the viewer arrives, and otherwise slides the
+ * active tab's outline over from where the previous sidebar had it. The outline lives
+ * inside the active link, so it only moves while animating and always lines up with its
+ * tab afterwards.
  */
-function useSlidingOutline() {
+function useSidebarMotion() {
+  const asideRef = useRef<HTMLDivElement>(null);
   const outlineRef = useRef<HTMLDivElement>(null);
   const { pathname } = useLocation();
 
   useLayoutEffect(() => {
+    const arriving = sidebarsOnScreen === 0;
+    sidebarsOnScreen++;
+
     const outline = outlineRef.current;
-    const from = lastOutline;
+    const from = arriving ? null : lastOutlineTop;
     // The active link's layout position within the nav. Unlike a bounding rect, it
     // ignores a slide that's already running.
-    const top = outline?.parentElement?.offsetTop;
-    const to = top === undefined ? null : { top };
-    lastOutline = to;
+    const to = outline?.parentElement?.offsetTop ?? null;
+    lastOutlineTop = to;
 
-    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (outline && from && to && from.top !== to.top && !reduceMotion) {
-      outline.animate(
-        [{ transform: `translateY(${from.top - to.top}px)` }, { transform: "none" }],
-        OUTLINE_SLIDE,
-      );
+    if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      if (arriving) {
+        asideRef.current?.animate(
+          [{ transform: "translateX(-100%)" }, { transform: "none" }],
+          ENTRANCE,
+        );
+      } else if (outline && from !== null && to !== null && from !== to) {
+        outline.animate(
+          [{ transform: `translateY(${from - to}px)` }, { transform: "none" }],
+          OUTLINE_SLIDE,
+        );
+      }
     }
 
-    // Leaving the shell altogether (signing out) forgets the position, so the next
-    // sidebar doesn't slide in from a stale tab. A sidebar mounting in the same commit
-    // has already read and replaced it by the time this runs.
     return () =>
       queueMicrotask(() => {
-        if (lastOutline === to) lastOutline = null;
+        sidebarsOnScreen--;
       });
   }, [pathname]);
 
-  return outlineRef;
+  return { asideRef, outlineRef };
 }
 
 function StreakWeek({ week }: { week: readonly StreakDay[] }) {
