@@ -10,6 +10,7 @@ import {
   Stave,
   StaveNote,
   StaveTie,
+  Stem,
   Voice,
   type RenderContext,
 } from "vexflow";
@@ -99,6 +100,7 @@ export function Staff({
       keySig: musicKey ? getKeySig(musicKey) : "",
       timeSig,
       barlines,
+      showText,
       colorFor: (i, isRest) => {
         if (isRest) return roles.fg.DEFAULT;
         if (noteColor) return noteColor;
@@ -181,6 +183,17 @@ function useElementWidth(ref: React.RefObject<HTMLElement | null>, enabled: bool
 
 type Placed = { note: StaveNote; stave: Stave; color: string; rest: boolean; tied: boolean };
 
+/** One bar, built and formatted but not yet drawn. */
+type Bar = { stave: Stave; voice: Voice; beams: Beam[] };
+
+// Vertical layout in staff units (10 = one staff space), relative to a stave's y.
+const STAFF_TOP = 30; // the top line, below `space_above_staff_ln` of headroom
+const STAFF_BOTTOM = 70;
+/** Clearance between the lowest mark of one line and the highest of the next. */
+const LINE_GAP = 12;
+/** Room the per-note text takes below the lowest note or the staff (see `drawLabels`). */
+const LABEL_ROOM = 42;
+
 function drawMeasures(
   ctx: RenderContext,
   opts: {
@@ -191,6 +204,7 @@ function drawMeasures(
     keySig: string;
     timeSig: string;
     barlines: boolean;
+    showText: boolean;
     colorFor: (index: number, isRest: boolean) => string;
   },
 ): Placed[] {
@@ -200,69 +214,86 @@ function drawMeasures(
   const beamGroups = Beam.getDefaultBeamGroups(timeSig);
   const staveOpts = { space_above_staff_ln: 3, space_below_staff_ln: 3 };
   const placed: Placed[] = [];
+  const lines: Bar[][] = [];
   let index = 0;
 
+  // Build every line first (at y = 0) so each one's reach above and below the staff is
+  // known before the lines are spaced out.
   for (let start = 0, line = 0; start < measures.length; start += perLine, line++) {
     const bars = measures.slice(start, start + perLine);
-    const y = line * lineHeight;
     const isLastLine = start + perLine >= measures.length;
 
     // Measure how much room the clef / key / time take so bars get equal note space.
-    const probe = new Stave(0, y, 300, staveOpts).addClef("treble");
+    const probe = new Stave(0, 0, 300, staveOpts).addClef("treble");
     if (keySig) probe.addKeySignature(keySig);
     if (line === 0 && barlines) probe.addTimeSignature(timeSig);
     const preamble = probe.getNoteStartX() - probe.getX();
     const barWidth = (innerWidth - 2 - preamble) / bars.length;
 
     let x = 1;
-    bars.forEach((bar, bi) => {
-      const w = bi === 0 ? preamble + barWidth : barWidth;
-      const stave = new Stave(x, y, w, staveOpts);
-      x += w;
-      if (bi === 0) {
-        stave.addClef("treble");
-        if (keySig) stave.addKeySignature(keySig);
-        if (line === 0 && barlines) stave.addTimeSignature(timeSig);
-      }
-      if (!barlines) {
-        stave.setEndBarType(Barline.type.NONE);
-        if (bi > 0) stave.setBegBarType(Barline.type.NONE);
-      } else if (isLastLine && bi === bars.length - 1) {
-        stave.setEndBarType(Barline.type.END);
-      }
-      stave.setContext(ctx).draw();
+    lines.push(
+      bars.map((bar, bi) => {
+        const w = bi === 0 ? preamble + barWidth : barWidth;
+        const stave = new Stave(x, 0, w, staveOpts);
+        x += w;
+        if (bi === 0) {
+          stave.addClef("treble");
+          if (keySig) stave.addKeySignature(keySig);
+          if (line === 0 && barlines) stave.addTimeSignature(timeSig);
+        }
+        if (!barlines) {
+          stave.setEndBarType(Barline.type.NONE);
+          if (bi > 0) stave.setBegBarType(Barline.type.NONE);
+        } else if (isLastLine && bi === bars.length - 1) {
+          stave.setEndBarType(Barline.type.END);
+        }
 
-      const staveNotes = bar.map((p) => {
-        const n = new StaveNote({
-          keys: [p.key],
-          duration: p.duration + (p.dotted ? "d" : "") + (p.rest ? "r" : ""),
-          auto_stem: true,
+        const staveNotes = bar.map((p) => {
+          const n = new StaveNote({
+            keys: [p.key],
+            duration: p.duration + (p.dotted ? "d" : "") + (p.rest ? "r" : ""),
+            auto_stem: true,
+          });
+          if (p.dotted) Dot.buildAndAttach([n], { all: true });
+          return n;
         });
-        if (p.dotted) Dot.buildAndAttach([n], { all: true });
-        return n;
-      });
 
-      const voice = new Voice({ num_beats: beats || 4, beat_value: beatValue || 4 }).setMode(
-        Voice.Mode.SOFT,
-      );
-      voice.addTickables(staveNotes);
-      Accidental.applyAccidentals([voice], keySig || "C");
-      const beams = barlines ? Beam.generateBeams(staveNotes, { groups: beamGroups }) : [];
-      new Formatter()
-        .joinVoices([voice])
-        .format([voice], Math.max(10, stave.getNoteEndX() - stave.getNoteStartX() - 14));
+        const voice = new Voice({ num_beats: beats || 4, beat_value: beatValue || 4 }).setMode(
+          Voice.Mode.SOFT,
+        );
+        voice.addTickables(staveNotes);
+        Accidental.applyAccidentals([voice], keySig || "C");
+        const beams = barlines ? Beam.generateBeams(staveNotes, { groups: beamGroups }) : [];
+        new Formatter()
+          .joinVoices([voice])
+          .format([voice], Math.max(10, stave.getNoteEndX() - stave.getNoteStartX() - 14));
 
-      staveNotes.forEach((n, k) => {
-        const color = colorFor(index++, bar[k].rest);
-        const style = { fillStyle: color, strokeStyle: color };
-        n.setStyle(style);
-        n.setStemStyle(style);
-        n.setFlagStyle(style);
-        n.setLedgerLineStyle(style);
-        n.getModifiers().forEach((m) => m.setStyle(style));
-        placed.push({ note: n, stave, color, rest: bar[k].rest, tied: bar[k].tied });
-      });
+        staveNotes.forEach((n, k) => {
+          const color = colorFor(index++, bar[k].rest);
+          const style = { fillStyle: color, strokeStyle: color };
+          n.setStyle(style);
+          n.setStemStyle(style);
+          n.setFlagStyle(style);
+          n.setLedgerLineStyle(style);
+          n.getModifiers().forEach((m) => m.setStyle(style));
+          placed.push({ note: n, stave, color, rest: bar[k].rest, tied: bar[k].tied });
+        });
+        return { stave, voice, beams };
+      }),
+    );
+  }
 
+  // Lines sit `lineHeight` apart, or further when one's low notes would meet the next's
+  // high ones.
+  let y = 0;
+  let prevBottom = 0;
+  lines.forEach((bars, line) => {
+    const { top, bottom } = lineExtent(bars, opts.showText);
+    if (line > 0) y = Math.max(y + lineHeight, y + prevBottom - top + LINE_GAP);
+    prevBottom = bottom;
+
+    bars.forEach(({ stave, voice, beams }) => {
+      stave.setY(y).setContext(ctx).draw();
       voice.draw(ctx, stave);
       beams.forEach((b) => {
         const first = placed.find((p) => p.note === b.getNotes()[0]);
@@ -270,9 +301,33 @@ function drawMeasures(
         b.setContext(ctx).draw();
       });
     });
-  }
+  });
   drawTies(ctx, placed);
   return placed;
+}
+
+/**
+ * How far a line's notes reach above and below the staff, relative to its stave's y:
+ * note heads plus stems (a beam can stretch a stem a little past its usual length).
+ */
+function lineExtent(bars: Bar[], showText: boolean) {
+  let top = STAFF_TOP;
+  let bottom = STAFF_BOTTOM;
+  let lowest = STAFF_BOTTOM;
+  const stem = Stem.HEIGHT + 6;
+  for (const { voice } of bars) {
+    for (const n of voice.getTickables() as StaveNote[]) {
+      if (n.isRest()) continue;
+      // Key line 5 is the staff's top line, 1 its bottom one (as `Stave.getYForNote`).
+      const head = STAFF_TOP + 50 - n.getKeyProps()[0].line * 10;
+      const up = n.getStemDirection() === Stem.UP;
+      top = Math.min(top, head - 6 - (up ? stem : 0));
+      bottom = Math.max(bottom, head + 6 + (up ? 0 : stem));
+      lowest = Math.max(lowest, head);
+    }
+  }
+  if (showText) bottom = Math.max(bottom, lowest + LABEL_ROOM);
+  return { top, bottom };
 }
 
 /**
