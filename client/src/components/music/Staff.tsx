@@ -75,6 +75,9 @@ export function Staff({
   const showText = !!labels || !!annotate;
   const lineHeight = showText ? ANNOTATED_LINE_HEIGHT : LINE_HEIGHT;
   const height = Math.ceil(lineCount * lineHeight * scale);
+  // Notes far above or below the staff can reach past the lines' allotted height; the
+  // drawing grows to fit them so they don't spill over neighbouring content.
+  const [drawnHeight, setDrawnHeight] = useState(height);
 
   useEffect(() => {
     const host = ref.current;
@@ -114,6 +117,7 @@ export function Staff({
         labels ? (labels[i] ?? "") : cents?.[i] != null ? formatCents(cents[i]!, false) : "",
       );
     }
+    setDrawnHeight(fitToContent(svg, W, height, scale));
     return () => {
       host.innerHTML = "";
     };
@@ -135,8 +139,31 @@ export function Staff({
   ]);
 
   return (
-    <Box ref={ref} width={width != null ? `${width}px` : "100%"} height={`${height}px`} {...rest} />
+    <Box
+      ref={ref}
+      width={width != null ? `${width}px` : "100%"}
+      height={`${Math.max(height, drawnHeight)}px`}
+      {...rest}
+    />
   );
+}
+
+/**
+ * Grows the SVG to take in anything drawn above or below its `height`, keeping the
+ * staff where it was, and returns the new pixel height.
+ */
+function fitToContent(svg: SVGSVGElement, width: number, height: number, scale: number) {
+  if (typeof svg.getBBox !== "function") return height; // jsdom
+  const box = svg.getBBox();
+  const pad = 2;
+  const top = Math.min(0, box.y - pad);
+  const bottom = Math.max(height / scale, box.y + box.height + pad);
+  const fitted = Math.ceil((bottom - top) * scale);
+  if (fitted <= height) return height;
+  svg.setAttribute("viewBox", `0 ${top} ${width / scale} ${fitted / scale}`);
+  svg.setAttribute("height", String(fitted));
+  svg.style.height = `${fitted}px`;
+  return fitted;
 }
 
 /** Tracks an element's content width (only when `enabled`). */
