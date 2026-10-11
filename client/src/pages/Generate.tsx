@@ -36,7 +36,7 @@ import {
   TIME_SIGNATURES,
   type TimeSignature,
 } from "@/lib/generatorOptions";
-import { generateMusic, RANGE_NOTES } from "@/utils/generateMusic";
+import { generateMusic, generateScaleExercise, RANGE_NOTES } from "@/utils/generateMusic";
 import { clearHistory, getInitialHistory, insertToHistory } from "@/utils/history";
 import { getInitialLibrary, saveToLibrary } from "@/utils/library";
 import { splitNotes } from "@/utils/splitNotes";
@@ -52,13 +52,6 @@ import {
   type Range,
 } from "@/schema";
 
-// Only the random generator exists so far, so the other types can't be picked yet.
-const TYPE_OPTIONS: readonly ChoiceOption<ExerciseType>[] = EXERCISE_TYPES.map((t) => ({
-  value: t,
-  label: EXERCISE_TYPE_LABELS[t],
-  disabled: t !== "RANDOM",
-}));
-
 type Settings = {
   type: ExerciseType;
   key: Key;
@@ -67,6 +60,23 @@ type Settings = {
   range: Range;
   difficulty: Difficulty;
 };
+
+/** The notes for each type built so far. The other types can't be picked yet. */
+const GENERATORS: Partial<Record<ExerciseType, (settings: Settings) => string>> = {
+  SCALES: ({ timeSig, key, range, difficulty }) =>
+    generateScaleExercise(timeSig, key, range, difficulty),
+  RANDOM: ({ measures, timeSig, key, range, difficulty }) =>
+    generateMusic(measures, timeSig, key, range, difficulty),
+};
+
+/** Types whose length comes from the music itself, so the Measures setting is ignored. */
+const SETS_OWN_LENGTH: ReadonlySet<ExerciseType> = new Set(["SCALES"]);
+
+const TYPE_OPTIONS: readonly ChoiceOption<ExerciseType>[] = EXERCISE_TYPES.map((t) => ({
+  value: t,
+  label: EXERCISE_TYPE_LABELS[t],
+  disabled: !GENERATORS[t],
+}));
 
 const DEFAULT_SETTINGS: Settings = {
   type: "RANDOM",
@@ -132,13 +142,15 @@ export function Generate() {
   };
 
   const handleGenerate = () => {
-    const { type, key, timeSig, measures, range, difficulty } = settings;
+    const { type, key, timeSig, range, difficulty } = settings;
+    const generate = GENERATORS[type];
+    if (!generate) return;
 
     const exercise: MusicInfo = {
       id: crypto.randomUUID(),
       exerciseId: crypto.randomUUID(),
       exerciseType: type,
-      notes: generateMusic(measures, timeSig, key, range, difficulty),
+      notes: generate(settings),
       timeSig,
       musicKey: key,
       noteRange: range,
@@ -554,6 +566,7 @@ function SettingsMargin({ settings, onChange, onGenerate, ...rest }: SettingsMar
     label: <PitchText>{k}</PitchText>,
   }));
   const [low, high] = RANGE_NOTES[settings.range];
+  const ownLength = SETS_OWN_LENGTH.has(settings.type);
 
   return (
     <Flex
@@ -578,7 +591,7 @@ function SettingsMargin({ settings, onChange, onGenerate, ...rest }: SettingsMar
       >
         <PageHeader title="Generate" hideFrom="lg" mb="sm" />
 
-        <Field label="Exercise type" helper="Only random exercises can be generated so far.">
+        <Field label="Exercise type" helper="Long tones, lip slurs and etudes are on the way.">
           <RadioGroup
             aria-label="Exercise type"
             orientation="grid"
@@ -619,11 +632,15 @@ function SettingsMargin({ settings, onChange, onGenerate, ...rest }: SettingsMar
           />
         </Field>
 
-        <Field label="Measures">
+        <Field
+          label="Measures"
+          helper={ownLength ? "A scale runs as long as its key and range need." : undefined}
+        >
           <Stepper
             aria-label="Measures"
             min={MEASURE_LIMITS.min}
             max={MEASURE_LIMITS.max}
+            disabled={ownLength}
             value={settings.measures}
             onChange={(measures) => onChange({ measures })}
           />

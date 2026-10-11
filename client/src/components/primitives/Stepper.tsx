@@ -11,6 +11,8 @@ type StepperProps = {
   step?: number;
   /** Renders the value, e.g. `(v) => \`A = ${v} Hz\``. */
   format?: (value: number) => ReactNode;
+  /** Turns off both buttons and dims the value, for a setting that doesn't apply. */
+  disabled?: boolean;
   "aria-label": string;
 };
 
@@ -22,6 +24,7 @@ export function Stepper({
   max = Infinity,
   step = 1,
   format = String,
+  disabled = false,
   "aria-label": label,
 }: StepperProps) {
   const set = (v: number) => onChange(Math.min(max, Math.max(min, v)));
@@ -29,6 +32,7 @@ export function Stepper({
     <Flex
       role="group"
       aria-label={label}
+      aria-disabled={disabled || undefined}
       align="center"
       borderWidth="1px"
       borderColor="border"
@@ -40,7 +44,7 @@ export function Stepper({
         size="sm"
         borderWidth={0}
         boxSize="34px"
-        disabled={value <= min}
+        disabled={disabled || value <= min}
         onClick={() => set(value - step)}
       >
         <Minus />
@@ -55,6 +59,7 @@ export function Stepper({
         lineHeight="34px"
         borderInlineWidth="1px"
         borderColor="border"
+        opacity={disabled ? 0.45 : undefined}
       >
         {format(value)}
       </Text>
@@ -63,7 +68,7 @@ export function Stepper({
         size="sm"
         borderWidth={0}
         boxSize="34px"
-        disabled={value >= max}
+        disabled={disabled || value >= max}
         onClick={() => set(value + step)}
       >
         <Plus />
