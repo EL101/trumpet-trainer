@@ -48,28 +48,42 @@ export async function deleteExercises(table: ExerciseTable, userId: string) {
   return count;
 }
 
+/** Excess rows fetched and deleted per round trip while pruning one user. */
+const PRUNE_BATCH = 1000;
+
 /**
- * Delete every history row past each user's newest `limit`, ranked as
- * listExercises lists them. Returns how many rows went.
+ * Delete every history row past each user's newest `limit`, the rows
+ * listExercises never returns. Returns how many rows went.
  *
- * Only users over the limit are ranked, so the cost follows the rows to delete
- * rather than the size of the table. A row inserted while this runs is newer
- * than anything ranked, so it's never the one deleted; it can leave a user one
- * over the limit until the next run.
+ * Only users over the limit are visited, so the cost follows the rows to delete
+ * rather than the size of the table. Each batch deletes the exact rows it found
+ * past the limit, not everything below a cutoff, so a row saved meanwhile (even
+ * a No. 1 re-saved after a clear) is never caught up in it.
  */
-export function pruneHistory(limit = HISTORY_LIMIT) {
-  return prisma.$executeRaw`
-    DELETE FROM history
-    WHERE id IN (
-      SELECT id FROM (
-        SELECT id, ROW_NUMBER() OVER (
-          PARTITION BY user_id ORDER BY generation_num DESC
-        ) AS position
-        FROM history
-        WHERE user_id IN (
-          SELECT user_id FROM history GROUP BY user_id HAVING COUNT(*) > ${limit}
-        )
-      ) AS ranked
-      WHERE position > ${limit}
-    )`;
+export async function pruneHistory(limit = HISTORY_LIMIT, batch = PRUNE_BATCH) {
+  const over = await prisma.history.groupBy({
+    by: ["userId"],
+    having: { userId: { _count: { gt: limit } } },
+  });
+
+  let deleted = 0;
+  for (const { userId } of over) {
+    for (;;) {
+      const excess = await prisma.history.findMany({
+        where: { userId },
+        orderBy: { generationNum: "desc" },
+        skip: limit,
+        take: batch,
+        select: { id: true },
+      });
+      if (excess.length === 0) break;
+
+      const { count } = await prisma.history.deleteMany({
+        where: { id: { in: excess.map((row) => row.id) } },
+      });
+      deleted += count;
+      if (excess.length < batch) break;
+    }
+  }
+  return deleted;
 }

@@ -132,6 +132,20 @@ describe("pruneHistory", () => {
     expect(await prisma.library.count({ where: { userId: uid } })).toBe(HISTORY_LIMIT + 10);
   });
 
+  it("works through a large excess in batches", async () => {
+    const a = newUid();
+    const b = newUid();
+    await createUser(a);
+    await createUser(b);
+    await addHistory(a, ...upTo(12));
+    await addHistory(b, ...upTo(9));
+
+    // Limit 5, two rows per batch: a needs four rounds, b two.
+    expect(await pruneHistory(5, 2)).toBe(11);
+    expect(await historyGenerations(a)).toEqual([8, 9, 10, 11, 12]);
+    expect(await historyGenerations(b)).toEqual([5, 6, 7, 8, 9]);
+  });
+
   it("does nothing when everyone is within the limit", async () => {
     const uid = newUid();
     await createUser(uid);

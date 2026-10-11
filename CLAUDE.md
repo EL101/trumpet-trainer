@@ -83,3 +83,15 @@ chosen, and don't change routes or the sidebar navigation unless asked.
 
 Run `npm run build`, `npm run lint`, `npm test -- --run` and `npm run format:check` in
 `client/`. Look at visual changes in the browser, using `/design` for shared components.
+
+## Backend
+
+- Database access lives in `server/src/queries/`. Use Prisma Client's methods
+  (`findMany`, `createMany`, `deleteMany`, `groupBy`, …) by default: they're
+  type-checked, so a renamed or removed column fails the build instead of a query.
+- Drop to raw SQL only when Prisma can't express the operation, for example a window
+  function or a lock. Use the `$queryRaw` / `$executeRaw` tagged templates, which
+  send values as parameters; never build SQL strings from input for the `Unsafe`
+  variants. Add a comment saying why Prisma's methods don't fit.
+- Migrations are SQL by design. Generate them with `npm run migrate:dev --prefix server`
+  and hand-edit them for data clean-up, locks or deploy-safety notes.
