@@ -21,8 +21,9 @@ router.post("/", requireAuth, async (req: Request, res: Response) => {
   }
 
   try {
-    const row = await insertExercise("history", req.user!.uid, parsed.data);
-    res.status(201).json(row);
+    // Saving a generation the user already has is a no-op, answered with 200.
+    const { row, created } = await insertExercise("history", req.user!.uid, parsed.data);
+    res.status(created ? 201 : 200).json(row);
   } catch (err) {
     console.error("Failed to insert history row:", err);
     res.status(500).json({ error: "Failed to save history entry" });

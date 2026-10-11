@@ -45,15 +45,18 @@ export async function insertToHistory(
   }
 }
 
+/** Delete the user's history. Resolves to whether it was cleared. */
 export async function clearHistory(
   user: User | undefined | null,
   setHistory: Dispatch<SetStateAction<Record<number, MusicInfo>>>,
 ) {
   try {
     const res = await authedFetch("/api/history", user, { method: "DELETE" });
-    if (!res) return;
+    if (!res) return false;
     setHistory({});
+    return true;
   } catch (error) {
     console.error("clear history error:", error);
+    return false;
   }
 }

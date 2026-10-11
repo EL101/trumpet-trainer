@@ -111,26 +111,6 @@ export function Generate() {
     [user],
   );
 
-  // Flush the exercise on screen into history when the page unmounts. Refs keep the
-  // unmount effect at [] while still seeing the latest values.
-  const generatedRef = useRef(generated);
-  const addToHistoryRef = useRef(addToHistory);
-
-  useEffect(() => {
-    generatedRef.current = generated;
-  }, [generated]);
-  useEffect(() => {
-    addToHistoryRef.current = addToHistory;
-  }, [addToHistory]);
-
-  useEffect(() => {
-    return () => {
-      if (generatedRef.current) {
-        addToHistoryRef.current(generatedRef.current);
-      }
-    };
-  }, []);
-
   const showPlate = () => {
     plateRef.current?.scrollIntoView({
       block: "nearest",
@@ -168,11 +148,17 @@ export function Generate() {
     showPlate();
   };
 
-  const handleClear = () => {
-    clearHistory(user, setHistory);
-    // Numbering starts again, with the exercise on the plate (if any) as No. 1.
-    setGenCount(generated ? 1 : 0);
-    setGenerated((prev) => prev && { ...prev, generationNum: 1 });
+  const handleClear = async () => {
+    if (!(await clearHistory(user, setHistory))) return;
+    if (!generated) {
+      setGenCount(0);
+      return;
+    }
+    // The exercise on the plate stays, and numbering starts again from it.
+    const kept = { ...generated, generationNum: 1 };
+    setGenerated(kept);
+    setGenCount(1);
+    addToHistory(kept);
   };
 
   // The server keeps only the newest HISTORY_LIMIT; match it as the session adds more.
@@ -217,7 +203,11 @@ export function Generate() {
           pt="md"
         >
           <Kicker tone="muted">Earlier</Kicker>
-          <ClearHistoryButton disabled={Object.keys(history).length === 0} onClear={handleClear} />
+          <ClearHistoryButton
+            disabled={Object.keys(history).length === 0}
+            keepsPlate={!!generated}
+            onClear={handleClear}
+          />
         </Flex>
         {earlier.length > 0 && (
           <Flex
@@ -456,7 +446,16 @@ function SaveToLibraryButton({ exercise }: { exercise: MusicInfo | null }) {
 }
 
 /** "Clear history", confirmed in a dialog first. */
-function ClearHistoryButton({ disabled, onClear }: { disabled: boolean; onClear: () => void }) {
+function ClearHistoryButton({
+  disabled,
+  keepsPlate,
+  onClear,
+}: {
+  disabled: boolean;
+  /** Whether an exercise on the plate survives the clear (as No. 1). */
+  keepsPlate: boolean;
+  onClear: () => void;
+}) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -477,8 +476,10 @@ function ClearHistoryButton({ disabled, onClear }: { disabled: boolean; onClear:
           <Dialog.Content maxWidth="440px" p="lg" gap="md" borderWidth="1px" borderColor="border">
             <Dialog.Title textStyle="heading.md">Clear history?</Dialog.Title>
             <Dialog.Description fontSize="14px" color="fg.muted">
-              This removes every exercise you've generated. Exercises saved to your library stay
-              where they are.
+              {keepsPlate
+                ? "Every earlier exercise is removed. The one on the plate stays and becomes No. 1."
+                : "Every exercise you've generated is removed."}{" "}
+              Exercises saved to your library stay where they are.
             </Dialog.Description>
             <Flex justify="flex-end" gap="sm" mt="sm">
               <Dialog.ActionTrigger asChild>

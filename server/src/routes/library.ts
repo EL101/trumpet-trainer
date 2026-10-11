@@ -21,7 +21,7 @@ router.post("/", requireAuth, async (req: Request, res: Response) => {
   }
 
   try {
-    const row = await insertExercise("library", req.user!.uid, parsed.data);
+    const { row } = await insertExercise("library", req.user!.uid, parsed.data);
     res.status(201).json(row);
   } catch (err) {
     console.error("Failed to insert library row:", err);

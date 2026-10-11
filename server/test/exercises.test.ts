@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import request from "supertest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db.js";
-import { HISTORY_LIMIT, pruneHistory } from "../src/queries/exercises.js";
+import { HISTORY_LIMIT, deleteHistoryDuplicates, pruneHistory } from "../src/queries/exercises.js";
 import { googleClaims, tokenFor } from "./firebaseMock.js";
 import { addHistory, addLibrary, createUser, exerciseBody, newUid } from "./helpers.js";
 
@@ -75,6 +75,40 @@ describe("GET /api/history", () => {
   });
 });
 
+describe("saving a generation twice", () => {
+  const post = (table: "history" | "library", uid: string, body: object) =>
+    request(app).post(`/api/${table}`).set(bearer(uid)).send(body);
+
+  it("keeps the first history save and answers the second with it", async () => {
+    const uid = newUid();
+    const first = await post("history", uid, { ...exerciseBody(1), notes: "C4/w" });
+    const again = await post("history", uid, { ...exerciseBody(1), notes: "G4/w" });
+
+    expect(first.status).toBe(201);
+    expect(again.status).toBe(200);
+    expect(again.body).toMatchObject({ id: first.body.id, notes: "C4/w" });
+    expect(await prisma.history.count({ where: { userId: uid } })).toBe(1);
+  });
+
+  it("still adds a second library row", async () => {
+    const uid = newUid();
+    expect((await post("library", uid, exerciseBody(1))).status).toBe(201);
+    expect((await post("library", uid, exerciseBody(1))).status).toBe(201);
+    expect(await prisma.library.count({ where: { userId: uid } })).toBe(2);
+  });
+
+  it("is refused by the database too, per user", async () => {
+    const a = newUid();
+    const b = newUid();
+    await createUser(a);
+    await createUser(b);
+    await addHistory(a, 1);
+
+    await expect(addHistory(a, 1)).rejects.toThrow(/Unique constraint/);
+    await expect(addHistory(b, 1)).resolves.toEqual({ count: 1 });
+  });
+});
+
 describe("pruneHistory", () => {
   it(`keeps each user's newest ${HISTORY_LIMIT} and deletes the rest`, async () => {
     const over = newUid();
@@ -96,23 +130,6 @@ describe("pruneHistory", () => {
 
     expect(await pruneHistory()).toBe(0);
     expect(await prisma.library.count({ where: { userId: uid } })).toBe(HISTORY_LIMIT + 10);
-  });
-
-  it("keeps the rows GET /api/history lists when generation numbers tie", async () => {
-    const uid = newUid();
-    await createUser(uid);
-    await addHistory(uid, ...upTo(HISTORY_LIMIT));
-    // A second row for the newest generation pushes generation 1 out.
-    await addHistory(uid, HISTORY_LIMIT);
-
-    const listed = (await request(app).get("/api/history").set(bearer(uid))).body as {
-      id: string;
-    }[];
-    await pruneHistory();
-    const kept = await prisma.history.findMany({ where: { userId: uid }, select: { id: true } });
-
-    expect(new Set(kept.map((row) => row.id))).toEqual(new Set(listed.map((row) => row.id)));
-    expect(await historyGenerations(uid)).not.toContain(1);
   });
 
   it("does nothing when everyone is within the limit", async () => {

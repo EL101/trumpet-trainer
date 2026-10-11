@@ -10,17 +10,34 @@ export function listExercises(table: ExerciseTable, userId: string) {
   return table === "history"
     ? prisma.history.findMany({
         where: { userId },
-        // createdAt and id settle ties (a re-saved generation), in the same
-        // order pruneHistory ranks rows, so the rows listed are the rows kept.
-        orderBy: [{ generationNum: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+        orderBy: { generationNum: "desc" },
         take: HISTORY_LIMIT,
       })
     : prisma.library.findMany({ where: { userId }, orderBy: { createdAt: "desc" } });
 }
 
-export function insertExercise(table: ExerciseTable, userId: string, exercise: ExerciseInput) {
+/**
+ * Save an exercise. `created` is false when nothing was added: a user has one
+ * history row per generation number, and saving that generation again returns
+ * the row already there (the first save wins). The library has no such limit.
+ */
+export async function insertExercise(
+  table: ExerciseTable,
+  userId: string,
+  exercise: ExerciseInput,
+) {
   const data = { userId, ...exercise };
-  return table === "history" ? prisma.history.create({ data }) : prisma.library.create({ data });
+  if (table === "library") {
+    return { row: await prisma.library.create({ data }), created: true };
+  }
+
+  // INSERT ... ON CONFLICT DO NOTHING RETURNING *: a conflict returns no row.
+  const [row] = await prisma.history.createManyAndReturn({ data, skipDuplicates: true });
+  if (row) return { row, created: true };
+  const existing = await prisma.history.findUniqueOrThrow({
+    where: { userId_generationNum: { userId, generationNum: exercise.generationNum } },
+  });
+  return { row: existing, created: false };
 }
 
 export async function deleteExercises(table: ExerciseTable, userId: string) {
@@ -46,8 +63,7 @@ export function pruneHistory(limit = HISTORY_LIMIT) {
     WHERE id IN (
       SELECT id FROM (
         SELECT id, ROW_NUMBER() OVER (
-          PARTITION BY user_id
-          ORDER BY generation_num DESC, created_at DESC, id DESC
+          PARTITION BY user_id ORDER BY generation_num DESC
         ) AS position
         FROM history
         WHERE user_id IN (

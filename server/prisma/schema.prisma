@@ -42,7 +42,8 @@ model History {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId, generationNum(sort: Desc)], map: "idx_history_user_generation")
+  /// One row per generation: saving the same generation again is a no-op.
+  @@unique([userId, generationNum], map: "uq_history_user_generation")
   @@map("history")
 }
 
