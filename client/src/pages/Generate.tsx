@@ -95,19 +95,29 @@ export function Generate() {
   const { user } = useContext(AuthUserContext);
   useEffect(() => getInitialHistory(user, setHistory), [user]);
 
-  // Saves go one at a time. The server numbers them in the order they arrive, so
-  // sent together (a double-click on Generate) they could be numbered out of order.
-  const saveQueue = useRef<Promise<void>>(Promise.resolve());
+  // History requests go one at a time. The server numbers saves in the order they
+  // arrive, so sent together (a double-click on Generate) they could be numbered out
+  // of order, and a clear could land before a save made just ahead of it.
+  const historyQueue = useRef<Promise<void>>(Promise.resolve());
+  const enqueue = (task: () => Promise<void>) => {
+    historyQueue.current = historyQueue.current.then(task);
+  };
+
+  // The exercise on the plate now, for queued work that runs after later renders.
+  const plateNow = useRef<MusicInfo | null>(null);
+  useEffect(() => {
+    plateNow.current = generated;
+  }, [generated]);
 
   /** Save the exercise, then number it on the plate once the server has. */
-  const saveToHistory = (exercise: MusicInfo) => {
-    saveQueue.current = saveQueue.current.then(async () => {
-      const saved = await insertToHistory(exercise, user, setHistory);
-      if (!saved) return;
-      // Only if it's still on the plate: a newer exercise may have replaced it.
-      setGenerated((current) => (current?.id === exercise.id ? saved : current));
-    });
+  const save = async (exercise: MusicInfo) => {
+    const saved = await insertToHistory(exercise, user, setHistory);
+    if (!saved) return;
+    // Only if it's still on the plate: a newer exercise may have replaced it.
+    setGenerated((current) => (current?.id === exercise.id ? saved : current));
   };
+
+  const saveToHistory = (exercise: MusicInfo) => enqueue(() => save(exercise));
 
   const showPlate = () => {
     plateRef.current?.scrollIntoView({
@@ -144,12 +154,17 @@ export function Generate() {
     showPlate();
   };
 
-  const handleClear = async () => {
-    if (!(await clearHistory(user, setHistory)) || !generated) return;
-    // The exercise on the plate stays: saved again, it's the server's new No. 1.
-    const kept = { ...generated, generationNum: 0 };
-    setGenerated(kept);
-    saveToHistory(kept);
+  const handleClear = () => {
+    const plate = generated;
+    enqueue(async () => {
+      if (!(await clearHistory(user, setHistory)) || !plate) return;
+      // An exercise generated during the clear has its own save queued after this.
+      if (plateNow.current?.id !== plate.id) return;
+      // The exercise on the plate stays: saved again, it's the server's new No. 1.
+      const kept = { ...plate, generationNum: 0 };
+      setGenerated((current) => (current?.id === plate.id ? kept : current));
+      await save(kept);
+    });
   };
 
   // The server keeps only the newest HISTORY_LIMIT; match it as the session adds more.
