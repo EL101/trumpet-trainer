@@ -36,6 +36,7 @@ import {
 } from "@/components/primitives";
 import {
   DIFFICULTY_LABELS,
+  EXERCISE_TYPE_LABELS,
   isCommonKey,
   keyChoices,
   MEASURE_LIMITS,
@@ -49,26 +50,22 @@ import { getInitialLibrary, saveToLibrary } from "@/utils/library";
 import { splitNotes } from "@/utils/splitNotes";
 import {
   DIFFICULTIES,
+  EXERCISE_TYPES,
+  HISTORY_LIMIT,
   RANGES,
   type Difficulty,
+  type ExerciseType,
   type Key,
   type MusicInfo,
   type Range,
 } from "@/schema";
 
-type ExerciseType = "long-tones" | "scales" | "lip-slurs" | "etudes" | "random";
-
 // Only the random generator exists so far, so the other types can't be picked yet.
-const EXERCISE_TYPES: readonly ChoiceOption<ExerciseType>[] = [
-  { value: "long-tones", label: "Long tones", disabled: true },
-  { value: "scales", label: "Scales", disabled: true },
-  { value: "lip-slurs", label: "Lip slurs", disabled: true },
-  { value: "etudes", label: "Etudes", disabled: true },
-  { value: "random", label: "Random" },
-];
-
-/** Every exercise so far is random, and history doesn't record an exercise's type. */
-const EXERCISE_TITLE = "Random";
+const TYPE_OPTIONS: readonly ChoiceOption<ExerciseType>[] = EXERCISE_TYPES.map((t) => ({
+  value: t,
+  label: EXERCISE_TYPE_LABELS[t],
+  disabled: t !== "RANDOM",
+}));
 
 type Settings = {
   type: ExerciseType;
@@ -80,7 +77,7 @@ type Settings = {
 };
 
 const DEFAULT_SETTINGS: Settings = {
-  type: "random",
+  type: "RANDOM",
   key: "C major",
   timeSig: "4/4",
   measures: 4,
@@ -142,11 +139,12 @@ export function Generate() {
   };
 
   const handleGenerate = () => {
-    const { key, timeSig, measures, range, difficulty } = settings;
+    const { type, key, timeSig, measures, range, difficulty } = settings;
     const generationNum = genCount + 1;
 
     const exercise: MusicInfo = {
       id: crypto.randomUUID(),
+      exerciseType: type,
       notes: generateMusic(measures, timeSig, key, range, difficulty),
       timeSig,
       musicKey: key,
@@ -177,9 +175,11 @@ export function Generate() {
     setGenerated((prev) => prev && { ...prev, generationNum: 1 });
   };
 
+  // The server keeps only the newest HISTORY_LIMIT; match it as the session adds more.
   const earlier = Object.values(history)
-    .filter((exercise) => exercise.generationNum !== generated?.generationNum)
-    .sort((a, b) => b.generationNum - a.generationNum);
+    .sort((a, b) => b.generationNum - a.generationNum)
+    .slice(0, HISTORY_LIMIT)
+    .filter((exercise) => exercise.generationNum !== generated?.generationNum);
 
   return (
     <AppShell
@@ -202,7 +202,12 @@ export function Generate() {
         pe={{ base: "xl", lg: "40px" }}
       >
         <PageHeader title="Generate" hideBelow="lg" />
-        <CurrentExercise ref={plateRef} exercise={generated} perLine={perLine} />
+        <CurrentExercise
+          ref={plateRef}
+          exercise={generated}
+          pendingType={settings.type}
+          perLine={perLine}
+        />
 
         <Flex
           justify="space-between"
@@ -254,10 +259,13 @@ function prefersReducedMotion() {
 /** The exercise just generated (or brought back), on a plate, with what to do with it. */
 function CurrentExercise({
   exercise,
+  pendingType,
   perLine,
   ref,
 }: {
   exercise: MusicInfo | null;
+  /** The type Generate will make, titling the plate while it's empty. */
+  pendingType: ExerciseType;
   perLine?: number;
   ref: Ref<HTMLDivElement>;
 }) {
@@ -267,7 +275,7 @@ function CurrentExercise({
       <Flex direction="column" gap="md" minWidth={0}>
         <Flex justify="space-between" align="baseline" gap="md" wrap="wrap">
           <Heading as="h2" textStyle="heading.md" m={0}>
-            {EXERCISE_TITLE}
+            {EXERCISE_TYPE_LABELS[exercise?.exerciseType ?? pendingType]}
           </Heading>
           {exercise && <ExerciseDetails exercise={exercise} long />}
         </Flex>
@@ -315,6 +323,7 @@ function EarlierExercise({
   perLine?: number;
   onOpen: () => void;
 }) {
+  const title = EXERCISE_TYPE_LABELS[exercise.exerciseType];
   return (
     <Grid as="li" className="group" position="relative" templateColumns={ENTRY_COLUMNS} gap="md">
       <NumberMark n={exercise.generationNum} />
@@ -323,7 +332,7 @@ function EarlierExercise({
           <chakra.button
             type="button"
             onClick={onOpen}
-            aria-label={`Open ${EXERCISE_TITLE} No. ${exercise.generationNum}`}
+            aria-label={`Open ${title} No. ${exercise.generationNum}`}
             textStyle="heading.sm"
             textAlign="start"
             cursor="pointer"
@@ -338,7 +347,7 @@ function EarlierExercise({
               "&:focus-visible::after": { outline: "2px solid {colors.accent.solid}" },
             }}
           >
-            {EXERCISE_TITLE}
+            {title}
           </chakra.button>
           <ExerciseDetails exercise={exercise} />
         </Flex>
@@ -536,7 +545,7 @@ function SettingsMargin({ settings, onChange, onGenerate, ...rest }: SettingsMar
           <RadioGroup
             aria-label="Exercise type"
             orientation="grid"
-            options={EXERCISE_TYPES}
+            options={TYPE_OPTIONS}
             value={settings.type}
             onChange={(type) => onChange({ type })}
           />

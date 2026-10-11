@@ -1,8 +1,16 @@
 import type { Difficulty, Key, Range } from "./music";
 
+/** The kinds of exercise the generator makes. Mirrors the server's ExerciseType enum. */
+export const EXERCISE_TYPES = ["LONG_TONES", "SCALES", "LIP_SLURS", "ETUDES", "RANDOM"] as const;
+export type ExerciseType = (typeof EXERCISE_TYPES)[number];
+
+/** History entries the server keeps per user. Mirrors the server's HISTORY_LIMIT. */
+export const HISTORY_LIMIT = 100;
+
 /** A generated exercise, as stored in history and in the library. */
 export type MusicInfo = {
   id: string;
+  exerciseType: ExerciseType;
   notes: string;
   timeSig: string;
   musicKey: Key;
@@ -27,6 +35,7 @@ export type ExerciseParams = {
 
 /** Body sent to POST /api/history and POST /api/library. Mirrors the server's ExerciseInputSchema. */
 export type ExerciseInput = {
+  exerciseType: ExerciseType;
   notes: string;
   timeSig: string;
   musicKey: Key;
@@ -37,6 +46,7 @@ export type ExerciseInput = {
 
 export function toExerciseInput(exercise: MusicInfo): ExerciseInput {
   return {
+    exerciseType: exercise.exerciseType,
     notes: exercise.notes,
     timeSig: exercise.timeSig,
     musicKey: exercise.musicKey,

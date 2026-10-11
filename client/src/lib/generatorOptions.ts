@@ -1,4 +1,4 @@
-import type { Difficulty, Key, Range } from "@/schema";
+import type { Difficulty, ExerciseType, Key, Range } from "@/schema";
 
 /**
  * Every key the generator plays in, as [major, relative minor] rows. The first
@@ -36,6 +36,14 @@ export const TIME_SIGNATURES = ["4/4", "3/4", "2/4", "2/2", "6/8", "3/8", "9/8",
 export type TimeSignature = (typeof TIME_SIGNATURES)[number];
 
 export const MEASURE_LIMITS = { min: 1, max: 8 } as const;
+
+export const EXERCISE_TYPE_LABELS: Record<ExerciseType, string> = {
+  LONG_TONES: "Long tones",
+  SCALES: "Scales",
+  LIP_SLURS: "Lip slurs",
+  ETUDES: "Etudes",
+  RANDOM: "Random",
+};
 
 export const RANGE_LABELS: Record<Range, string> = {
   LOW: "Low",

@@ -14,17 +14,31 @@ datasource db {
   provider = "postgresql"
 }
 
-/// One generated exercise, recorded as the user generates it.
+/// The kinds of exercise the generator makes. A Postgres enum, so the database
+/// itself rejects any other value.
+enum ExerciseType {
+  LONG_TONES
+  SCALES
+  LIP_SLURS
+  ETUDES
+  RANDOM
+
+  @@map("exercise_type")
+}
+
+/// One generated exercise, recorded as the user generates it. Each user keeps
+/// their newest HISTORY_LIMIT rows; the hourly prune deletes the rest.
 model History {
-  id            String   @id @default(uuid())
-  userId        String   @map("user_id")
+  id            String       @id @default(uuid())
+  userId        String       @map("user_id")
+  exerciseType  ExerciseType @default(RANDOM) @map("exercise_type")
   notes         String
-  timeSig       String   @map("time_sig")
-  musicKey      String   @map("music_key")
-  noteRange     String   @map("note_range")
+  timeSig       String       @map("time_sig")
+  musicKey      String       @map("music_key")
+  noteRange     String       @map("note_range")
   difficulty    String
-  generationNum Int      @map("generation_num")
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  generationNum Int          @map("generation_num")
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -34,15 +48,16 @@ model History {
 
 /// An exercise the user explicitly saved.
 model Library {
-  id            String   @id @default(uuid())
-  userId        String   @map("user_id")
+  id            String       @id @default(uuid())
+  userId        String       @map("user_id")
+  exerciseType  ExerciseType @default(RANDOM) @map("exercise_type")
   notes         String
-  timeSig       String   @map("time_sig")
-  musicKey      String   @map("music_key")
-  noteRange     String   @map("note_range")
+  timeSig       String       @map("time_sig")
+  musicKey      String       @map("music_key")
+  noteRange     String       @map("note_range")
   difficulty    String
-  generationNum Int      @map("generation_num")
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  generationNum Int          @map("generation_num")
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
