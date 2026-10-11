@@ -66,12 +66,17 @@ const DIFFICULTY_TO_DURATIONS = {
   HIGH: DURATION_TO_BEATS,
 };
 
-const RANGE_THRESHOLDS = {
-  LOW: [Note.midi("F#3"), Note.midi("C5")],
-  MED: [Note.midi("C4"), Note.midi("C6")],
-  HIGH: [Note.midi("C5"), Note.midi("G6")],
-  ANY: [Note.midi("F#3"), Note.midi("G6")],
+/** Lowest and highest written note for each range. */
+export const RANGE_NOTES: Record<Range, readonly [string, string]> = {
+  LOW: ["F#3", "C5"],
+  MED: ["C4", "C6"],
+  HIGH: ["C5", "G6"],
+  ANY: ["F#3", "G6"],
 };
+
+const RANGE_THRESHOLDS = Object.fromEntries(
+  Object.entries(RANGE_NOTES).map(([range, notes]) => [range, notes.map((n) => Note.midi(n))]),
+) as Record<Range, (number | null)[]>;
 
 function generateScale(key: Key) {
   return Scale.get(key).notes;

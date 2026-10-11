@@ -22,5 +22,5 @@ export { buttonRecipe } from "./recipes/button";
 export { tagRecipe } from "./recipes/tag";
 export { cardRecipe } from "./recipes/card";
 export { inputRecipe, textareaRecipe } from "./recipes/input";
-export { segmentedRecipe, radioRecipe } from "./recipes/choice";
+export { segmentedRecipe, radioRecipe, choiceGridRecipe } from "./recipes/choice";
 export { bookplateRecipe } from "./recipes/bookplate";

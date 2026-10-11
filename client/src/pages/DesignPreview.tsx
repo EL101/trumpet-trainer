@@ -6,6 +6,7 @@ import {
   ExerciseMeta,
   IntonationLegend,
   PitchReadout,
+  PitchText,
   ScoreFigure,
   Staff,
 } from "@/components/music";
@@ -13,6 +14,7 @@ import {
   Bookplate,
   Button,
   Card,
+  ChoiceGrid,
   Field,
   IconButton,
   Input,
@@ -30,7 +32,9 @@ import {
 /** Dev-only gallery of the design-system building blocks (route: /design). */
 export default function DesignPreview() {
   const [zone, setZone] = useState<"5" | "10" | "15">("5");
-  const [type, setType] = useState<"long" | "scales" | "random">("random");
+  const [type, setType] = useState<"long" | "scales" | "slurs" | "random">("random");
+  const [key, setKey] = useState("Bb major");
+  const [time, setTime] = useState("4/4");
   const [bars, setBars] = useState(2);
   const [cursor, setCursor] = useState(3.4);
 
@@ -131,7 +135,7 @@ export default function DesignPreview() {
           <Card.Root size="lg">
             <Card.Kicker>Up next · 03</Card.Kicker>
             <Card.Title>Clarke Study No. 2 in G</Card.Title>
-            <ExerciseMeta keyLabel="G major" tempo={96} bars={8} minutes={6} />
+            <ExerciseMeta keyLabel="Bb major" tempo={96} bars={8} minutes={6} />
             <Button variant="primary" size="lg" fullWidth mt="md">
               <Play />
               Begin
@@ -168,13 +172,36 @@ export default function DesignPreview() {
               aria-label="Exercise type"
               value={type}
               onChange={setType}
+              orientation="grid"
               options={[
                 { value: "long", label: "Long tones" },
                 { value: "scales", label: "Scales" },
+                { value: "slurs", label: "Lip slurs", disabled: true },
                 { value: "random", label: "Random" },
               ]}
             />
           </Field>
+          <Flex direction="column" gap="md">
+            <Field label="Key">
+              <ChoiceGrid
+                aria-label="Key"
+                value={key}
+                onChange={setKey}
+                options={["C major", "A minor", "Bb major", "G minor", "F# major", "D# minor"].map(
+                  (k) => ({ value: k, label: <PitchText>{k}</PitchText> }),
+                )}
+              />
+            </Field>
+            <Field label="Time signature">
+              <ChoiceGrid
+                aria-label="Time signature"
+                columns={4}
+                value={time}
+                onChange={setTime}
+                options={["4/4", "3/4", "2/4", "6/8"].map((t) => ({ value: t, label: t }))}
+              />
+            </Field>
+          </Flex>
           <Flex direction="column" gap="md">
             <Field label="Key">
               {(id) => (

@@ -1,40 +1,36 @@
 import { createSlotRecipeContext, type HTMLChakraProps } from "@chakra-ui/react";
 import { useId } from "react";
-import { radioRecipe } from "@/theme";
+import { choiceGridRecipe } from "@/theme";
 import type { ChoiceOption } from "./SegmentedControl";
 
-const { withProvider, withContext } = createSlotRecipeContext({ recipe: radioRecipe });
+const { withProvider, withContext } = createSlotRecipeContext({ recipe: choiceGridRecipe });
 
-const Root = withProvider<
-  HTMLDivElement,
-  HTMLChakraProps<"div"> & { orientation?: "vertical" | "horizontal" | "grid" }
->("div", "root");
+const Root = withProvider<HTMLDivElement, HTMLChakraProps<"div">>("div", "root");
 const Item = withContext<HTMLLabelElement, HTMLChakraProps<"label">>("label", "item");
 const HiddenInput = withContext<HTMLInputElement, HTMLChakraProps<"input">>("input", "input");
-const Dot = withContext<HTMLSpanElement, HTMLChakraProps<"span">>("span", "dot");
 
-type RadioGroupProps<T extends string> = {
+type ChoiceGridProps<T extends string> = {
   options: readonly ChoiceOption<T>[];
   value: T;
   onChange: (value: T) => void;
-  /** `grid` sets the options in two columns. */
-  orientation?: "vertical" | "horizontal" | "grid";
+  /** Options per row. */
+  columns?: number;
   "aria-label"?: string;
   name?: string;
 };
 
-/** `.radio` — a list of single-choice options with dot markers. */
-export function RadioGroup<T extends string>({
+/** One-of-many choice laid out as a grid of chips (keys, time signatures). */
+export function ChoiceGrid<T extends string>({
   options,
   value,
   onChange,
-  orientation,
+  columns = 2,
   name,
   ...aria
-}: RadioGroupProps<T>) {
+}: ChoiceGridProps<T>) {
   const autoName = useId();
   return (
-    <Root role="radiogroup" orientation={orientation} {...aria}>
+    <Root role="radiogroup" gridTemplateColumns={`repeat(${columns}, minmax(0, 1fr))`} {...aria}>
       {options.map((o) => (
         <Item key={o.value}>
           <HiddenInput
@@ -45,7 +41,6 @@ export function RadioGroup<T extends string>({
             disabled={o.disabled}
             onChange={() => onChange(o.value)}
           />
-          <Dot aria-hidden />
           {o.label}
         </Item>
       ))}

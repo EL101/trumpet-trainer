@@ -73,5 +73,7 @@ export const textStyles = defineTextStyles({
     lg: { value: { ...heading, ...tabular, fontSize: "38px", fontWeight: 400, lineHeight: 1 } },
     md: { value: { ...heading, ...tabular, fontSize: "34px", fontWeight: 400, lineHeight: 1 } },
     sm: { value: { ...heading, ...tabular, fontSize: "24px", fontWeight: 400, lineHeight: 1.1 } },
+    /** Entry numbers in a list ("43" in its box on Generate). */
+    xs: { value: { ...heading, ...tabular, fontSize: "18px", fontWeight: 400, lineHeight: 1 } },
   },
 });

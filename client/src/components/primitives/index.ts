@@ -5,6 +5,7 @@ export { Input, Textarea, NativeSelect } from "./Input";
 export { Field } from "./Field";
 export { SegmentedControl, type ChoiceOption } from "./SegmentedControl";
 export { RadioGroup } from "./RadioGroup";
+export { ChoiceGrid } from "./ChoiceGrid";
 export { Stepper } from "./Stepper";
 export { Rule } from "./Rule";
 export { Kicker } from "./Kicker";

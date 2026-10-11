@@ -66,7 +66,8 @@ export const radioRecipe = defineSlotRecipe({
       gap: "8px",
       cursor: "pointer",
       fontSize: "14px",
-      "&:hover .tt-radio__dot": { borderColor: "accent.solid" },
+      "&:not(:has(input:disabled)):hover .tt-radio__dot": { borderColor: "accent.solid" },
+      "&:has(input:disabled)": { opacity: 0.45, cursor: "not-allowed" },
     },
     input: hiddenInput,
     dot: {
@@ -90,7 +91,50 @@ export const radioRecipe = defineSlotRecipe({
     orientation: {
       vertical: {},
       horizontal: { root: { flexDirection: "row", flexWrap: "wrap", gap: "18px" } },
+      /** Two columns, filled row by row. */
+      grid: {
+        root: {
+          display: "grid",
+          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+          gap: "9px 12px",
+        },
+      },
     },
   },
   defaultVariants: { orientation: "vertical" },
+});
+
+/** Radio chips in a grid (key, time signature): a hairline accent ring marks the choice. */
+export const choiceGridRecipe = defineSlotRecipe({
+  className: "tt-choice-grid",
+  slots: ["root", "item", "input"],
+  base: {
+    root: { display: "grid", gap: "2px" },
+    item: {
+      position: "relative",
+      display: "flex",
+      alignItems: "center",
+      px: "8px",
+      py: "5px",
+      fontSize: "13px",
+      lineHeight: 1.4,
+      fontVariantNumeric: "tabular-nums",
+      whiteSpace: "nowrap",
+      borderRadius: "sm",
+      cursor: "pointer",
+      transitionProperty: "background-color, color",
+      transitionDuration: "fast",
+      "&:has(input:checked)": {
+        color: "accent.fg",
+        boxShadow: "inset 0 0 0 1px {colors.accent.solid}",
+      },
+      "&:not(:has(input:checked)):not(:has(input:disabled)):hover": { bg: "bg.muted" },
+      "&:has(input:focus-visible)": {
+        outline: "2px solid {colors.accent.solid}",
+        outlineOffset: "1px",
+      },
+      "&:has(input:disabled)": { opacity: 0.45, cursor: "not-allowed" },
+    },
+    input: hiddenInput,
+  },
 });

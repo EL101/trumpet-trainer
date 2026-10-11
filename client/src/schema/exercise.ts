@@ -1,4 +1,3 @@
-import type { Dispatch, SetStateAction } from "react";
 import type { Difficulty, Key, Range } from "./music";
 
 /** A generated exercise, as stored in history and in the library. */
@@ -24,15 +23,6 @@ export type ExerciseParams = {
   musicKey: Key;
   noteRange: Range;
   difficulty: Difficulty;
-};
-
-/** Props every exercise-type form (Random, Etudes, ...) receives from Generate. */
-export type ExerciseProps = {
-  setTimeSig: Dispatch<SetStateAction<string>>;
-  setMeasures: Dispatch<SetStateAction<number>>;
-  setKey: Dispatch<SetStateAction<Key>>;
-  setRange: Dispatch<SetStateAction<Range>>;
-  setDifficulty: Dispatch<SetStateAction<Difficulty>>;
 };
 
 /** Body sent to POST /api/history and POST /api/library. Mirrors the server's ExerciseInputSchema. */
