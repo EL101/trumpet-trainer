@@ -6,8 +6,8 @@ brass accent, hairline borders, and outlined buttons (never filled).
 
 > The frontend is mid-rehaul. The new design system, shared components and app shell
 > (sidebar) are in place; page content is being rebuilt on top of them one screen at a
-> time (done so far: the landing page). See [Old vs new](#old-vs-new) for what to use
-> and what to avoid.
+> time (done so far: the landing page and Generate). See [Old vs new](#old-vs-new) for
+> what to use and what to avoid.
 
 ## Running it
 
@@ -64,20 +64,22 @@ src/
 ├── components/
 │   ├── primitives/        Generic building blocks. Import from "@/components/primitives".
 │   │                      Button, IconButton, Card, Tag, Input, NativeSelect, Field,
-│   │                      SegmentedControl, RadioGroup, Stepper, Rule, Kicker, Stat,
-│   │                      SectionHeading, Bookplate
+│   │                      SegmentedControl, RadioGroup, ChoiceGrid, Stepper, Rule,
+│   │                      Kicker, Stat, SectionHeading, Bookplate
 │   ├── music/             Trumpet-specific UI. Import from "@/components/music".
 │   │                      Staff (VexFlow notation with per-note intonation colour and a
 │   │                      playback cursor), PitchReadout, ScoreFigure,
-│   │                      IntonationLegend, ExerciseMeta
+│   │                      IntonationLegend, ExerciseMeta, PitchText (key and note
+│   │                      names with ♭ and ♯)
 │   ├── layout/            Page frames. Import from "@/components/layout".
 │   │                      AppShell (sidebar + content), FocusShell (no sidebar, for the
 │   │                      player), Sidebar, PageHeader
 │   ├── ui/                Chakra's generated setup (provider, toaster, tooltip). Rarely touched.
-│   └── *.tsx, inputs/     OLD components. See "Old vs new" below.
+│   └── *.tsx              OLD components. See "Old vs new" below.
 │
 ├── pages/                 One file per route; routes are declared in App.tsx.
-├── lib/                   Pure helpers for the new UI (intonation colours, formatting).
+├── lib/                   Pure helpers for the new UI (intonation colours, formatting,
+│                          the generator's keys, time signatures and labels).
 ├── utils/                 App logic: music generation, API calls, history, library,
 │                          profile, image handling.
 ├── hooks/                 usePitch (microphone), useMetronome, usePersistedState
@@ -149,6 +151,9 @@ shell: it has no sidebar and nothing to go back to.
   variant; add the variant to the recipe instead.
 - **Icons:** use [Lucide](https://lucide.dev) (`lucide-react`), as the design system
   specifies. The old pages use `react-icons`.
+- **Key and note names:** render them with `<PitchText>` (`"Bb major"` → B♭ major).
+  Lora sets ♭ and ♯ on a full em, so PitchText pulls them in against their letter.
+  For a plain string (an `aria-label`, say), use `formatPitch()` from `@/lib/format`.
 - **Motion:** use the keyframes in `theme/keyframes.ts` with fill-mode `backwards`, and
   put the animation under `_motionSafe` so it's skipped for viewers who prefer reduced
   motion: `_motionSafe={{ animation: "appear 400ms ease-out 200ms backwards" }}`.
@@ -158,13 +163,12 @@ shell: it has no sidebar and nothing to go back to.
 The rehaul replaces the old components gradually. Until a page is rebuilt it keeps
 using the old ones, and both kinds live side by side.
 
-| Old (don't use in new code)                  | New                                      |
-| -------------------------------------------- | ---------------------------------------- |
-| `SheetMusic`                                 | `music/Staff`                            |
-| `SegmentInput`                               | `primitives/SegmentedControl`            |
-| `StepperInput`                               | `primitives/Stepper`                     |
-| `Dropdown`, `inputs/*Select`                 | `primitives/NativeSelect` inside `Field` |
-| Chakra `Button` / `Card` with stock variants | `primitives/Button` / `Card`             |
+| Old (don't use in new code)                  | New                           |
+| -------------------------------------------- | ----------------------------- |
+| `SheetMusic`                                 | `music/Staff`                 |
+| `SegmentInput`                               | `primitives/SegmentedControl` |
+| `StepperInput`                               | `primitives/Stepper`          |
+| Chakra `Button` / `Card` with stock variants | `primitives/Button` / `Card`  |
 
 Once a page no longer uses an old component and nothing else imports it, delete it.
 

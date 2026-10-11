@@ -18,9 +18,16 @@ export function toRoman(n: number): string {
   return out;
 }
 
+/** Swaps ASCII accidentals for music symbols: "Bb major" → "B♭ major", "F#3" → "F♯3". */
+export function formatPitch(text: string): string {
+  return text.replace(/([A-G])#/g, "$1♯").replace(/([A-G])b/g, "$1♭");
+}
+
 export type ExerciseMetaParts = {
   /** "G major", or a source like "Generated". */
   keyLabel?: string;
+  /** "4/4". */
+  timeSig?: string;
   tempo?: number;
   bars?: number;
   minutes?: number;
@@ -29,12 +36,14 @@ export type ExerciseMetaParts = {
 /** Exercise details as the mockups write them: ["G major", "♩ = 96", "8 bars", "6 min"]. */
 export function formatExerciseMeta({
   keyLabel,
+  timeSig,
   tempo,
   bars,
   minutes,
 }: ExerciseMetaParts): string[] {
   return [
     keyLabel,
+    timeSig,
     tempo != null ? `♩ = ${tempo}` : undefined,
     bars != null ? `${bars} ${bars === 1 ? "bar" : "bars"}` : undefined,
     minutes != null ? `${minutes} min` : undefined,

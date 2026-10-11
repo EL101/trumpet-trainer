@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { ExerciseInputSchema } from "../schema/index.js";
-import { insertExercise, listExercises } from "../queries/exercises.js";
+import { insertLibrary, listExercises } from "../queries/exercises.js";
 
 const router = Router();
 
@@ -21,8 +21,9 @@ router.post("/", requireAuth, async (req: Request, res: Response) => {
   }
 
   try {
-    const row = await insertExercise("library", req.user!.uid, parsed.data);
-    res.status(201).json(row);
+    // Saving an exercise that's already in the library is a no-op, answered with 200.
+    const { row, created } = await insertLibrary(req.user!.uid, parsed.data);
+    res.status(created ? 201 : 200).json(row);
   } catch (err) {
     console.error("Failed to insert library row:", err);
     res.status(500).json({ error: "Failed to save library entry" });

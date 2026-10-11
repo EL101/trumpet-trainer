@@ -14,38 +14,61 @@ datasource db {
   provider = "postgresql"
 }
 
-/// One generated exercise, recorded as the user generates it.
+/// The kinds of exercise the generator makes. A Postgres enum, so the database
+/// itself rejects any other value.
+enum ExerciseType {
+  LONG_TONES
+  SCALES
+  LIP_SLURS
+  ETUDES
+  RANDOM
+
+  @@map("exercise_type")
+}
+
+/// One generated exercise, recorded as the user generates it. Each user keeps
+/// their newest HISTORY_LIMIT rows; the hourly prune deletes the rest.
 model History {
-  id            String   @id @default(uuid())
-  userId        String   @map("user_id")
+  id            String       @id @default(uuid())
+  userId        String       @map("user_id")
+  /// The exercise itself, shared with its library row. Made by the client when it
+  /// generates the exercise, so it survives renumbering; generated here otherwise.
+  exerciseId    String       @default(dbgenerated("gen_random_uuid()")) @map("exercise_id") @db.Uuid
+  exerciseType  ExerciseType @default(RANDOM) @map("exercise_type")
   notes         String
-  timeSig       String   @map("time_sig")
-  musicKey      String   @map("music_key")
-  noteRange     String   @map("note_range")
+  timeSig       String       @map("time_sig")
+  musicKey      String       @map("music_key")
+  noteRange     String       @map("note_range")
   difficulty    String
-  generationNum Int      @map("generation_num")
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  generationNum Int          @map("generation_num")
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId, generationNum(sort: Desc)], map: "idx_history_user_generation")
+  /// One row per generation: saving the same generation again is a no-op.
+  @@unique([userId, generationNum], map: "uq_history_user_generation")
   @@map("history")
 }
 
 /// An exercise the user explicitly saved.
 model Library {
-  id            String   @id @default(uuid())
-  userId        String   @map("user_id")
+  id            String       @id @default(uuid())
+  userId        String       @map("user_id")
+  /// The exercise saved, matching its history row's exerciseId.
+  exerciseId    String       @default(dbgenerated("gen_random_uuid()")) @map("exercise_id") @db.Uuid
+  exerciseType  ExerciseType @default(RANDOM) @map("exercise_type")
   notes         String
-  timeSig       String   @map("time_sig")
-  musicKey      String   @map("music_key")
-  noteRange     String   @map("note_range")
+  timeSig       String       @map("time_sig")
+  musicKey      String       @map("music_key")
+  noteRange     String       @map("note_range")
   difficulty    String
-  generationNum Int      @map("generation_num")
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  generationNum Int          @map("generation_num")
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  /// Each exercise once: saving it again is a no-op.
+  @@unique([userId, exerciseId], map: "uq_library_user_exercise")
   @@index([userId, createdAt(sort: Desc)], map: "idx_library_user_created")
   @@map("library")
 }

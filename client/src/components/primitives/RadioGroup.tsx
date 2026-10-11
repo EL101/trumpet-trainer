@@ -7,7 +7,7 @@ const { withProvider, withContext } = createSlotRecipeContext({ recipe: radioRec
 
 const Root = withProvider<
   HTMLDivElement,
-  HTMLChakraProps<"div"> & { orientation?: "vertical" | "horizontal" }
+  HTMLChakraProps<"div"> & { orientation?: "vertical" | "horizontal" | "grid" }
 >("div", "root");
 const Item = withContext<HTMLLabelElement, HTMLChakraProps<"label">>("label", "item");
 const HiddenInput = withContext<HTMLInputElement, HTMLChakraProps<"input">>("input", "input");
@@ -17,7 +17,8 @@ type RadioGroupProps<T extends string> = {
   options: readonly ChoiceOption<T>[];
   value: T;
   onChange: (value: T) => void;
-  orientation?: "vertical" | "horizontal";
+  /** `grid` sets the options in two columns. */
+  orientation?: "vertical" | "horizontal" | "grid";
   "aria-label"?: string;
   name?: string;
 };

@@ -61,8 +61,8 @@ README in the same change.
 ### Components
 
 - New pages must not use the old components listed in the README's "Old vs new" table
-  (`SheetMusic`, `SegmentInput`, `Dropdown`, Chakra's stock `Button`/`Card` variants,
-  …). Use the replacements.
+  (`SheetMusic`, `SegmentInput`, `StepperInput`, Chakra's stock `Button`/`Card`
+  variants, …). Use the replacements.
 - Component files export only components (React fast refresh requires it). Put helper
   functions and constants in `lib/` or in a sibling `.ts` file (e.g. `navItems.ts`).
 - Accessibility: `IconButton` requires `aria-label`. Choice controls are built on
@@ -83,3 +83,17 @@ chosen, and don't change routes or the sidebar navigation unless asked.
 
 Run `npm run build`, `npm run lint`, `npm test -- --run` and `npm run format:check` in
 `client/`. Look at visual changes in the browser, using `/design` for shared components.
+
+## Backend
+
+- Database access lives in `server/src/queries/`. Use Prisma Client's methods
+  (`findMany`, `createMany`, `deleteMany`, `groupBy`, …) by default: they're
+  type-checked, so a renamed or removed column fails the build instead of a query.
+- Use raw SQL instead when Prisma can't express the operation (a window function, a
+  lock), when performance is a high priority (a hot path where one statement beats
+  several round trips), or when the query is highly complex. Use the `$queryRaw` /
+  `$executeRaw` tagged templates, which send values as parameters; never build SQL
+  strings from input for the `Unsafe` variants. Add a comment saying why, and cover the
+  query with a test, since the compiler can't check its column names.
+- Migrations are SQL by design. Generate them with `npm run migrate:dev --prefix server`
+  and hand-edit them for data clean-up, locks or deploy-safety notes.

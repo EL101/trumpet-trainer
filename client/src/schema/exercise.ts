@@ -1,14 +1,27 @@
-import type { Dispatch, SetStateAction } from "react";
 import type { Difficulty, Key, Range } from "./music";
+
+/** The kinds of exercise the generator makes. Mirrors the server's ExerciseType enum. */
+export const EXERCISE_TYPES = ["LONG_TONES", "SCALES", "LIP_SLURS", "ETUDES", "RANDOM"] as const;
+export type ExerciseType = (typeof EXERCISE_TYPES)[number];
+
+/** History entries the server keeps per user. Mirrors the server's HISTORY_LIMIT. */
+export const HISTORY_LIMIT = 100;
 
 /** A generated exercise, as stored in history and in the library. */
 export type MusicInfo = {
   id: string;
+  /**
+   * The exercise itself, made when it's generated and shared by its history and
+   * library rows, so it still matches its library row after history renumbers it.
+   */
+  exerciseId: string;
+  exerciseType: ExerciseType;
   notes: string;
   timeSig: string;
   musicKey: Key;
   noteRange: Range;
   difficulty: Difficulty;
+  /** Picked by the server when the exercise is saved to history; 0 until then. */
   generationNum: number;
 };
 
@@ -26,32 +39,32 @@ export type ExerciseParams = {
   difficulty: Difficulty;
 };
 
-/** Props every exercise-type form (Random, Etudes, ...) receives from Generate. */
-export type ExerciseProps = {
-  setTimeSig: Dispatch<SetStateAction<string>>;
-  setMeasures: Dispatch<SetStateAction<number>>;
-  setKey: Dispatch<SetStateAction<Key>>;
-  setRange: Dispatch<SetStateAction<Range>>;
-  setDifficulty: Dispatch<SetStateAction<Difficulty>>;
-};
-
-/** Body sent to POST /api/history and POST /api/library. Mirrors the server's ExerciseInputSchema. */
-export type ExerciseInput = {
+/** Body sent to POST /api/history, which picks the number. Mirrors the server's HistoryInputSchema. */
+export type HistoryInput = {
+  exerciseId: string;
+  exerciseType: ExerciseType;
   notes: string;
   timeSig: string;
   musicKey: Key;
   noteRange: Range;
   difficulty: Difficulty;
-  generationNum: number;
 };
 
-export function toExerciseInput(exercise: MusicInfo): ExerciseInput {
+/** Body sent to POST /api/library. Mirrors the server's ExerciseInputSchema. */
+export type ExerciseInput = HistoryInput & { generationNum: number };
+
+export function toHistoryInput(exercise: MusicInfo): HistoryInput {
   return {
+    exerciseId: exercise.exerciseId,
+    exerciseType: exercise.exerciseType,
     notes: exercise.notes,
     timeSig: exercise.timeSig,
     musicKey: exercise.musicKey,
     noteRange: exercise.noteRange,
     difficulty: exercise.difficulty,
-    generationNum: exercise.generationNum,
   };
+}
+
+export function toExerciseInput(exercise: MusicInfo): ExerciseInput {
+  return { ...toHistoryInput(exercise), generationNum: exercise.generationNum };
 }
