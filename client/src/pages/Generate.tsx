@@ -91,6 +91,20 @@ const TIME_OPTIONS = TIME_SIGNATURES.map((t) => ({ value: t, label: t }));
 const RANGE_OPTIONS = RANGES.map((r) => ({ value: r, label: RANGE_LABELS[r] }));
 const DIFFICULTY_OPTIONS = DIFFICULTIES.map((d) => ({ value: d, label: DIFFICULTY_LABELS[d] }));
 
+/** The settings margin's entrance: it slides in, then its settings rise in one by one. */
+const ENTER_EASE = "cubic-bezier(0.33, 1, 0.68, 1)";
+const ENTER_MS = 250;
+const ENTER_FIRST_AT = 100;
+const ENTER_STAGGER = 50;
+/** Header plus the six settings; Generate follows them. */
+const ENTER_ITEMS = 7;
+const riseIn = (i: number) => ({
+  animation: `rise-in ${ENTER_MS}ms ${ENTER_EASE} ${ENTER_FIRST_AT + i * ENTER_STAGGER}ms backwards`,
+});
+const SETTINGS_ENTRANCE = Object.fromEntries(
+  Array.from({ length: ENTER_ITEMS }, (_, i) => [`& > :nth-child(${i + 1})`, riseIn(i)]),
+);
+
 /** The entry grid: a number box in the margin, the exercise beside it. */
 const ENTRY_COLUMNS = "40px minmax(0, 1fr)";
 
@@ -577,6 +591,14 @@ function SettingsMargin({ settings, onChange, onGenerate, ...rest }: SettingsMar
       borderColor="border"
       borderLeftWidth={{ lg: "1px" }}
       borderBottomWidth={{ base: "1px", lg: 0 }}
+      // Beside the music it slides in from the page edge; stacked above, the settings'
+      // own rise is enough.
+      _motionSafe={{
+        lg: {
+          "--slide-from": "32px",
+          animation: `slide-in ${ENTER_MS}ms ${ENTER_EASE} backwards, appear ${ENTER_MS}ms ${ENTER_EASE} backwards`,
+        },
+      }}
       {...rest}
     >
       <Flex
@@ -588,6 +610,7 @@ function SettingsMargin({ settings, onChange, onGenerate, ...rest }: SettingsMar
         pt="2xl"
         ps="xl"
         pe="2xl"
+        _motionSafe={SETTINGS_ENTRANCE}
       >
         <PageHeader title="Generate" hideFrom="lg" mb="sm" />
 
@@ -665,7 +688,7 @@ function SettingsMargin({ settings, onChange, onGenerate, ...rest }: SettingsMar
         </Field>
       </Flex>
 
-      <Box pt="md" pb="xl" ps="xl" pe="2xl">
+      <Box pt="md" pb="xl" ps="xl" pe="2xl" _motionSafe={riseIn(ENTER_ITEMS)}>
         <Button variant="primary" size="lg" fullWidth onClick={onGenerate}>
           Generate
         </Button>
