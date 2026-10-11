@@ -1,6 +1,6 @@
 import { Note, Scale } from "tonal";
 import { barLength, notate, type NoteEvent } from "./notate";
-import { DURATION_TO_BEATS } from "./splitNotes";
+import { figureLength, randomFigure, rhythmFor } from "./rhythm";
 import type { Difficulty, Key, Range } from "@/schema";
 
 export const PRACTICAL_MAJOR = [
@@ -57,15 +57,6 @@ const MINOR_TO_MAJOR: Record<string, string> = {
   Gb: "A", // Bbb → A (enharmonic)
 };
 
-const NOTE_LENGTHS = Object.values(DURATION_TO_BEATS);
-
-/** The note lengths, in quarter notes, each difficulty draws its rhythm from. */
-const DIFFICULTY_TO_LENGTHS: Record<Difficulty, number[]> = {
-  LOW: NOTE_LENGTHS.filter((v) => v >= 0.5 && v <= 4 && v !== 0.75),
-  MED: NOTE_LENGTHS.filter((v) => v >= 0.25 && v <= 2),
-  HIGH: NOTE_LENGTHS,
-};
-
 /** Lowest and highest written note for each range. */
 export const RANGE_NOTES: Record<Range, readonly [string, string]> = {
   LOW: ["F#3", "C5"],
@@ -117,16 +108,6 @@ export function getKeySig(key: Key) {
 }
 
 /**
- * A random length from `lengths` that fits in the `left` quarters still to fill, and
- * doesn't leave a gap too short for any of them to fill.
- */
-function randomLength(lengths: number[], left: number): number {
-  const fillable = (length: number) =>
-    length === left || lengths.some((other) => other <= left - length);
-  return randomElement(lengths.filter((length) => length <= left && fillable(length)));
-}
-
-/**
  * Random notes and rests from the key's scale. They're laid end to end over the whole
  * length, wherever the bar lines fall, so a note can be tied across one.
  */
@@ -137,21 +118,24 @@ export function generateMusic(
   range: Range = "MED",
   difficulty: Difficulty = "LOW",
 ) {
-  const lengths = DIFFICULTY_TO_LENGTHS[difficulty];
+  const rhythm = rhythmFor(timeSig, difficulty);
   const pitches = scaleNotesInRange(key, range);
+  const total = bars * barLength(timeSig);
   const events: NoteEvent[] = [];
-  for (let left = bars * barLength(timeSig); left > 0; ) {
-    const quarters = randomLength(lengths, left);
-    events.push({ pitch: randomElement([...pitches, null]), quarters });
-    left -= quarters;
+  for (let position = 0; position < total; ) {
+    const figure = randomFigure(rhythm, position, { left: total - position });
+    figure.forEach((quarters) =>
+      events.push({ pitch: randomElement([...pitches, null]), quarters }),
+    );
+    position += figureLength(figure);
   }
   return notate(events, timeSig);
 }
 
 /**
  * A scale exercise: the pitches are set by the key and range (see `scalePitches`), and
- * only the rhythm is random, drawn from the difficulty's note lengths with no regard for
- * bar lines. The last tonic is held through to the next bar line.
+ * only the rhythm is random, built from the difficulty's figures (see `rhythmFor`) with
+ * no regard for bar lines. The last tonic is held through to the next bar line.
  */
 export function generateScaleExercise(
   timeSig: string,
@@ -159,14 +143,21 @@ export function generateScaleExercise(
   range: Range = "MED",
   difficulty: Difficulty = "LOW",
 ) {
-  const lengths = DIFFICULTY_TO_LENGTHS[difficulty];
-  const events: NoteEvent[] = scalePitches(key, range).map((pitch) => ({
-    pitch,
-    quarters: randomElement(lengths),
-  }));
-  const last = events[events.length - 1];
+  const rhythm = rhythmFor(timeSig, difficulty);
+  const pitches = scalePitches(key, range);
+  // Every note but the last tonic, which is held to the bar line instead.
+  const lengths: number[] = [];
+  let position = 0;
+  while (lengths.length < pitches.length - 1) {
+    const maxNotes = pitches.length - 1 - lengths.length;
+    const figure = randomFigure(rhythm, position, { maxNotes });
+    lengths.push(...figure);
+    position += figureLength(figure);
+  }
   const bar = barLength(timeSig);
-  const before = events.slice(0, -1).reduce((sum, event) => sum + event.quarters, 0);
-  last.quarters = bar - (before % bar);
-  return notate(events, timeSig);
+  lengths.push(bar - (position % bar));
+  return notate(
+    pitches.map((pitch, i) => ({ pitch, quarters: lengths[i] })),
+    timeSig,
+  );
 }

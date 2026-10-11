@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { DIFFICULTIES, RANGES } from "@/schema";
 import { TIME_SIGNATURES } from "@/lib/generatorOptions";
 import { generateMusic, generateScaleExercise, RANGE_NOTES, scalePitches } from "./generateMusic";
-import { splitNotes } from "./splitNotes";
+import { DURATION_TO_BEATS, splitNotes } from "./splitNotes";
 
 describe("scalePitches", () => {
   it("climbs and comes back down when the range starts on the tonic", () => {
@@ -74,6 +74,19 @@ function playedPitches(notes: string) {
     .map((token) => token.split("/")[0]);
 }
 
+/** Each played note's length in quarters, its tied pieces added up. For music with no rests. */
+function playedLengths(notes: string) {
+  const lengths: number[] = [];
+  let tied = false;
+  for (const token of notes.split(", ")) {
+    const value = token.split("/")[1].replace("~", "") as keyof typeof DURATION_TO_BEATS;
+    if (tied) lengths[lengths.length - 1] += DURATION_TO_BEATS[value];
+    else lengths.push(DURATION_TO_BEATS[value]);
+    tied = token.endsWith("~");
+  }
+  return lengths;
+}
+
 describe("generateScaleExercise", () => {
   it("plays exactly the scale's pitches, with no rests", () => {
     const notes = generateScaleExercise("4/4", "D major", "MED", "HIGH");
@@ -102,6 +115,32 @@ describe("generateScaleExercise", () => {
       expect(notes.split(", ").at(-1)).toMatch(/^C4\/[^~]*$/);
     }
   });
+
+  it("only uses sixteenths in pairs, or after a dotted eighth, at medium difficulty", () => {
+    let pairs = 0;
+    for (let run = 0; run < 50; run++) {
+      // The last tonic is held to the bar line, whatever length that leaves it.
+      const lengths = playedLengths(generateScaleExercise("4/4", "C major", "ANY", "MED"));
+      lengths.pop();
+      for (let i = 0; i < lengths.length; i++) {
+        if (lengths[i] !== 0.25 || lengths[i - 1] === 0.75) continue;
+        expect(lengths[i + 1]).toBe(0.25);
+        pairs++;
+        i++;
+      }
+    }
+    expect(pairs).toBeGreaterThan(0);
+  });
+
+  it.each(["4/4", "6/8"])(
+    "never writes dotted sixteenths or thirty-seconds at medium difficulty in %s",
+    (timeSig) => {
+      for (let run = 0; run < 50; run++) {
+        const notes = generateScaleExercise(timeSig, "C major", "ANY", "MED");
+        expect(notes).not.toMatch(/\/16\.|\/32/);
+      }
+    },
+  );
 
   it("only uses easy note values at low difficulty", () => {
     for (const token of generateScaleExercise("4/4", "C major", "ANY", "LOW").split(", ")) {
