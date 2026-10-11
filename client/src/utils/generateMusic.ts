@@ -1,5 +1,6 @@
 import { Note, Scale } from "tonal";
 import { barLength, notate, type NoteEvent } from "./notate";
+import { closingTonic, nextPitch } from "./melody";
 import { figureLength, randomFigure, rhythmFor } from "./rhythm";
 import type { Difficulty, Key, Range } from "@/schema";
 
@@ -95,10 +96,6 @@ export function scalePitches(key: Key, range: Range): string[] {
   return [...up, ...down, ...backUp];
 }
 
-function randomElement<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-
 export function getKeySig(key: Key) {
   const [root, quality] = key.split(" ");
   if (quality === "major") return root;
@@ -109,7 +106,8 @@ export function getKeySig(key: Key) {
 
 /**
  * Random notes and rests from the key's scale. They're laid end to end over the whole
- * length, wherever the bar lines fall, so a note can be tied across one.
+ * length, wherever the bar lines fall, so a note can be tied across one. Each note
+ * follows from the ones before it (see `nextPitch`), and the last is the tonic.
  */
 export function generateMusic(
   bars: number,
@@ -120,15 +118,24 @@ export function generateMusic(
 ) {
   const rhythm = rhythmFor(timeSig, difficulty);
   const pitches = scaleNotesInRange(key, range);
+  // A rest is as likely as any one pitch in the range.
+  const restChance = 1 / (pitches.length + 1);
   const total = bars * barLength(timeSig);
   const events: NoteEvent[] = [];
+  const played: string[] = [];
   for (let position = 0; position < total; ) {
     const figure = randomFigure(rhythm, position, { left: total - position });
-    figure.forEach((quarters) =>
-      events.push({ pitch: randomElement([...pitches, null]), quarters }),
-    );
+    for (const quarters of figure) {
+      const pitch = Math.random() < restChance ? null : nextPitch(pitches, played, difficulty);
+      if (pitch) played.push(pitch);
+      events.push({ pitch, quarters });
+    }
     position += figureLength(figure);
   }
+  // End on the tonic nearest the note before the last, even if the last was a rest.
+  const last = events[events.length - 1];
+  if (last.pitch) played.pop();
+  last.pitch = closingTonic(pitches, Scale.get(key).tonic!, played.at(-1) ?? null);
   return notate(events, timeSig);
 }
 

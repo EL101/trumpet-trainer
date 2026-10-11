@@ -165,6 +165,42 @@ describe("generateMusic", () => {
     expect(runs.some((notes) => notes.includes("~"))).toBe(true);
   });
 
+  it.each([
+    ["LOW", 7],
+    ["MED", 12],
+    ["HIGH", 19],
+  ] as const)("keeps leaps at %s difficulty within %i semitones", (difficulty, max) => {
+    const leaps: number[] = [];
+    for (let run = 0; run < 50; run++) {
+      const midis = playedPitches(generateMusic(8, "4/4", "C major", "ANY", difficulty)).map(
+        (pitch) => Note.midi(pitch)!,
+      );
+      midis.slice(1).forEach((midi, i) => leaps.push(Math.abs(midi - midis[i])));
+    }
+    expect(Math.max(...leaps)).toBeLessThanOrEqual(max);
+    // The limit is reached, not undercut: the widest leaps allowed do turn up.
+    expect(Math.max(...leaps)).toBeGreaterThanOrEqual(max - 1);
+  });
+
+  it("never leaps a tritone at low difficulty", () => {
+    for (let run = 0; run < 50; run++) {
+      const midis = playedPitches(generateMusic(8, "4/4", "C major", "ANY", "LOW")).map(
+        (pitch) => Note.midi(pitch)!,
+      );
+      midis.slice(1).forEach((midi, i) => expect(Math.abs(midi - midis[i])).not.toBe(6));
+    }
+  });
+
+  it("ends on the tonic", () => {
+    for (const difficulty of DIFFICULTIES) {
+      for (let run = 0; run < 50; run++) {
+        const tokens = generateMusic(2, "3/4", "Eb major", "MED", difficulty).split(", ");
+        expect(tokens.at(-1)).not.toContain("/r");
+        expect(Note.pitchClass(tokens.at(-1)!.split("/")[0])).toBe("Eb");
+      }
+    }
+  });
+
   it("keeps to the key and range", () => {
     const [low, high] = RANGE_NOTES.LOW.map((n) => Note.midi(n)!);
     for (const pitch of playedPitches(generateMusic(8, "4/4", "G major", "LOW", "MED"))) {
