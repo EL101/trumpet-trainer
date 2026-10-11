@@ -105,6 +105,13 @@ const SETTINGS_ENTRANCE = Object.fromEntries(
   Array.from({ length: ENTER_ITEMS }, (_, i) => [`& > :nth-child(${i + 1})`, riseIn(i)]),
 );
 
+/** History's entrance: the rule wipes in, then the loaded entries rise in one by one. */
+const HISTORY_WIPE_MS = 400;
+const HISTORY_FIRST_AT = 50;
+const HISTORY_STAGGER = 50;
+/** Entries past this many share its delay; they start below the fold anyway. */
+const HISTORY_STAGGER_CAP = 6;
+
 /** The entry grid: a number box in the margin, the exercise beside it. */
 const ENTRY_COLUMNS = "40px minmax(0, 1fr)";
 
@@ -118,6 +125,9 @@ export function Generate() {
 
   const { user } = useContext(AuthUserContext);
   useEffect(() => getInitialHistory(user, setHistory), [user]);
+  // Until the first generate, open or clear, entries that appear are the loaded
+  // history, so they rise in one after another. After that they arrive alone.
+  const [intro, setIntro] = useState(true);
 
   const [library, setLibrary] = useState<MusicInfo[]>([]);
   useEffect(() => getInitialLibrary(user, setLibrary), [user]);
@@ -172,12 +182,14 @@ export function Generate() {
       generationNum: 0,
     };
 
+    setIntro(false);
     setGenerated(exercise);
     saveToHistory(exercise);
     showPlate();
   };
 
   const handleOpen = (exercise: MusicInfo) => {
+    setIntro(false);
     // The exercise leaving the plate joins the list below it (once it's numbered).
     if (generated?.generationNum && !history[generated.generationNum]) {
       setHistory((prev) => ({ ...prev, [generated.generationNum]: generated }));
@@ -187,6 +199,7 @@ export function Generate() {
   };
 
   const handleClear = () => {
+    setIntro(false);
     const plate = generated;
     enqueue(async () => {
       if (!(await clearHistory(user, setHistory)) || !plate) return;
@@ -241,6 +254,9 @@ export function Generate() {
           borderTopWidth="1px"
           borderColor="border"
           pt="md"
+          _motionSafe={{
+            animation: `wipe-in ${HISTORY_WIPE_MS}ms ${ENTER_EASE} backwards`,
+          }}
         >
           <Kicker tone="muted">Earlier</Kicker>
           <ClearHistoryButton
@@ -259,10 +275,13 @@ export function Generate() {
             m={0}
             p={0}
           >
-            {earlier.map((exercise) => (
+            {earlier.map((exercise, i) => (
               <EarlierExercise
                 key={exercise.generationNum}
                 exercise={exercise}
+                enterDelay={
+                  intro ? HISTORY_FIRST_AT + Math.min(i, HISTORY_STAGGER_CAP) * HISTORY_STAGGER : 0
+                }
                 perLine={perLine}
                 saved={isSaved(exercise)}
                 onOpen={() => handleOpen(exercise)}
@@ -359,18 +378,30 @@ function CurrentExercise({
 function EarlierExercise({
   exercise,
   perLine,
+  enterDelay,
   saved,
   onOpen,
 }: {
   exercise: MusicInfo;
+  /** How long to wait before rising in, in ms. */
+  enterDelay: number;
   perLine?: number;
   /** Whether the exercise is in the library, shown as a bookmark by its details. */
   saved: boolean;
   onOpen: () => void;
 }) {
   const title = EXERCISE_TYPE_LABELS[exercise.exerciseType];
+  // Fixed when the entry mounts: a later change would restart or cut short its rise.
+  const [delay] = useState(enterDelay);
   return (
-    <Grid as="li" className="group" position="relative" templateColumns={ENTRY_COLUMNS} gap="md">
+    <Grid
+      as="li"
+      className="group"
+      position="relative"
+      templateColumns={ENTRY_COLUMNS}
+      gap="md"
+      _motionSafe={{ animation: `rise-in ${ENTER_MS}ms ${ENTER_EASE} ${delay}ms backwards` }}
+    >
       <NumberMark n={exercise.generationNum} />
       <Flex direction="column" gap="xs" minWidth={0}>
         <Flex justify="space-between" align="baseline" gap="md" wrap="wrap">
