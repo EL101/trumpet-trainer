@@ -1,10 +1,10 @@
-import DashboardTemplate from "../components/DashBoardTemplate";
+import { AppShell } from "@/components/layout";
 import SignOut from "../components/SignOut";
 
 export default function Progress() {
   return (
-    <DashboardTemplate>
+    <AppShell display="flex" flexDirection="column" gap="lg">
       <SignOut />
-    </DashboardTemplate>
+    </AppShell>
   );
 }

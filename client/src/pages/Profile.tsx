@@ -1,5 +1,5 @@
 import { Heading, Spinner, Text } from "@chakra-ui/react";
-import DashboardTemplate from "../components/DashBoardTemplate";
+import { AppShell } from "@/components/layout";
 import SignOut from "../components/SignOut";
 import LinkGoogleAccount from "../components/LinkGoogleAccount";
 import AvatarUpload from "../components/AvatarUpload";
@@ -10,12 +10,18 @@ export default function Profile() {
   const { user } = useAuth();
   const { profile, loading } = useProfile();
 
-  if (!user || loading) return <DashboardTemplate>{<Spinner size="xl" />}</DashboardTemplate>;
+  if (!user || loading) {
+    return (
+      <AppShell>
+        <Spinner size="xl" />
+      </AppShell>
+    );
+  }
 
   const name = profile?.isAnonymous ? "Guest" : (profile?.displayName ?? "Profile");
 
   return (
-    <DashboardTemplate>
+    <AppShell display="flex" flexDirection="column" gap="lg">
       <AvatarUpload user={user} />
       <Heading size="2xl">{name}</Heading>
       {profile?.email ? (
@@ -25,6 +31,6 @@ export default function Profile() {
       )}
       {profile?.isAnonymous && <LinkGoogleAccount user={user} />}
       <SignOut />
-    </DashboardTemplate>
+    </AppShell>
   );
 }

@@ -1,5 +1,5 @@
-import { Box, Heading } from "@chakra-ui/react";
-import DashboardTemplate from "../components/DashBoardTemplate";
+import { Heading } from "@chakra-ui/react";
+import { AppShell } from "@/components/layout";
 
 export default function Today() {
   const dateToday = new Date().toLocaleDateString("en-US", {
@@ -9,10 +9,8 @@ export default function Today() {
   });
 
   return (
-    <DashboardTemplate>
-      <Box flex="1" height="100%" p="1rem 2rem">
-        <Heading size="2xl">{dateToday}</Heading>
-      </Box>
-    </DashboardTemplate>
+    <AppShell>
+      <Heading size="2xl">{dateToday}</Heading>
+    </AppShell>
   );
 }
