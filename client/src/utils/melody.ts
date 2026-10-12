@@ -142,12 +142,25 @@ export function tonicReach(
   tonic: string,
   canMove: (from: string, to: string) => boolean,
 ) {
-  const reach = [new Set(pitches.filter((pitch) => Note.pitchClass(pitch) === tonic))];
+  const tonics = pitches.filter((pitch) => Note.pitchClass(pitch) === tonic);
+  return reachOf(pitches, tonics, canMove);
+}
+
+/**
+ * `tonicReach` for any items and any targets: for a number of moves, the items from which
+ * one of `targets` can be reached in exactly that many moves.
+ */
+export function reachOf<T>(
+  items: readonly T[],
+  targets: readonly T[],
+  canMove: (from: T, to: T) => boolean,
+) {
+  const reach = [new Set(targets)];
   return (moves: number) => {
-    // Once every note can reach a tonic, every note can for any number of moves more.
-    while (reach.length <= moves && reach[reach.length - 1].size < pitches.length) {
+    // Once every item can reach a target, every item can for any number of moves more.
+    while (reach.length <= moves && reach[reach.length - 1].size < items.length) {
       const nearer = [...reach[reach.length - 1]];
-      reach.push(new Set(pitches.filter((p) => nearer.some((q) => canMove(p, q)))));
+      reach.push(new Set(items.filter((p) => nearer.some((q) => canMove(p, q)))));
     }
     return reach[Math.min(moves, reach.length - 1)];
   };

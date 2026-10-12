@@ -1,9 +1,15 @@
 import { Note } from "tonal";
 import { describe, expect, it } from "vitest";
-import { TIME_SIGNATURES } from "@/lib/generatorOptions";
-import { DIFFICULTIES, RANGES, type Difficulty, type Key } from "@/schema";
-import { RANGE_NOTES, scaleNotesInRange } from "./generateMusic";
-import { generateLipSlurs, lipSlurFingerings, partialDistances, partialsApart } from "./lipSlurs";
+import { MEASURE_LIMITS, TIME_SIGNATURES } from "@/lib/generatorOptions";
+import { DIFFICULTIES, RANGES, type Difficulty, type Range } from "@/schema";
+import { RANGE_NOTES } from "./generateMusic";
+import {
+  generateLipSlurs,
+  lipSlurFingerings,
+  partialDistances,
+  partialsApart,
+  planLipSlurs,
+} from "./lipSlurs";
 import { splitNotes } from "./splitNotes";
 
 const SLUR_PARTIALS: Record<Difficulty, { min: number; max: number }> = {
@@ -12,41 +18,60 @@ const SLUR_PARTIALS: Record<Difficulty, { min: number; max: number }> = {
   HIGH: { min: 2, max: Infinity },
 };
 
+/** From open down, each a half step lower than the one before. */
+const VALVE_ORDER = ["0", "2", "1", "12", "23", "13", "123"];
+
+/** The letters each fingering's notes are spelled with: root, 5th, 3rd and 9th. */
+const SPELLINGS: Record<string, string[]> = {
+  "0": ["C", "G", "E", "D"],
+  "2": ["B", "F#", "D#", "C#"],
+  "1": ["Bb", "F", "D", "C"],
+  "12": ["A", "E", "C#", "B"],
+  "23": ["Ab", "Eb", "C", "Bb"],
+  "13": ["G", "D", "B", "A"],
+  "123": ["F#", "C#", "A#", "G#"],
+};
+
 const pitchesOf = (notes: string) =>
   notes.split(", ").map((token) => token.replace(/[()]/g, "").split("/")[0]);
 
 type Moves = {
-  /** For each slur on one fingering, how many partials apart its notes are on each. */
-  slurs: number[][];
-  changes: { steps: number; groupStart: boolean }[];
+  /** How many partials apart the notes of each slur on one fingering are. */
+  slurs: number[];
+  changes: { valves: number; partials: number; semitones: number; groupStart: boolean }[];
   total: number;
 };
 const generated = new Map<string, Moves>();
 
 /**
  * Every move of many 8-bar exercises, sorted into slurs on one fingering and changes.
- * Generated once for each key, difficulty and time signature, and shared between tests.
+ * Generated once for each range, difficulty and time signature, and shared between tests.
  */
-function moves(key: Key, difficulty: Difficulty, timeSig = "4/4"): Moves {
-  const id = `${key} ${difficulty} ${timeSig}`;
-  if (!generated.has(id)) generated.set(id, generateMoves(key, difficulty, timeSig));
+function moves(range: Range, difficulty: Difficulty, timeSig = "4/4"): Moves {
+  const id = `${range} ${difficulty} ${timeSig}`;
+  if (!generated.has(id)) generated.set(id, generateMoves(range, difficulty, timeSig));
   return generated.get(id)!;
 }
 
-function generateMoves(key: Key, difficulty: Difficulty, timeSig: string): Moves {
-  const scale = scaleNotesInRange(key, "MED");
+function generateMoves(range: Range, difficulty: Difficulty, timeSig: string): Moves {
   const slurs: Moves["slurs"] = [];
   const changes: Moves["changes"] = [];
-  const perBar = timeSig === "6/8" ? 6 : Number(timeSig.split("/")[0]);
-  const groupSize = timeSig === "6/8" ? 3 : perBar;
+  const groupSize = timeSig === "6/8" ? 3 : Number(timeSig.split("/")[0]);
   for (let run = 0; run < 100; run++) {
-    const pitches = pitchesOf(generateLipSlurs(8, timeSig, key, "MED", difficulty));
-    pitches.slice(1).forEach((pitch, i) => {
-      const apart = partialsApart(pitches[i], pitch);
-      if (apart !== null) slurs.push(partialDistances(pitches[i], pitch));
+    const plan = planLipSlurs(8, timeSig, range, difficulty);
+    plan.slice(1).forEach((note, i) => {
+      const previous = plan[i];
+      const partials = Math.abs(note.partial - previous.partial);
+      if (note.fingering === previous.fingering) slurs.push(partials);
       else {
-        const steps = Math.abs(scale.indexOf(pitch) - scale.indexOf(pitches[i]));
-        changes.push({ steps, groupStart: (i + 1) % groupSize === 0 });
+        changes.push({
+          valves: Math.abs(
+            VALVE_ORDER.indexOf(note.fingering) - VALVE_ORDER.indexOf(previous.fingering),
+          ),
+          partials,
+          semitones: Math.abs(note.midi - previous.midi),
+          groupStart: (i + 1) % groupSize === 0,
+        });
       }
     });
   }
@@ -76,7 +101,7 @@ describe("generateLipSlurs", () => {
   it.each(TIME_SIGNATURES)(
     "fills the bars with one slur each, in quarters (or eighths in x/8), in %s",
     (timeSig) => {
-      const notes = generateLipSlurs(3, timeSig, "C major", "MED", "MED");
+      const notes = generateLipSlurs(3, timeSig, "MED", "MED");
       const bars = splitNotes(notes, timeSig);
       expect(bars).toHaveLength(3);
       const value = timeSig.endsWith("/8") ? "8" : "q";
@@ -90,86 +115,105 @@ describe("generateLipSlurs", () => {
       }
     },
   );
+});
 
-  it.each(RANGES)("keeps to the key and %s range, and ends on the tonic", (range) => {
-    const [low, high] = RANGE_NOTES[range].map((n) => Note.midi(n)!);
-    for (const key of ["C major", "Eb major", "A minor", "F# major"] as const) {
-      const scale = scaleNotesInRange(key, range);
+describe("planLipSlurs", () => {
+  it.each(RANGES)(
+    "keeps to the %s range, spelling each note from its fingering's series",
+    (range) => {
+      const [low, high] = RANGE_NOTES[range].map((n) => Note.midi(n)!);
       for (const difficulty of DIFFICULTIES) {
         for (let run = 0; run < 20; run++) {
-          const pitches = pitchesOf(generateLipSlurs(4, "4/4", key, range, difficulty));
-          for (const pitch of pitches) {
-            expect(scale).toContain(pitch);
-            expect(Note.midi(pitch)).toBeGreaterThanOrEqual(low);
-            expect(Note.midi(pitch)).toBeLessThanOrEqual(high);
+          for (const note of planLipSlurs(4, "4/4", range, difficulty)) {
+            expect(note.midi).toBe(Note.midi(note.pitch));
+            expect(note.midi).toBeGreaterThanOrEqual(low);
+            expect(note.midi).toBeLessThanOrEqual(high);
+            expect(SPELLINGS[note.fingering]).toContain(Note.pitchClass(note.pitch));
           }
-          expect(Note.pitchClass(pitches.at(-1)!)).toBe(key.split(" ")[0]);
+        }
+      }
+    },
+  );
+
+  it("starts on any fingering, and ends on that fingering's root", () => {
+    const starts = new Set<string>();
+    for (let bars = MEASURE_LIMITS.min; bars <= MEASURE_LIMITS.max; bars++) {
+      for (const timeSig of TIME_SIGNATURES) {
+        for (const range of RANGES) {
+          for (const difficulty of DIFFICULTIES) {
+            const plan = planLipSlurs(bars, timeSig, range, difficulty);
+            const [first, last] = [plan[0], plan.at(-1)!];
+            starts.add(first.fingering);
+            expect(last.fingering).toBe(first.fingering);
+            expect(Note.pitchClass(last.pitch)).toBe(SPELLINGS[first.fingering][0]);
+          }
         }
       }
     }
+    expect(starts.size).toBe(VALVE_ORDER.length);
   });
 
-  it("slurs as far as the difficulty allows, or changes fingering by a step or a third", () => {
-    for (const key of ["C major", "Eb major", "A minor"] as const) {
+  it("slurs as far as the difficulty allows", () => {
+    for (const range of RANGES) {
       for (const difficulty of DIFFICULTIES) {
-        const { slurs, changes } = moves(key, difficulty);
         const { min, max } = SLUR_PARTIALS[difficulty];
-        for (const distances of slurs) {
-          expect(distances.some((apart) => apart >= min && apart <= max)).toBe(true);
+        for (const apart of moves(range, difficulty).slurs) {
+          expect(apart).toBeGreaterThanOrEqual(min);
+          expect(apart).toBeLessThanOrEqual(max);
         }
-        for (const { steps } of changes) expect([1, 2]).toContain(steps);
+      }
+    }
+  }, 30000);
+
+  it("changes to the next valve combination, a half step at low or up to a third above", () => {
+    for (const range of RANGES) {
+      for (const difficulty of DIFFICULTIES) {
+        for (const { valves, partials, semitones } of moves(range, difficulty).changes) {
+          expect(valves).toBe(1);
+          if (difficulty === "LOW") {
+            expect(partials).toBe(0);
+            expect(semitones).toBe(1);
+          } else {
+            expect(partials).toBeLessThanOrEqual(1);
+            expect(semitones).toBeLessThanOrEqual(4);
+          }
+        }
       }
     }
   }, 30000);
 
   it("leans a little towards the narrower slurs at high difficulty", () => {
-    let two = 0;
-    let wide = 0;
-    let slurs = 0;
-    for (const key of ["C major", "A minor"] as const) {
-      for (let run = 0; run < 100; run++) {
-        const pitches = pitchesOf(generateLipSlurs(8, "4/4", key, "ANY", "HIGH"));
-        pitches.slice(1).forEach((pitch, i) => {
-          const distances = partialDistances(pitches[i], pitch).filter((d) => d >= 2);
-          if (!distances.length) return;
-          slurs++;
-          if (Math.min(...distances) === 2) two++;
-          if (Math.min(...distances) >= 6) wide++;
-        });
-      }
-    }
-    expect(two / slurs).toBeGreaterThan(0.22);
-    expect(two / slurs).toBeLessThan(0.38);
-    expect(wide / slurs).toBeLessThan(0.15);
+    const { slurs } = moves("ANY", "HIGH");
+    const two = slurs.filter((apart) => apart === 2).length / slurs.length;
+    const wide = slurs.filter((apart) => apart >= 6).length / slurs.length;
+    expect(two).toBeGreaterThan(0.24);
+    expect(two).toBeLessThan(0.38);
+    // About 21% if every width weighed the same.
+    expect(wide).toBeLessThan(0.19);
   }, 30000);
 
   it("changes fingering about a tenth of the time, mostly where a bar starts", () => {
     for (const timeSig of ["4/4", "3/4", "6/8"]) {
       for (const difficulty of DIFFICULTIES) {
-        const { changes, total } = moves("C major", difficulty, timeSig);
-        expect(changes.length / total).toBeGreaterThan(0.06);
-        expect(changes.length / total).toBeLessThan(0.14);
+        const { changes, total } = moves("MED", difficulty, timeSig);
+        expect(changes.length / total).toBeGreaterThan(0.07);
+        expect(changes.length / total).toBeLessThan(0.13);
         const midGroup = changes.filter((c) => !c.groupStart).length;
-        expect(midGroup / total).toBeLessThan(0.1);
+        expect(midGroup / total).toBeLessThan(0.05);
       }
     }
   }, 30000);
 
-  it("changes fingering by thirds more as the difficulty rises", () => {
-    // Pooled over a few keys: how many thirds are on offer varies from key to key.
-    const thirdShare = (difficulty: Difficulty) => {
-      const changes = (["C major", "Eb major", "A minor"] as const).flatMap(
-        (key) => moves(key, difficulty).changes,
-      );
-      return changes.filter((c) => c.steps === 2).length / changes.length;
+  it("moves onto another partial when changing fingering more as the difficulty rises", () => {
+    const partialShare = (difficulty: Difficulty) => {
+      const { changes } = moves("MED", difficulty);
+      return changes.filter((c) => c.partials > 0).length / changes.length;
     };
-    const [low, med, high] = DIFFICULTIES.map(thirdShare);
-    expect(low).toBeLessThan(0.4);
+    const [low, med, high] = DIFFICULTIES.map(partialShare);
+    expect(low).toBe(0);
     expect(med).toBeGreaterThan(0.38);
     expect(med).toBeLessThan(0.62);
-    expect(high).toBeGreaterThan(0.55);
-    expect(low).toBeLessThan(med);
-    expect(med).toBeLessThan(high);
+    expect(high).toBeGreaterThan(0.7);
   }, 30000);
 });
 
@@ -192,6 +236,12 @@ describe("lipSlurFingerings", () => {
     expect(lipSlurFingerings("B4/q, D5/q, G5/q")).toEqual(["13", "", ""]);
   });
 
+  it("reads sharps and flats alike", () => {
+    // D#5 on 2, spelled from B; the same note is Eb5 on 23.
+    expect(lipSlurFingerings("B4/q, D#5/q, F#5/q")).toEqual(["2", "", ""]);
+    expect(lipSlurFingerings("Ab4/q, C5/q, Eb5/q")).toEqual(["23", "", ""]);
+  });
+
   it("leaves rests unlabelled", () => {
     expect(lipSlurFingerings("C5/q, B4/q/r, E5/h")).toEqual(["0", "", ""]);
   });
@@ -199,7 +249,7 @@ describe("lipSlurFingerings", () => {
   it("gives every note of a generated exercise a fingering it can slur on", () => {
     for (const difficulty of DIFFICULTIES) {
       for (let run = 0; run < 50; run++) {
-        const notes = generateLipSlurs(4, "4/4", "Eb major", "MED", difficulty);
+        const notes = generateLipSlurs(4, "4/4", "MED", difficulty);
         const pitches = pitchesOf(notes);
         const labels = lipSlurFingerings(notes);
         expect(labels).toHaveLength(pitches.length);

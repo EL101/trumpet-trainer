@@ -74,8 +74,8 @@ const GENERATORS: Partial<Record<ExerciseType, (settings: Settings) => string>> 
   // The margin only offers long tones at low or high difficulty (see TYPE_DIFFICULTIES).
   LONG_TONES: ({ measures, timeSig, key, range, difficulty }) =>
     generateLongTones(measures, timeSig, key, range, difficulty === "HIGH" ? "HIGH" : "LOW"),
-  LIP_SLURS: ({ measures, timeSig, key, range, difficulty }) =>
-    generateLipSlurs(measures, timeSig, key, range, difficulty),
+  LIP_SLURS: ({ measures, timeSig, range, difficulty }) =>
+    generateLipSlurs(measures, timeSig, range, difficulty),
   SCALES: ({ timeSig, key, range, difficulty }) =>
     generateScaleExercise(timeSig, key, range, difficulty),
   RANDOM: ({ measures, timeSig, key, range, difficulty }) =>
@@ -84,6 +84,12 @@ const GENERATORS: Partial<Record<ExerciseType, (settings: Settings) => string>> 
 
 /** Types whose length comes from the music itself, so the Measures setting is ignored. */
 const SETS_OWN_LENGTH: ReadonlySet<ExerciseType> = new Set(["SCALES"]);
+
+/**
+ * Types written without a key, so the Key setting is ignored. Lip slurs follow each
+ * valve combination's own notes. They're stored as C major, which has no signature.
+ */
+const KEYLESS: ReadonlySet<ExerciseType> = new Set(["LIP_SLURS"]);
 
 const TYPE_OPTIONS: readonly ChoiceOption<ExerciseType>[] = EXERCISE_TYPES.map((t) => ({
   value: t,
@@ -190,7 +196,7 @@ export function Generate() {
       exerciseType: type,
       notes: generate(settings),
       timeSig,
-      musicKey: key,
+      musicKey: KEYLESS.has(type) ? "C major" : key,
       noteRange: range,
       difficulty,
       generationNum: 0,
@@ -494,13 +500,16 @@ function EarlierExercise({
   );
 }
 
-/** "C major · 4/4 · 8 bars · Medium range · Low difficulty" (short form drops the nouns). */
+/**
+ * "C major · 4/4 · 8 bars · Medium range · Low difficulty" (short form drops the nouns).
+ * Exercises written without a key leave it out.
+ */
 function ExerciseDetails({ exercise, long }: { exercise: MusicInfo; long?: boolean }) {
   const range = RANGE_LABELS[exercise.noteRange];
   const difficulty = DIFFICULTY_LABELS[exercise.difficulty];
   return (
     <ExerciseMeta
-      keyLabel={exercise.musicKey}
+      keyLabel={KEYLESS.has(exercise.exerciseType) ? undefined : exercise.musicKey}
       timeSig={exercise.timeSig}
       bars={splitNotes(exercise.notes, exercise.timeSig).length}
       extra={long ? [`${range} range`, `${difficulty} difficulty`] : [range, difficulty]}
@@ -651,9 +660,11 @@ function SettingsMargin({ settings, onChange, onGenerate, ...rest }: SettingsMar
   const [allKeys, setAllKeys] = useState(false);
   // Once a key from the longer list is chosen, keep the list open so it stays visible.
   const rareKey = !isCommonKey(settings.key);
+  const keyless = KEYLESS.has(settings.type);
   const keyOptions = keyChoices(allKeys || rareKey).map((k) => ({
     value: k,
     label: <PitchText>{k}</PitchText>,
+    disabled: keyless,
   }));
   const [low, high] = RANGE_NOTES[settings.range];
   const ownLength = SETS_OWN_LENGTH.has(settings.type);
@@ -703,7 +714,10 @@ function SettingsMargin({ settings, onChange, onGenerate, ...rest }: SettingsMar
           />
         </Field>
 
-        <Field label="Key">
+        <Field
+          label="Key"
+          helper={keyless ? "Lip slurs follow each valve combination's own notes." : undefined}
+        >
           <ChoiceGrid
             aria-label="Key"
             options={keyOptions}
@@ -715,6 +729,7 @@ function SettingsMargin({ settings, onChange, onGenerate, ...rest }: SettingsMar
               variant="ghost"
               size="sm"
               mt="xs"
+              disabled={keyless}
               aria-expanded={allKeys}
               onClick={() => setAllKeys((open) => !open)}
             >
