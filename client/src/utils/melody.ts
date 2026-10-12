@@ -11,8 +11,9 @@ import type { NoteEvent } from "./notate";
  *   weighs 1, and each scale step wider multiplies that by `decay`: at 0.5, a third
  *   weighs 0.5, a fourth 0.25 and a fifth 0.125.
  * - `repeat`: the weight of playing the same note again.
- * - `edgePull`: how much less likely a note at the very edge of the range is than one in
- *   the middle (0.5 is half as likely).
+ * - `edgePull`: how much the middle of the range is favoured over its edges. At 0.5 a
+ *   note at the very edge is half as likely as one in the middle, at 0 they're even, and
+ *   below 0 the edges are favoured (at -3 they're four times as likely).
  * - `recoverAfter`: the leap, in scale steps, from which a step back the other way can
  *   follow (3 is a fourth, 5 a sixth).
  * - `recovery`: the chance that such a leap is followed by that step back.
@@ -65,28 +66,18 @@ export const RANDOM_MELODY: MelodyMode = {
 };
 
 /**
- * Long tones: held notes that move by step more than random exercises do, with a repeated
- * note rarer since it only lengthens the tone. Steps come out about 63% of the time at
- * low, 56% at medium, 44% at high.
+ * Long tones, which come in low and high difficulty only: held notes, with a repeated
+ * note rarer since it only lengthens the tone. Low moves by step about 63% of the time
+ * and keeps near the middle of the range; high moves by step about 44% of the time.
  */
-export const LONG_TONE_MELODY: MelodyMode = {
-  // Up to a third.
+export const LONG_TONE_MELODY: Record<"LOW" | "HIGH", MelodyStyle> = {
+  // Up to a third, staying near the middle of the range.
   LOW: {
     maxLeap: 4,
     tritone: false,
     decay: 0.5,
     repeat: 0.2,
-    edgePull: 0.5,
-    recoverAfter: 3,
-    recovery: 1,
-  },
-  // Up to a fifth.
-  MED: {
-    maxLeap: 7,
-    tritone: false,
-    decay: 0.6,
-    repeat: 0.2,
-    edgePull: 0.5,
+    edgePull: 0.9,
     recoverAfter: 3,
     recovery: 1,
   },

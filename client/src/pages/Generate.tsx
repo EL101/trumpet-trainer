@@ -28,12 +28,14 @@ import {
 } from "@/components/primitives";
 import {
   DIFFICULTY_LABELS,
+  difficultyFor,
   EXERCISE_TYPE_LABELS,
   isCommonKey,
   keyChoices,
   MEASURE_LIMITS,
   RANGE_LABELS,
   TIME_SIGNATURES,
+  TYPE_DIFFICULTIES,
   type TimeSignature,
 } from "@/lib/generatorOptions";
 import {
@@ -46,7 +48,6 @@ import { clearHistory, getInitialHistory, insertToHistory } from "@/utils/histor
 import { getInitialLibrary, saveToLibrary } from "@/utils/library";
 import { splitNotes } from "@/utils/splitNotes";
 import {
-  DIFFICULTIES,
   EXERCISE_TYPES,
   HISTORY_LIMIT,
   RANGES,
@@ -68,8 +69,9 @@ type Settings = {
 
 /** The notes for each type built so far. The other types can't be picked yet. */
 const GENERATORS: Partial<Record<ExerciseType, (settings: Settings) => string>> = {
+  // The margin only offers long tones at low or high difficulty (see TYPE_DIFFICULTIES).
   LONG_TONES: ({ measures, timeSig, key, range, difficulty }) =>
-    generateLongTones(measures, timeSig, key, range, difficulty),
+    generateLongTones(measures, timeSig, key, range, difficulty === "HIGH" ? "HIGH" : "LOW"),
   SCALES: ({ timeSig, key, range, difficulty }) =>
     generateScaleExercise(timeSig, key, range, difficulty),
   RANDOM: ({ measures, timeSig, key, range, difficulty }) =>
@@ -96,7 +98,6 @@ const DEFAULT_SETTINGS: Settings = {
 
 const TIME_OPTIONS = TIME_SIGNATURES.map((t) => ({ value: t, label: t }));
 const RANGE_OPTIONS = RANGES.map((r) => ({ value: r, label: RANGE_LABELS[r] }));
-const DIFFICULTY_OPTIONS = DIFFICULTIES.map((d) => ({ value: d, label: DIFFICULTY_LABELS[d] }));
 
 /** The settings margin's entrance: it slides in, then its settings rise in one by one. */
 const ENTER_EASE = "cubic-bezier(0.33, 1, 0.68, 1)";
@@ -658,7 +659,10 @@ function SettingsMargin({ settings, onChange, onGenerate, ...rest }: SettingsMar
             orientation="grid"
             options={TYPE_OPTIONS}
             value={settings.type}
-            onChange={(type) => onChange({ type })}
+            // A type that doesn't come in the chosen difficulty falls back to its lowest.
+            onChange={(type) =>
+              onChange({ type, difficulty: difficultyFor(type, settings.difficulty) })
+            }
           />
         </Field>
 
@@ -719,7 +723,10 @@ function SettingsMargin({ settings, onChange, onGenerate, ...rest }: SettingsMar
         <Field label="Difficulty">
           <SegmentedControl
             aria-label="Difficulty"
-            options={DIFFICULTY_OPTIONS}
+            options={TYPE_DIFFICULTIES[settings.type].map((d) => ({
+              value: d,
+              label: DIFFICULTY_LABELS[d],
+            }))}
             value={settings.difficulty}
             onChange={(difficulty) => onChange({ difficulty })}
           />

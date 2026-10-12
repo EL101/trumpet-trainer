@@ -103,17 +103,15 @@ describe("nextPitch", () => {
   });
 
   it("leaps wider as the difficulty rises", () => {
-    for (const mode of [RANDOM_MELODY, LONG_TONE_MELODY]) {
-      const [low, med, high] = DIFFICULTIES.map((d) =>
-        mean(intervals(mode[d]).steps.map(Math.abs)),
-      );
-      expect(low).toBeLessThan(med);
-      expect(med).toBeLessThan(high);
-    }
+    const leap = (style: MelodyStyle) => mean(intervals(style).steps.map(Math.abs));
+    const [low, med, high] = DIFFICULTIES.map((d) => leap(RANDOM_MELODY[d]));
+    expect(low).toBeLessThan(med);
+    expect(med).toBeLessThan(high);
+    expect(leap(LONG_TONE_MELODY.LOW)).toBeLessThan(leap(LONG_TONE_MELODY.HIGH));
   });
 
   it("moves by step more in long tones than in random exercises", () => {
-    for (const difficulty of DIFFICULTIES) {
+    for (const difficulty of ["LOW", "HIGH"] as const) {
       expect(stepShare(LONG_TONE_MELODY[difficulty])).toBeGreaterThan(
         stepShare(RANDOM_MELODY[difficulty]),
       );
@@ -132,6 +130,17 @@ describe("nextPitch", () => {
     expect(recovered / leaps).toBeLessThan(0.85);
   });
 
+  it("keeps low long tones nearer the middle of the range than high ones", () => {
+    // C4 to C6: the outer half is below F#4 and above F#5.
+    const outerShare = (style: MelodyStyle) => {
+      const notes = intervals(style).melodies.flat();
+      return notes.filter((p) => Math.abs(Note.midi(p)! - 72) > 6).length / notes.length;
+    };
+    const low = outerShare(LONG_TONE_MELODY.LOW);
+    expect(low).toBeLessThan(0.35);
+    expect(low).toBeLessThan(outerShare(LONG_TONE_MELODY.HIGH));
+  });
+
   it("spends more time in the middle of the range than at the edges", () => {
     const notes = intervals(RANDOM_MELODY.HIGH).melodies.flat();
     // C4 to C6: the middle half runs from F#4 to F#5.
@@ -144,7 +153,7 @@ describe("melody", () => {
   const lengths = Array.from({ length: 30 }, () => 4);
 
   it("gives each length a note, with no rests unless asked for", () => {
-    const events = melody(lengths, C_MAJOR, "C", LONG_TONE_MELODY.MED);
+    const events = melody(lengths, C_MAJOR, "C", LONG_TONE_MELODY.HIGH);
     expect(events.map((e) => e.quarters)).toEqual(lengths);
     expect(events.every((e) => e.pitch !== null)).toBe(true);
   });

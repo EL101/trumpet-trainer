@@ -1,4 +1,4 @@
-import type { Difficulty, ExerciseType, Key, Range } from "@/schema";
+import { DIFFICULTIES, type Difficulty, type ExerciseType, type Key, type Range } from "@/schema";
 
 /**
  * Every key the generator plays in, as [major, relative minor] rows. The first
@@ -57,3 +57,18 @@ export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
   MED: "Medium",
   HIGH: "High",
 };
+
+/** The difficulties each exercise type comes in. Long tones have no medium. */
+export const TYPE_DIFFICULTIES: Record<ExerciseType, readonly Difficulty[]> = {
+  LONG_TONES: ["LOW", "HIGH"],
+  SCALES: DIFFICULTIES,
+  LIP_SLURS: DIFFICULTIES,
+  ETUDES: DIFFICULTIES,
+  RANDOM: DIFFICULTIES,
+};
+
+/** `difficulty` if the type comes in it, otherwise the type's lowest. */
+export function difficultyFor(type: ExerciseType, difficulty: Difficulty): Difficulty {
+  const offered = TYPE_DIFFICULTIES[type];
+  return offered.includes(difficulty) ? difficulty : offered[0];
+}

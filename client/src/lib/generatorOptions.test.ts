@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getKeySig, PRACTICAL_MAJOR, PRACTICAL_MINOR } from "@/utils/generateMusic";
-import { isCommonKey, KEY_ROWS, keyChoices } from "./generatorOptions";
+import { difficultyFor, isCommonKey, KEY_ROWS, keyChoices } from "./generatorOptions";
 
 describe("KEY_ROWS", () => {
   it("offers every key the generator plays in, once each", () => {
@@ -41,5 +41,16 @@ describe("keyChoices", () => {
   it("knows which keys sit behind 'More keys'", () => {
     expect(isCommonKey("Bb major")).toBe(true);
     expect(isCommonKey("F# minor")).toBe(false);
+  });
+});
+
+describe("difficultyFor", () => {
+  it("keeps a difficulty the type comes in", () => {
+    expect(difficultyFor("RANDOM", "MED")).toBe("MED");
+    expect(difficultyFor("LONG_TONES", "HIGH")).toBe("HIGH");
+  });
+
+  it("falls back to the type's lowest when it doesn't come in that difficulty", () => {
+    expect(difficultyFor("LONG_TONES", "MED")).toBe("LOW");
   });
 });

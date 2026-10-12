@@ -133,25 +133,24 @@ export function generateMusic(
 
 const WHOLE = 4;
 
-/** The note lengths, in quarters, long tones are made of: whole notes, and half notes above low. */
-const LONG_TONE_LENGTHS: Record<Difficulty, number[]> = {
+/** The note lengths, in quarters, long tones are made of at each of their difficulties. */
+const LONG_TONE_LENGTHS: Record<keyof typeof LONG_TONE_MELODY, number[]> = {
   LOW: [WHOLE],
-  MED: [WHOLE, 2],
   HIGH: [WHOLE, 2],
 };
 
 /**
- * Long tones: whole notes, and half notes above low difficulty, with no rests, over the
- * bars asked for. The last note is the tonic, held through to the end, so it's never
- * shorter than a whole note unless the whole exercise is. The melody is shaped by
- * `LONG_TONE_MELODY`: mostly by step, less strictly as the difficulty rises.
+ * Long tones, at low or high difficulty (there's no medium): whole notes, and half notes
+ * at high, with no rests, over the bars asked for. The last note is the tonic, held
+ * through to the end, so it's never shorter than a whole note unless the whole exercise
+ * is. The melody is shaped by `LONG_TONE_MELODY`.
  */
 export function generateLongTones(
   bars: number,
   timeSig: string,
   key: Key,
   range: Range = "MED",
-  difficulty: Difficulty = "LOW",
+  difficulty: keyof typeof LONG_TONE_MELODY = "LOW",
 ) {
   const options = LONG_TONE_LENGTHS[difficulty];
   const lengths: number[] = [];
