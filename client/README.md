@@ -57,7 +57,8 @@ src/
 │   ├── tokens.ts          Fonts, spacing, radii, shadows, sizes; registers the roles.
 │   ├── textStyles.ts      Type scale: display.*, heading.*, kicker, meta, figure.*
 │   ├── globalCss.ts       Page background, heading font, focus ring, text selection.
-│   ├── keyframes.ts       Entrance animations: rise-in, pop-in, wipe-in, draw-on, …
+│   ├── keyframes.ts       Entrance animations (rise-in, pop-in, wipe-in, draw-on, …) and
+│   │                      one exit (sink-out).
 │   ├── recipes/           Variant definitions per component (button primary/secondary/…)
 │   └── index.ts           Builds the Chakra `system` and re-exports everything.
 │
@@ -80,7 +81,8 @@ src/
 ├── pages/                 One file per route; routes are declared in App.tsx.
 ├── lib/                   Pure helpers for the new UI (intonation colours, formatting,
 │                          the generator's keys, time signatures and labels).
-├── utils/                 App logic: music generation, API calls, history, library,
+├── utils/                 App logic: music generation (generateMusic, lipSlurs, built on
+│                          rhythm, melody and notate), API calls, history, library,
 │                          profile, image handling.
 ├── hooks/                 usePitch (microphone), useMetronome, usePersistedState
 ├── auth/                  Firebase sign-in: useAuth() for state; auth.ts signs in, links
@@ -154,9 +156,12 @@ shell: it has no sidebar and nothing to go back to.
 - **Key and note names:** render them with `<PitchText>` (`"Bb major"` → B♭ major).
   Lora sets ♭ and ♯ on a full em, so PitchText pulls them in against their letter.
   For a plain string (an `aria-label`, say), use `formatPitch()` from `@/lib/format`.
-- **Motion:** use the keyframes in `theme/keyframes.ts` with fill-mode `backwards`, and
+- **Motion:** use the keyframes in `theme/keyframes.ts` with fill-mode `backwards` (the
+  exit, `sink-out`, takes `forwards` so the element stays hidden until it's removed), and
   put the animation under `_motionSafe` so it's skipped for viewers who prefer reduced
-  motion: `_motionSafe={{ animation: "appear 400ms ease-out 200ms backwards" }}`.
+  motion: `_motionSafe={{ animation: "appear 400ms ease-out 200ms backwards" }}`. Code
+  that draws its own SVG can't use `_motionSafe`; check `prefers-reduced-motion` itself,
+  as `Staff` does for its labels.
 
 ## Old vs new
 

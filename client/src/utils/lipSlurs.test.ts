@@ -122,6 +122,27 @@ describe("generateLipSlurs", () => {
     }
   }, 30000);
 
+  it("leans a little towards the narrower slurs at high difficulty", () => {
+    let two = 0;
+    let wide = 0;
+    let slurs = 0;
+    for (const key of ["C major", "A minor"] as const) {
+      for (let run = 0; run < 100; run++) {
+        const pitches = pitchesOf(generateLipSlurs(8, "4/4", key, "ANY", "HIGH"));
+        pitches.slice(1).forEach((pitch, i) => {
+          const distances = partialDistances(pitches[i], pitch).filter((d) => d >= 2);
+          if (!distances.length) return;
+          slurs++;
+          if (Math.min(...distances) === 2) two++;
+          if (Math.min(...distances) >= 6) wide++;
+        });
+      }
+    }
+    expect(two / slurs).toBeGreaterThan(0.22);
+    expect(two / slurs).toBeLessThan(0.38);
+    expect(wide / slurs).toBeLessThan(0.15);
+  }, 30000);
+
   it("changes fingering about a tenth of the time, mostly where a bar starts", () => {
     for (const timeSig of ["4/4", "3/4", "6/8"]) {
       for (const difficulty of DIFFICULTIES) {

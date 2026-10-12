@@ -119,7 +119,7 @@ export function Staff({
     ctx.setFillStyle(roles.fg.DEFAULT);
     ctx.setStrokeStyle(roles.fg.DEFAULT);
 
-    const placed = drawMeasures(ctx, {
+    const { placed, underSlurs } = drawMeasures(ctx, {
       measures,
       perLine,
       lineHeight,
@@ -153,6 +153,7 @@ export function Staff({
               ? formatCents(cents[i]!, false)
               : "",
         riseIn,
+        underSlurs,
       );
     }
     labelsDrawn.current = !!shownLabels;
@@ -262,7 +263,7 @@ function drawMeasures(
     showText: boolean;
     colorFor: (index: number, isRest: boolean) => string;
   },
-): Placed[] {
+): { placed: Placed[]; underSlurs: UnderSlur[] } {
   const { measures, perLine, lineHeight, innerWidth, keySig, timeSig, barlines, colorFor } = opts;
   const [beats, beatValue] = timeSig.split("/").map(Number);
   // Beam by the meter's beat (e.g. 3+3 in 6/8); VexFlow otherwise pairs eighths in every meter.
@@ -361,8 +362,8 @@ function drawMeasures(
     });
   });
   drawTies(ctx, placed);
-  drawSlurs(ctx, placed);
-  return placed;
+  const underSlurs = drawSlurs(ctx, placed);
+  return { placed, underSlurs };
 }
 
 /**
@@ -453,12 +454,17 @@ function drawTies(ctx: RenderContext, placed: Placed[]) {
   });
 }
 
+/** A slur drawn under its notes: on which line (its staves' y), across which x, how low. */
+type UnderSlur = { line: number; x0: number; x1: number; bottom: number };
+
 /**
  * Draws each slur, from a note that starts one to the next that ends one, in the first
  * note's colour. It arcs over the notes, or under their heads if every stem points up. A
  * slur across a line break is drawn in parts: off the end of one line, into the next.
+ * Returns the slurs drawn under their notes, so text written under them can clear them.
  */
-function drawSlurs(ctx: RenderContext, placed: Placed[]) {
+function drawSlurs(ctx: RenderContext, placed: Placed[]): UnderSlur[] {
+  const underSlurs: UnderSlur[] = [];
   let start = -1;
   placed.forEach((p, i) => {
     if (p.slurStart) start = i;
@@ -505,8 +511,32 @@ function drawSlurs(ctx: RenderContext, placed: Placed[]) {
       ctx.setStrokeStyle(slurred[0].color);
       curve.setContext(ctx).draw();
       ctx.restore();
+      if (!above) {
+        const bottom = slurBottom(endY(first), endY(last), bowStart, bowEnd);
+        underSlurs.push({ line: line[0].stave.getY(), x0, x1, bottom });
+      }
     });
   });
+  return underSlurs;
+}
+
+/**
+ * The lowest point of a slur drawn under its notes, from ends at heights y0 and y1 with
+ * the given bows (see `slurBow`): its curve's lowest sample, plus the slur's thickness.
+ */
+function slurBottom(y0: number, y1: number, bowStart: number, bowEnd: number) {
+  const [from, to] = [y0 + SLUR_GAP, y1 + SLUR_GAP];
+  let bottom = Math.max(from, to);
+  for (let t = 0.05; t < 1; t += 0.05) {
+    const u = 1 - t;
+    const y =
+      u ** 3 * from +
+      3 * u * u * t * (from + bowStart) +
+      3 * u * t * t * (to + bowEnd) +
+      t ** 3 * to;
+    bottom = Math.max(bottom, y);
+  }
+  return bottom + 2;
 }
 
 /** How far a slur's ends sit off the notes they start and end on. */
@@ -589,22 +619,32 @@ function drawCursor(svg: SVGSVGElement, placed: Placed[], cursor: number) {
   svg.insertBefore(band, svg.firstChild);
 }
 
-/** Writes `textFor(i)` under each note, sliding the text up into place if `riseIn`. */
+/**
+ * Writes `textFor(i)` under each note, sliding the text up into place if `riseIn`, and
+ * below any slur drawn under the notes there (`underSlurs`).
+ */
 function drawLabels(
   svg: SVGSVGElement,
   placed: Placed[],
   textFor: (i: number) => string,
   riseIn: boolean,
+  underSlurs: UnderSlur[],
 ) {
   placed.forEach((p, i) => {
     if (p.rest) return;
     const text = textFor(i);
     if (!text) return;
-    const y = Math.max(p.stave.getYForLine(4) + 38, Math.max(...p.note.getYs()) + 24);
+    const x = noteCenterX(p.note);
+    const slurs = underSlurs.filter((s) => s.line === p.stave.getY() && s.x0 <= x && x <= s.x1);
+    const y = Math.max(
+      p.stave.getYForLine(4) + 38,
+      Math.max(...p.note.getYs()) + 24,
+      ...slurs.map((s) => s.bottom + 12),
+    );
     const color = p.color === roles.fg.DEFAULT ? roles.fg.muted : p.color;
     const t = svgEl(
       "text",
-      { x: noteCenterX(p.note), y, "text-anchor": "middle", "font-size": 10, "data-label": "" },
+      { x, y, "text-anchor": "middle", "font-size": 10, "data-label": "" },
       {
         fill: color,
         "font-family": "var(--chakra-fonts-body)",

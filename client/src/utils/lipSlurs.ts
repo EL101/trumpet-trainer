@@ -20,11 +20,17 @@ type Fingering = keyof typeof FINGERINGS;
 /** Fewest valves first, which is also the order a player reaches for them. */
 const FINGERING_NAMES: Fingering[] = ["0", "1", "2", "12", "13", "23", "123"];
 
-/** How many partials apart the notes of a slur on one fingering can be, at each difficulty. */
-const SLUR_PARTIALS: Record<Difficulty, { min: number; max: number }> = {
-  LOW: { min: 1, max: 1 }, // the next partial: G4 to C5
-  MED: { min: 1, max: 2 }, // one or two: G4 to C5 or E5
-  HIGH: { min: 2, max: Infinity }, // two or more: G4 to E5, C4 to C5
+/**
+ * How many partials apart the notes of a slur on one fingering can be, at each
+ * difficulty, and how fast wider ones get rarer: each partial further than `min` weighs
+ * `decay` times as much.
+ */
+const SLUR_PARTIALS: Record<Difficulty, { min: number; max: number; decay: number }> = {
+  LOW: { min: 1, max: 1, decay: 1 }, // the next partial: G4 to C5
+  MED: { min: 1, max: 2, decay: 1 }, // one or two: G4 to C5 or E5
+  // Two or more: G4 to E5, C4 to C5. Two apart comes out about 30% of the time in the
+  // Any range, and very wide slurs rarer than they would be at random.
+  HIGH: { min: 2, max: Infinity, decay: 0.85 },
 };
 
 /** The share of moves that change fingering. The rest slur on one fingering. */
@@ -61,6 +67,17 @@ export function partialsApart(a: string, b: string): number | null {
   return apart.length ? Math.min(...apart) : null;
 }
 
+/** One of `items`, chosen with probability proportional to its weight. */
+function weightedElement<T>(items: readonly T[], weight: (item: T) => number): T {
+  const weights = items.map(weight);
+  let r = Math.random() * weights.reduce((sum, w) => sum + w, 0);
+  for (let i = 0; i < items.length; i++) {
+    r -= weights[i];
+    if (r < 0) return items[i];
+  }
+  return items[items.length - 1];
+}
+
 function randomElement<T>(items: readonly T[]): T {
   return items[Math.floor(Math.random() * items.length)];
 }
@@ -87,7 +104,7 @@ export function generateLipSlurs(
   const groupSize = compound ? 3 : perBar;
   // Changes can only come once a group, so they're likelier there to make up the share.
   const changeChance = Math.min(1, CHANGE_SHARE * groupSize);
-  const { min, max } = SLUR_PARTIALS[difficulty];
+  const { min, max, decay } = SLUR_PARTIALS[difficulty];
   const slurSpan = (apart: number) => apart >= min && apart <= max;
   const pitches = scaleNotesInRange(key, range);
   const scaleSteps = (a: string, b: string) => Math.abs(pitches.indexOf(a) - pitches.indexOf(b));
@@ -147,7 +164,9 @@ export function generateLipSlurs(
       const slurs = slursFrom(previous, fingering).filter(inReach);
       const changes = pitches.filter((p) => inReach(p) && isChange(previous, p));
       if (slurs.length && !(wantsChange && changes.length)) {
-        next = randomElement(slurs);
+        const on = fingering;
+        const from = partialOn(previous, on)!;
+        next = weightedElement(slurs, (p) => decay ** (Math.abs(partialOn(p, on)! - from) - min));
       } else if (changes.length) {
         if (!wantsChange) forced++;
         const thirds = changes.filter((p) => scaleSteps(previous, p) === 2);
