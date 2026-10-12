@@ -2,7 +2,14 @@ import { Note } from "tonal";
 import { describe, expect, it } from "vitest";
 import { DIFFICULTIES, RANGES } from "@/schema";
 import { TIME_SIGNATURES } from "@/lib/generatorOptions";
-import { generateMusic, generateScaleExercise, RANGE_NOTES, scalePitches } from "./generateMusic";
+import {
+  generateLongTones,
+  generateMusic,
+  generateScaleExercise,
+  RANGE_NOTES,
+  scalePitches,
+} from "./generateMusic";
+import { LONG_TONE_MELODY, withinLeap } from "./melody";
 import { DURATION_TO_BEATS, splitNotes } from "./splitNotes";
 
 describe("scalePitches", () => {
@@ -207,6 +214,53 @@ describe("generateMusic", () => {
       expect(Note.midi(pitch)).toBeGreaterThanOrEqual(low);
       expect(Note.midi(pitch)).toBeLessThanOrEqual(high);
       expect(["G", "A", "B", "C", "D", "E", "F#"]).toContain(Note.pitchClass(pitch));
+    }
+  });
+});
+
+describe("generateLongTones", () => {
+  it.each(TIME_SIGNATURES)("fills exactly the bars asked for, with no rests, in %s", (timeSig) => {
+    for (const difficulty of DIFFICULTIES) {
+      for (let run = 0; run < 50; run++) {
+        const notes = generateLongTones(3, timeSig, "Bb major", "MED", difficulty);
+        expectWellFormed(notes, timeSig);
+        expect(splitNotes(notes, timeSig)).toHaveLength(3);
+        expect(notes).not.toContain("/r");
+      }
+    }
+  });
+
+  it("only uses whole notes at low difficulty", () => {
+    for (let run = 0; run < 50; run++) {
+      const lengths = playedLengths(generateLongTones(8, "4/4", "C major", "MED", "LOW"));
+      expect(lengths.every((length) => length === 4)).toBe(true);
+    }
+  });
+
+  it("uses whole and half notes above low, ending on a note at least a whole note long", () => {
+    let halves = 0;
+    for (const difficulty of ["MED", "HIGH"] as const) {
+      for (let run = 0; run < 50; run++) {
+        const lengths = playedLengths(generateLongTones(8, "4/4", "C major", "MED", difficulty));
+        const last = lengths.pop()!;
+        expect(last).toBeGreaterThanOrEqual(4);
+        expect(lengths.every((length) => length === 4 || length === 2)).toBe(true);
+        halves += lengths.filter((length) => length === 2).length;
+      }
+    }
+    expect(halves).toBeGreaterThan(0);
+  });
+
+  it("keeps to the difficulty's leap and ends on the tonic", () => {
+    for (const difficulty of DIFFICULTIES) {
+      for (let run = 0; run < 50; run++) {
+        const pitches = playedPitches(generateLongTones(8, "4/4", "D major", "ANY", difficulty));
+        const midis = pitches.map((pitch) => Note.midi(pitch)!);
+        midis.slice(1).forEach((midi, i) => {
+          expect(withinLeap(midi - midis[i], LONG_TONE_MELODY[difficulty])).toBe(true);
+        });
+        expect(Note.pitchClass(pitches.at(-1)!)).toBe("D");
+      }
     }
   });
 });

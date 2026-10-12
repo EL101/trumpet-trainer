@@ -36,7 +36,12 @@ import {
   TIME_SIGNATURES,
   type TimeSignature,
 } from "@/lib/generatorOptions";
-import { generateMusic, generateScaleExercise, RANGE_NOTES } from "@/utils/generateMusic";
+import {
+  generateLongTones,
+  generateMusic,
+  generateScaleExercise,
+  RANGE_NOTES,
+} from "@/utils/generateMusic";
 import { clearHistory, getInitialHistory, insertToHistory } from "@/utils/history";
 import { getInitialLibrary, saveToLibrary } from "@/utils/library";
 import { splitNotes } from "@/utils/splitNotes";
@@ -63,6 +68,8 @@ type Settings = {
 
 /** The notes for each type built so far. The other types can't be picked yet. */
 const GENERATORS: Partial<Record<ExerciseType, (settings: Settings) => string>> = {
+  LONG_TONES: ({ measures, timeSig, key, range, difficulty }) =>
+    generateLongTones(measures, timeSig, key, range, difficulty),
   SCALES: ({ timeSig, key, range, difficulty }) =>
     generateScaleExercise(timeSig, key, range, difficulty),
   RANDOM: ({ measures, timeSig, key, range, difficulty }) =>
@@ -645,7 +652,7 @@ function SettingsMargin({ settings, onChange, onGenerate, ...rest }: SettingsMar
       >
         <PageHeader title="Generate" hideFrom="lg" mb="sm" />
 
-        <Field label="Exercise type" helper="Long tones, lip slurs and etudes are on the way.">
+        <Field label="Exercise type" helper="Lip slurs and etudes are on the way.">
           <RadioGroup
             aria-label="Exercise type"
             orientation="grid"

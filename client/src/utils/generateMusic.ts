@@ -1,6 +1,6 @@
 import { Note, Scale } from "tonal";
-import { barLength, notate, type NoteEvent } from "./notate";
-import { closingTonic, nextPitch } from "./melody";
+import { barLength, notate } from "./notate";
+import { LONG_TONE_MELODY, melody, RANDOM_MELODY } from "./melody";
 import { figureLength, randomFigure, rhythmFor } from "./rhythm";
 import type { Difficulty, Key, Range } from "@/schema";
 
@@ -106,8 +106,8 @@ export function getKeySig(key: Key) {
 
 /**
  * Random notes and rests from the key's scale. They're laid end to end over the whole
- * length, wherever the bar lines fall, so a note can be tied across one. Each note
- * follows from the ones before it (see `nextPitch`), and the last is the tonic.
+ * length, wherever the bar lines fall, so a note can be tied across one. The melody is
+ * shaped by `RANDOM_MELODY` and ends on the tonic.
  */
 export function generateMusic(
   bars: number,
@@ -118,25 +118,52 @@ export function generateMusic(
 ) {
   const rhythm = rhythmFor(timeSig, difficulty);
   const pitches = scaleNotesInRange(key, range);
-  // A rest is as likely as any one pitch in the range.
-  const restChance = 1 / (pitches.length + 1);
   const total = bars * barLength(timeSig);
-  const events: NoteEvent[] = [];
-  const played: string[] = [];
+  const lengths: number[] = [];
   for (let position = 0; position < total; ) {
     const figure = randomFigure(rhythm, position, { left: total - position });
-    for (const quarters of figure) {
-      const pitch = Math.random() < restChance ? null : nextPitch(pitches, played, difficulty);
-      if (pitch) played.push(pitch);
-      events.push({ pitch, quarters });
-    }
+    lengths.push(...figure);
     position += figureLength(figure);
   }
-  // End on the tonic nearest the note before the last, even if the last was a rest.
-  const last = events[events.length - 1];
-  if (last.pitch) played.pop();
-  last.pitch = closingTonic(pitches, Scale.get(key).tonic!, played.at(-1) ?? null);
-  return notate(events, timeSig);
+  // A rest is as likely as any one pitch in the range.
+  const restChance = 1 / (pitches.length + 1);
+  const tonic = Scale.get(key).tonic!;
+  return notate(melody(lengths, pitches, tonic, RANDOM_MELODY[difficulty], restChance), timeSig);
+}
+
+const WHOLE = 4;
+
+/** The note lengths, in quarters, long tones are made of: whole notes, and half notes above low. */
+const LONG_TONE_LENGTHS: Record<Difficulty, number[]> = {
+  LOW: [WHOLE],
+  MED: [WHOLE, 2],
+  HIGH: [WHOLE, 2],
+};
+
+/**
+ * Long tones: whole notes, and half notes above low difficulty, with no rests, over the
+ * bars asked for. The last note is the tonic, held through to the end, so it's never
+ * shorter than a whole note unless the whole exercise is. The melody is shaped by
+ * `LONG_TONE_MELODY`: mostly by step, less strictly as the difficulty rises.
+ */
+export function generateLongTones(
+  bars: number,
+  timeSig: string,
+  key: Key,
+  range: Range = "MED",
+  difficulty: Difficulty = "LOW",
+) {
+  const options = LONG_TONE_LENGTHS[difficulty];
+  const lengths: number[] = [];
+  for (let left = bars * barLength(timeSig); left > 0; ) {
+    const length = options[Math.floor(Math.random() * options.length)];
+    const quarters = left - length < WHOLE ? left : length;
+    lengths.push(quarters);
+    left -= quarters;
+  }
+  const pitches = scaleNotesInRange(key, range);
+  const tonic = Scale.get(key).tonic!;
+  return notate(melody(lengths, pitches, tonic, LONG_TONE_MELODY[difficulty]), timeSig);
 }
 
 /**
