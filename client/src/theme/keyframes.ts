@@ -1,15 +1,18 @@
 import { defineKeyframes } from "@chakra-ui/react";
 
 /**
- * Entrance animations. Most have only a `from` frame, so they animate to however the
- * element already looks. Run them with fill-mode `backwards` (hidden during the delay,
- * back to normal styles afterwards) and gate them behind `_motionSafe`.
+ * Entrance animations, and one exit. Most entrances have only a `from` frame, so they
+ * animate to however the element already looks. Run them with fill-mode `backwards`
+ * (hidden during the delay, back to normal styles afterwards) and gate them behind
+ * `_motionSafe`.
  */
 export const keyframes = defineKeyframes({
   /** Fade in from transparent to the element's own opacity. */
   appear: { from: { opacity: 0 } },
   /** Fade in while rising a little into place, for text. */
   "rise-in": { from: { opacity: 0, transform: "translateY(12px)" } },
+  /** Fade out while sinking a little: `rise-in` in reverse. Run with fill-mode `forwards`. */
+  "sink-out": { to: { opacity: 0, transform: "translateY(12px)" } },
   /**
    * Grow in from slightly small and transparent; pair with an overshooting easing to pop.
    * Hidden until it starts, so it can't be focused or clicked during its delay.

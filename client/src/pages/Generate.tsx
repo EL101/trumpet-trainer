@@ -11,9 +11,10 @@ import {
   VisuallyHidden,
   type FlexProps,
 } from "@chakra-ui/react";
-import { Bookmark, BookmarkCheck, ChevronDown, ChevronUp, Play } from "lucide-react";
-import { useContext, useEffect, useRef, useState, type ReactNode, type Ref } from "react";
+import { Bookmark, BookmarkCheck, ChevronDown, ChevronUp, Eye, EyeOff, Play } from "lucide-react";
+import { useContext, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import { AuthUserContext } from "@/auth/AuthUserContext";
+import { usePersistedState } from "@/hooks/usePersistedState";
 import { AppShell, PageHeader } from "@/components/layout";
 import { ExerciseMeta, PitchText, Staff } from "@/components/music";
 import {
@@ -28,20 +29,27 @@ import {
 } from "@/components/primitives";
 import {
   DIFFICULTY_LABELS,
+  difficultyFor,
   EXERCISE_TYPE_LABELS,
   isCommonKey,
   keyChoices,
   MEASURE_LIMITS,
   RANGE_LABELS,
   TIME_SIGNATURES,
+  TYPE_DIFFICULTIES,
   type TimeSignature,
 } from "@/lib/generatorOptions";
-import { generateMusic, RANGE_NOTES } from "@/utils/generateMusic";
+import {
+  generateLongTones,
+  generateMusic,
+  generateScaleExercise,
+  RANGE_NOTES,
+} from "@/utils/generateMusic";
 import { clearHistory, getInitialHistory, insertToHistory } from "@/utils/history";
+import { generateLipSlurs, lipSlurFingerings } from "@/utils/lipSlurs";
 import { getInitialLibrary, saveToLibrary } from "@/utils/library";
 import { splitNotes } from "@/utils/splitNotes";
 import {
-  DIFFICULTIES,
   EXERCISE_TYPES,
   HISTORY_LIMIT,
   RANGES,
@@ -52,13 +60,6 @@ import {
   type Range,
 } from "@/schema";
 
-// Only the random generator exists so far, so the other types can't be picked yet.
-const TYPE_OPTIONS: readonly ChoiceOption<ExerciseType>[] = EXERCISE_TYPES.map((t) => ({
-  value: t,
-  label: EXERCISE_TYPE_LABELS[t],
-  disabled: t !== "RANDOM",
-}));
-
 type Settings = {
   type: ExerciseType;
   key: Key;
@@ -67,6 +68,34 @@ type Settings = {
   range: Range;
   difficulty: Difficulty;
 };
+
+/** The notes for each type built so far. The other types can't be picked yet. */
+const GENERATORS: Partial<Record<ExerciseType, (settings: Settings) => string>> = {
+  // The margin only offers long tones at low or high difficulty (see TYPE_DIFFICULTIES).
+  LONG_TONES: ({ measures, timeSig, key, range, difficulty }) =>
+    generateLongTones(measures, timeSig, key, range, difficulty === "HIGH" ? "HIGH" : "LOW"),
+  LIP_SLURS: ({ measures, timeSig, range, difficulty }) =>
+    generateLipSlurs(measures, timeSig, range, difficulty),
+  SCALES: ({ timeSig, key, range, difficulty }) =>
+    generateScaleExercise(timeSig, key, range, difficulty),
+  RANDOM: ({ measures, timeSig, key, range, difficulty }) =>
+    generateMusic(measures, timeSig, key, range, difficulty),
+};
+
+/** Types whose length comes from the music itself, so the Measures setting is ignored. */
+const SETS_OWN_LENGTH: ReadonlySet<ExerciseType> = new Set(["SCALES"]);
+
+/**
+ * Types written without a key, so the Key setting is ignored. Lip slurs follow each
+ * valve combination's own notes. They're stored as C major, which has no signature.
+ */
+const KEYLESS: ReadonlySet<ExerciseType> = new Set(["LIP_SLURS"]);
+
+const TYPE_OPTIONS: readonly ChoiceOption<ExerciseType>[] = EXERCISE_TYPES.map((t) => ({
+  value: t,
+  label: EXERCISE_TYPE_LABELS[t],
+  disabled: !GENERATORS[t],
+}));
 
 const DEFAULT_SETTINGS: Settings = {
   type: "RANDOM",
@@ -79,7 +108,27 @@ const DEFAULT_SETTINGS: Settings = {
 
 const TIME_OPTIONS = TIME_SIGNATURES.map((t) => ({ value: t, label: t }));
 const RANGE_OPTIONS = RANGES.map((r) => ({ value: r, label: RANGE_LABELS[r] }));
-const DIFFICULTY_OPTIONS = DIFFICULTIES.map((d) => ({ value: d, label: DIFFICULTY_LABELS[d] }));
+
+/** The settings margin's entrance: it slides in, then its settings rise in one by one. */
+const ENTER_EASE = "cubic-bezier(0.33, 1, 0.68, 1)";
+const ENTER_MS = 250;
+const ENTER_FIRST_AT = 100;
+const ENTER_STAGGER = 50;
+/** Header plus the six settings; Generate follows them. */
+const ENTER_ITEMS = 7;
+const riseIn = (i: number) => ({
+  animation: `rise-in ${ENTER_MS}ms ${ENTER_EASE} ${ENTER_FIRST_AT + i * ENTER_STAGGER}ms backwards`,
+});
+const SETTINGS_ENTRANCE = Object.fromEntries(
+  Array.from({ length: ENTER_ITEMS }, (_, i) => [`& > :nth-child(${i + 1})`, riseIn(i)]),
+);
+
+/** History's entrance: the rule wipes in, then the loaded entries rise in one by one. */
+const HISTORY_WIPE_MS = 400;
+const HISTORY_FIRST_AT = 50;
+const HISTORY_STAGGER = 50;
+/** Entries past this many share its delay; they start below the fold anyway. */
+const HISTORY_STAGGER_CAP = 6;
 
 /** The entry grid: a number box in the margin, the exercise beside it. */
 const ENTRY_COLUMNS = "40px minmax(0, 1fr)";
@@ -94,8 +143,13 @@ export function Generate() {
 
   const { user } = useContext(AuthUserContext);
   useEffect(() => getInitialHistory(user, setHistory), [user]);
+  // Until the first generate, open or clear, entries that appear are the loaded
+  // history, so they rise in one after another. After that they arrive alone.
+  const [intro, setIntro] = useState(true);
 
   const [library, setLibrary] = useState<MusicInfo[]>([]);
+  // Valve numbers under lip slurs, on unless the player hides them.
+  const [showFingerings, setShowFingerings] = usePersistedState("showFingerings", true);
   useEffect(() => getInitialLibrary(user, setLibrary), [user]);
   const savedIds = new Set(library.map((entry) => entry.exerciseId));
   const isSaved = (exercise: MusicInfo) => savedIds.has(exercise.exerciseId);
@@ -132,26 +186,30 @@ export function Generate() {
   };
 
   const handleGenerate = () => {
-    const { type, key, timeSig, measures, range, difficulty } = settings;
+    const { type, key, timeSig, range, difficulty } = settings;
+    const generate = GENERATORS[type];
+    if (!generate) return;
 
     const exercise: MusicInfo = {
       id: crypto.randomUUID(),
       exerciseId: crypto.randomUUID(),
       exerciseType: type,
-      notes: generateMusic(measures, timeSig, key, range, difficulty),
+      notes: generate(settings),
       timeSig,
-      musicKey: key,
+      musicKey: KEYLESS.has(type) ? "C major" : key,
       noteRange: range,
       difficulty,
       generationNum: 0,
     };
 
+    setIntro(false);
     setGenerated(exercise);
     saveToHistory(exercise);
     showPlate();
   };
 
   const handleOpen = (exercise: MusicInfo) => {
+    setIntro(false);
     // The exercise leaving the plate joins the list below it (once it's numbered).
     if (generated?.generationNum && !history[generated.generationNum]) {
       setHistory((prev) => ({ ...prev, [generated.generationNum]: generated }));
@@ -161,6 +219,7 @@ export function Generate() {
   };
 
   const handleClear = () => {
+    setIntro(false);
     const plate = generated;
     enqueue(async () => {
       if (!(await clearHistory(user, setHistory)) || !plate) return;
@@ -207,6 +266,8 @@ export function Generate() {
           perLine={perLine}
           saved={!!generated && isSaved(generated)}
           onSaved={(exercise) => setLibrary((prev) => [...prev, exercise])}
+          showFingerings={showFingerings}
+          onToggleFingerings={() => setShowFingerings((shown) => !shown)}
         />
 
         <Flex
@@ -215,6 +276,9 @@ export function Generate() {
           borderTopWidth="1px"
           borderColor="border"
           pt="md"
+          _motionSafe={{
+            animation: `wipe-in ${HISTORY_WIPE_MS}ms ${ENTER_EASE} backwards`,
+          }}
         >
           <Kicker tone="muted">Earlier</Kicker>
           <ClearHistoryButton
@@ -233,12 +297,16 @@ export function Generate() {
             m={0}
             p={0}
           >
-            {earlier.map((exercise) => (
+            {earlier.map((exercise, i) => (
               <EarlierExercise
                 key={exercise.generationNum}
                 exercise={exercise}
+                enterDelay={
+                  intro ? HISTORY_FIRST_AT + Math.min(i, HISTORY_STAGGER_CAP) * HISTORY_STAGGER : 0
+                }
                 perLine={perLine}
                 saved={isSaved(exercise)}
+                showFingerings={showFingerings}
                 onOpen={() => handleOpen(exercise)}
               />
             ))}
@@ -261,6 +329,16 @@ function prefersReducedMotion() {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
+/**
+ * The valve numbers to print under an exercise's notes: only lip slurs have them, and
+ * only while they're shown. Kept the same array between renders, so the staff isn't
+ * redrawn for nothing.
+ */
+function useFingeringLabels(exercise: MusicInfo | null, show: boolean) {
+  const notes = exercise?.exerciseType === "LIP_SLURS" ? exercise.notes : null;
+  return useMemo(() => (show && notes ? lipSlurFingerings(notes) : undefined), [notes, show]);
+}
+
 /** The exercise just generated (or brought back), on a plate, with what to do with it. */
 function CurrentExercise({
   exercise,
@@ -268,6 +346,8 @@ function CurrentExercise({
   perLine,
   saved,
   onSaved,
+  showFingerings,
+  onToggleFingerings,
   ref,
 }: {
   exercise: MusicInfo | null;
@@ -277,8 +357,12 @@ function CurrentExercise({
   /** Whether the exercise is already in the library. */
   saved: boolean;
   onSaved: (exercise: MusicInfo) => void;
+  /** Whether lip slurs show their valve numbers under the notes. */
+  showFingerings: boolean;
+  onToggleFingerings: () => void;
   ref: Ref<HTMLDivElement>;
 }) {
+  const fingerings = useFingeringLabels(exercise, showFingerings);
   return (
     <Grid ref={ref} templateColumns={ENTRY_COLUMNS} gap="md" scrollMarginTop="2xl">
       <Box>
@@ -301,6 +385,7 @@ function CurrentExercise({
               musicKey={exercise.musicKey}
               scale={0.95}
               measuresPerLine={perLine}
+              labels={fingerings}
               role="img"
               aria-label={
                 exercise.generationNum
@@ -323,6 +408,12 @@ function CurrentExercise({
             Practice with feedback
           </Button>
           <SaveToLibraryButton exercise={exercise} saved={saved} onSaved={onSaved} />
+          {exercise?.exerciseType === "LIP_SLURS" && (
+            <Button variant="ghost" onClick={onToggleFingerings}>
+              {showFingerings ? <EyeOff /> : <Eye />}
+              {showFingerings ? "Hide fingerings" : "Show fingerings"}
+            </Button>
+          )}
         </Flex>
       </Flex>
     </Grid>
@@ -333,18 +424,34 @@ function CurrentExercise({
 function EarlierExercise({
   exercise,
   perLine,
+  enterDelay,
   saved,
+  showFingerings,
   onOpen,
 }: {
   exercise: MusicInfo;
+  /** How long to wait before rising in, in ms. */
+  enterDelay: number;
   perLine?: number;
   /** Whether the exercise is in the library, shown as a bookmark by its details. */
   saved: boolean;
+  /** Whether lip slurs show their valve numbers under the notes. */
+  showFingerings: boolean;
   onOpen: () => void;
 }) {
   const title = EXERCISE_TYPE_LABELS[exercise.exerciseType];
+  const fingerings = useFingeringLabels(exercise, showFingerings);
+  // Fixed when the entry mounts: a later change would restart or cut short its rise.
+  const [delay] = useState(enterDelay);
   return (
-    <Grid as="li" className="group" position="relative" templateColumns={ENTRY_COLUMNS} gap="md">
+    <Grid
+      as="li"
+      className="group"
+      position="relative"
+      templateColumns={ENTRY_COLUMNS}
+      gap="md"
+      _motionSafe={{ animation: `rise-in ${ENTER_MS}ms ${ENTER_EASE} ${delay}ms backwards` }}
+    >
       <NumberMark n={exercise.generationNum} />
       <Flex direction="column" gap="xs" minWidth={0}>
         <Flex justify="space-between" align="baseline" gap="md" wrap="wrap">
@@ -385,6 +492,7 @@ function EarlierExercise({
           musicKey={exercise.musicKey}
           scale={0.7}
           measuresPerLine={perLine}
+          labels={fingerings}
           aria-hidden
         />
       </Flex>
@@ -392,13 +500,16 @@ function EarlierExercise({
   );
 }
 
-/** "C major · 4/4 · 8 bars · Medium range · Low difficulty" (short form drops the nouns). */
+/**
+ * "C major · 4/4 · 8 bars · Medium range · Low difficulty" (short form drops the nouns).
+ * Exercises written without a key leave it out.
+ */
 function ExerciseDetails({ exercise, long }: { exercise: MusicInfo; long?: boolean }) {
   const range = RANGE_LABELS[exercise.noteRange];
   const difficulty = DIFFICULTY_LABELS[exercise.difficulty];
   return (
     <ExerciseMeta
-      keyLabel={exercise.musicKey}
+      keyLabel={KEYLESS.has(exercise.exerciseType) ? undefined : exercise.musicKey}
       timeSig={exercise.timeSig}
       bars={splitNotes(exercise.notes, exercise.timeSig).length}
       extra={long ? [`${range} range`, `${difficulty} difficulty`] : [range, difficulty]}
@@ -549,11 +660,14 @@ function SettingsMargin({ settings, onChange, onGenerate, ...rest }: SettingsMar
   const [allKeys, setAllKeys] = useState(false);
   // Once a key from the longer list is chosen, keep the list open so it stays visible.
   const rareKey = !isCommonKey(settings.key);
+  const keyless = KEYLESS.has(settings.type);
   const keyOptions = keyChoices(allKeys || rareKey).map((k) => ({
     value: k,
     label: <PitchText>{k}</PitchText>,
+    disabled: keyless,
   }));
   const [low, high] = RANGE_NOTES[settings.range];
+  const ownLength = SETS_OWN_LENGTH.has(settings.type);
 
   return (
     <Flex
@@ -564,6 +678,14 @@ function SettingsMargin({ settings, onChange, onGenerate, ...rest }: SettingsMar
       borderColor="border"
       borderLeftWidth={{ lg: "1px" }}
       borderBottomWidth={{ base: "1px", lg: 0 }}
+      // Beside the music it slides in from the page edge; stacked above, the settings'
+      // own rise is enough.
+      _motionSafe={{
+        lg: {
+          "--slide-from": "32px",
+          animation: `slide-in ${ENTER_MS}ms ${ENTER_EASE} backwards, appear ${ENTER_MS}ms ${ENTER_EASE} backwards`,
+        },
+      }}
       {...rest}
     >
       <Flex
@@ -575,20 +697,27 @@ function SettingsMargin({ settings, onChange, onGenerate, ...rest }: SettingsMar
         pt="2xl"
         ps="xl"
         pe="2xl"
+        _motionSafe={SETTINGS_ENTRANCE}
       >
         <PageHeader title="Generate" hideFrom="lg" mb="sm" />
 
-        <Field label="Exercise type" helper="Only random exercises can be generated so far.">
+        <Field label="Exercise type" helper="Etudes are on the way.">
           <RadioGroup
             aria-label="Exercise type"
             orientation="grid"
             options={TYPE_OPTIONS}
             value={settings.type}
-            onChange={(type) => onChange({ type })}
+            // A type that doesn't come in the chosen difficulty falls back to its lowest.
+            onChange={(type) =>
+              onChange({ type, difficulty: difficultyFor(type, settings.difficulty) })
+            }
           />
         </Field>
 
-        <Field label="Key">
+        <Field
+          label="Key"
+          helper={keyless ? "Lip slurs follow each valve combination's own notes." : undefined}
+        >
           <ChoiceGrid
             aria-label="Key"
             options={keyOptions}
@@ -600,6 +729,7 @@ function SettingsMargin({ settings, onChange, onGenerate, ...rest }: SettingsMar
               variant="ghost"
               size="sm"
               mt="xs"
+              disabled={keyless}
               aria-expanded={allKeys}
               onClick={() => setAllKeys((open) => !open)}
             >
@@ -619,11 +749,15 @@ function SettingsMargin({ settings, onChange, onGenerate, ...rest }: SettingsMar
           />
         </Field>
 
-        <Field label="Measures">
+        <Field
+          label="Measures"
+          helper={ownLength ? "A scale runs as long as its key and range need." : undefined}
+        >
           <Stepper
             aria-label="Measures"
             min={MEASURE_LIMITS.min}
             max={MEASURE_LIMITS.max}
+            disabled={ownLength}
             value={settings.measures}
             onChange={(measures) => onChange({ measures })}
           />
@@ -641,14 +775,17 @@ function SettingsMargin({ settings, onChange, onGenerate, ...rest }: SettingsMar
         <Field label="Difficulty">
           <SegmentedControl
             aria-label="Difficulty"
-            options={DIFFICULTY_OPTIONS}
+            options={TYPE_DIFFICULTIES[settings.type].map((d) => ({
+              value: d,
+              label: DIFFICULTY_LABELS[d],
+            }))}
             value={settings.difficulty}
             onChange={(difficulty) => onChange({ difficulty })}
           />
         </Field>
       </Flex>
 
-      <Box pt="md" pb="xl" ps="xl" pe="2xl">
+      <Box pt="md" pb="xl" ps="xl" pe="2xl" _motionSafe={riseIn(ENTER_ITEMS)}>
         <Button variant="primary" size="lg" fullWidth onClick={onGenerate}>
           Generate
         </Button>

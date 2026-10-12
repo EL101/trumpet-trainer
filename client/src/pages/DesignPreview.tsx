@@ -334,6 +334,30 @@ export default function DesignPreview() {
               scale={0.8}
             />
           </Box>
+          <Box>
+            <Text fontSize="12px" color="fg.muted" mb="xs">
+              Ties (a trailing ~): across a bar line, across a line break, and within a bar
+            </Text>
+            <Staff
+              notes="G4/w~, G4/h, A4/q, B4/q~, B4/h., C5/8~, C5/8, D5/w"
+              timeSig="4/4"
+              musicKey="G major"
+              measuresPerLine={2}
+              scale={0.8}
+            />
+          </Box>
+          <Box>
+            <Text fontSize="12px" color="fg.muted" mb="xs">
+              Slurs ( … ): under stems-up notes, over mixed stems, and across a line break
+            </Text>
+            <Staff
+              notes="(C4/q, G4/q, E4/q, G4/q), (E5/q, C5/q, G4/q, C5/q, G4/q, D5/q, G5/q, D5/q), (C5/8, E5/8, G5/8, E5/8, C5/h)"
+              timeSig="4/4"
+              musicKey="C major"
+              measuresPerLine={2}
+              scale={0.8}
+            />
+          </Box>
         </Flex>
       </Section>
 
