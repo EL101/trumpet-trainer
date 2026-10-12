@@ -17,7 +17,8 @@ const OPEN_PARTIALS = ["C4", "G4", "C5", "E5", "G5", "C6", "D6", "E6", "G6"].map
 /** The valve combinations, each with how many semitones it lowers the open horn. */
 const FINGERINGS = { "0": 0, "2": 1, "1": 2, "12": 3, "23": 4, "13": 5, "123": 6 } as const;
 type Fingering = keyof typeof FINGERINGS;
-const FINGERING_NAMES = Object.keys(FINGERINGS) as Fingering[];
+/** Fewest valves first, which is also the order a player reaches for them. */
+const FINGERING_NAMES: Fingering[] = ["0", "1", "2", "12", "13", "23", "123"];
 
 /** How many partials apart the notes of a slur on one fingering can be, at each difficulty. */
 const PARTIAL_LEAP: Record<Difficulty, number> = { LOW: 1, MED: 2, HIGH: Infinity };
@@ -26,10 +27,12 @@ const PARTIAL_LEAP: Record<Difficulty, number> = { LOW: 1, MED: 2, HIGH: Infinit
 const CHANGE_SHARE = 0.1;
 
 /**
- * How often a change of fingering moves by a third rather than a step: steps likelier at
- * low, the two even at medium, thirds likelier at high.
+ * How often a change of fingering aims to move by a third rather than a step. Neither is
+ * always on offer (many thirds share a fingering), so these aim past the shares wanted,
+ * which come out about 25% thirds at low, 50% at medium and 70% at high; at high, a third
+ * is taken whenever there is one.
  */
-const CHANGE_THIRDS: Record<Difficulty, number> = { LOW: 1 / 3, MED: 1 / 2, HIGH: 2 / 3 };
+const CHANGE_THIRDS: Record<Difficulty, number> = { LOW: 0.15, MED: 0.7, HIGH: 1 };
 
 /** Which partial (an index into `OPEN_PARTIALS`) a fingering plays a note on, if any. */
 function partialOn(pitch: string, fingering: Fingering): number | null {
@@ -167,4 +170,41 @@ export function generateLipSlurs(
       return `${open}${pitch}/${value}${close}`;
     })
     .join(", ");
+}
+
+/**
+ * Fingering labels for a lip-slur exercise, one per note, for printing under the staff:
+ * the valve combination ("0" for open) where the fingering changes and where each slur
+ * starts, and "" under the notes in between, which keep it. A note keeps the fingering of
+ * the note before when that plays it too (so a run slurred on one fingering keeps it);
+ * otherwise it takes the fingering that plays the longest run from it, and the usual one
+ * of those on a tie (B4 on 2, D5 on 1). Rests get "".
+ */
+export function lipSlurFingerings(notes: string): string[] {
+  const tokens = notes.split(", ").map((token) => token.trim());
+  const pitches = tokens.map((token) => {
+    const body = token.replace(/^\(/, "").replace(/[~)]+$/, "");
+    return body.includes("/r") ? null : body.split("/")[0];
+  });
+  const plays = (i: number, fingering: Fingering) =>
+    pitches[i] !== null && partialOn(pitches[i]!, fingering) !== null;
+  const runFrom = (i: number, fingering: Fingering) => {
+    let length = 0;
+    while (i + length < pitches.length && plays(i + length, fingering)) length++;
+    return length;
+  };
+
+  let current: Fingering | null = null;
+  return tokens.map((token, i) => {
+    if (pitches[i] === null) return "";
+    const previous = current;
+    if (!current || !plays(i, current)) {
+      // FINGERING_NAMES puts the usual fingering first, and a tie keeps the first.
+      const options = FINGERING_NAMES.filter((f) => plays(i, f));
+      current = options.length
+        ? options.reduce((best, f) => (runFrom(i, f) > runFrom(i, best) ? f : best))
+        : null;
+    }
+    return current && (current !== previous || token.startsWith("(")) ? current : "";
+  });
 }

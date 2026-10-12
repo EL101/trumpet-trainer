@@ -11,9 +11,10 @@ import {
   VisuallyHidden,
   type FlexProps,
 } from "@chakra-ui/react";
-import { Bookmark, BookmarkCheck, ChevronDown, ChevronUp, Play } from "lucide-react";
-import { useContext, useEffect, useRef, useState, type ReactNode, type Ref } from "react";
+import { Bookmark, BookmarkCheck, ChevronDown, ChevronUp, Eye, EyeOff, Play } from "lucide-react";
+import { useContext, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import { AuthUserContext } from "@/auth/AuthUserContext";
+import { usePersistedState } from "@/hooks/usePersistedState";
 import { AppShell, PageHeader } from "@/components/layout";
 import { ExerciseMeta, PitchText, Staff } from "@/components/music";
 import {
@@ -45,7 +46,7 @@ import {
   RANGE_NOTES,
 } from "@/utils/generateMusic";
 import { clearHistory, getInitialHistory, insertToHistory } from "@/utils/history";
-import { generateLipSlurs } from "@/utils/lipSlurs";
+import { generateLipSlurs, lipSlurFingerings } from "@/utils/lipSlurs";
 import { getInitialLibrary, saveToLibrary } from "@/utils/library";
 import { splitNotes } from "@/utils/splitNotes";
 import {
@@ -141,6 +142,8 @@ export function Generate() {
   const [intro, setIntro] = useState(true);
 
   const [library, setLibrary] = useState<MusicInfo[]>([]);
+  // Valve numbers under lip slurs, on unless the player hides them.
+  const [showFingerings, setShowFingerings] = usePersistedState("showFingerings", true);
   useEffect(() => getInitialLibrary(user, setLibrary), [user]);
   const savedIds = new Set(library.map((entry) => entry.exerciseId));
   const isSaved = (exercise: MusicInfo) => savedIds.has(exercise.exerciseId);
@@ -257,6 +260,8 @@ export function Generate() {
           perLine={perLine}
           saved={!!generated && isSaved(generated)}
           onSaved={(exercise) => setLibrary((prev) => [...prev, exercise])}
+          showFingerings={showFingerings}
+          onToggleFingerings={() => setShowFingerings((shown) => !shown)}
         />
 
         <Flex
@@ -295,6 +300,7 @@ export function Generate() {
                 }
                 perLine={perLine}
                 saved={isSaved(exercise)}
+                showFingerings={showFingerings}
                 onOpen={() => handleOpen(exercise)}
               />
             ))}
@@ -317,6 +323,16 @@ function prefersReducedMotion() {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
+/**
+ * The valve numbers to print under an exercise's notes: only lip slurs have them, and
+ * only while they're shown. Kept the same array between renders, so the staff isn't
+ * redrawn for nothing.
+ */
+function useFingeringLabels(exercise: MusicInfo | null, show: boolean) {
+  const notes = exercise?.exerciseType === "LIP_SLURS" ? exercise.notes : null;
+  return useMemo(() => (show && notes ? lipSlurFingerings(notes) : undefined), [notes, show]);
+}
+
 /** The exercise just generated (or brought back), on a plate, with what to do with it. */
 function CurrentExercise({
   exercise,
@@ -324,6 +340,8 @@ function CurrentExercise({
   perLine,
   saved,
   onSaved,
+  showFingerings,
+  onToggleFingerings,
   ref,
 }: {
   exercise: MusicInfo | null;
@@ -333,8 +351,12 @@ function CurrentExercise({
   /** Whether the exercise is already in the library. */
   saved: boolean;
   onSaved: (exercise: MusicInfo) => void;
+  /** Whether lip slurs show their valve numbers under the notes. */
+  showFingerings: boolean;
+  onToggleFingerings: () => void;
   ref: Ref<HTMLDivElement>;
 }) {
+  const fingerings = useFingeringLabels(exercise, showFingerings);
   return (
     <Grid ref={ref} templateColumns={ENTRY_COLUMNS} gap="md" scrollMarginTop="2xl">
       <Box>
@@ -357,6 +379,7 @@ function CurrentExercise({
               musicKey={exercise.musicKey}
               scale={0.95}
               measuresPerLine={perLine}
+              labels={fingerings}
               role="img"
               aria-label={
                 exercise.generationNum
@@ -379,6 +402,12 @@ function CurrentExercise({
             Practice with feedback
           </Button>
           <SaveToLibraryButton exercise={exercise} saved={saved} onSaved={onSaved} />
+          {exercise?.exerciseType === "LIP_SLURS" && (
+            <Button variant="ghost" onClick={onToggleFingerings}>
+              {showFingerings ? <EyeOff /> : <Eye />}
+              {showFingerings ? "Hide fingerings" : "Show fingerings"}
+            </Button>
+          )}
         </Flex>
       </Flex>
     </Grid>
@@ -391,6 +420,7 @@ function EarlierExercise({
   perLine,
   enterDelay,
   saved,
+  showFingerings,
   onOpen,
 }: {
   exercise: MusicInfo;
@@ -399,9 +429,12 @@ function EarlierExercise({
   perLine?: number;
   /** Whether the exercise is in the library, shown as a bookmark by its details. */
   saved: boolean;
+  /** Whether lip slurs show their valve numbers under the notes. */
+  showFingerings: boolean;
   onOpen: () => void;
 }) {
   const title = EXERCISE_TYPE_LABELS[exercise.exerciseType];
+  const fingerings = useFingeringLabels(exercise, showFingerings);
   // Fixed when the entry mounts: a later change would restart or cut short its rise.
   const [delay] = useState(enterDelay);
   return (
@@ -453,6 +486,7 @@ function EarlierExercise({
           musicKey={exercise.musicKey}
           scale={0.7}
           measuresPerLine={perLine}
+          labels={fingerings}
           aria-hidden
         />
       </Flex>

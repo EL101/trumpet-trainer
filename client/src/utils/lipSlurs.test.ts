@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { TIME_SIGNATURES } from "@/lib/generatorOptions";
 import { DIFFICULTIES, RANGES, type Difficulty, type Key } from "@/schema";
 import { RANGE_NOTES, scaleNotesInRange } from "./generateMusic";
-import { generateLipSlurs, partialsApart } from "./lipSlurs";
+import { generateLipSlurs, lipSlurFingerings, partialsApart } from "./lipSlurs";
 import { splitNotes } from "./splitNotes";
 
 const PARTIAL_LEAP: Record<Difficulty, number> = { LOW: 1, MED: 2, HIGH: Infinity };
@@ -125,16 +125,59 @@ describe("generateLipSlurs", () => {
   }, 30000);
 
   it("changes fingering by thirds more as the difficulty rises", () => {
+    // Pooled over a few keys: how many thirds are on offer varies from key to key.
     const thirdShare = (difficulty: Difficulty) => {
-      const { changes } = moves("C major", difficulty);
+      const changes = (["C major", "Eb major", "A minor"] as const).flatMap(
+        (key) => moves(key, difficulty).changes,
+      );
       return changes.filter((c) => c.steps === 2).length / changes.length;
     };
-    // Thirds that change fingering aren't always on offer, so the shares fall a little
-    // short of 1/3, 1/2 and 2/3.
     const [low, med, high] = DIFFICULTIES.map(thirdShare);
+    expect(low).toBeLessThan(0.4);
+    expect(med).toBeGreaterThan(0.38);
+    expect(med).toBeLessThan(0.62);
+    expect(high).toBeGreaterThan(0.55);
     expect(low).toBeLessThan(med);
     expect(med).toBeLessThan(high);
-    expect(med).toBeGreaterThan(0.33);
-    expect(high).toBeGreaterThan(0.45);
   }, 30000);
+});
+
+describe("lipSlurFingerings", () => {
+  it("labels where the fingering changes, and keeps it through a run on one fingering", () => {
+    // G4 C5 E5 C5 all on open; D5 F5 D5 on 1.
+    expect(lipSlurFingerings("G4/q, C5/q, E5/q, C5/q, D5/q, F5/q, D5/q")).toEqual([
+      ...["0", "", "", ""],
+      ...["1", "", ""],
+    ]);
+  });
+
+  it("labels the start of every slur, even on the same fingering", () => {
+    expect(lipSlurFingerings("(C4/q, G4/q), (C5/q, G4/q)")).toEqual(["0", "", "0", ""]);
+  });
+
+  it("picks the fingering that carries furthest, or the usual one", () => {
+    // B4 is 2 on its own, but 13 when the run goes on to D5 and G5 on 13.
+    expect(lipSlurFingerings("B4/q")).toEqual(["2"]);
+    expect(lipSlurFingerings("B4/q, D5/q, G5/q")).toEqual(["13", "", ""]);
+  });
+
+  it("leaves rests unlabelled", () => {
+    expect(lipSlurFingerings("C5/q, B4/q/r, E5/h")).toEqual(["0", "", ""]);
+  });
+
+  it("gives every note of a generated exercise a fingering it can slur on", () => {
+    for (const difficulty of DIFFICULTIES) {
+      for (let run = 0; run < 50; run++) {
+        const notes = generateLipSlurs(4, "4/4", "Eb major", "MED", difficulty);
+        const pitches = pitchesOf(notes);
+        const labels = lipSlurFingerings(notes);
+        expect(labels).toHaveLength(pitches.length);
+        expect(labels[0]).not.toBe("");
+        // Between labels the fingering holds, so those notes slur on one fingering.
+        pitches.slice(1).forEach((pitch, i) => {
+          if (labels[i + 1] === "") expect(partialsApart(pitches[i], pitch)).not.toBeNull();
+        });
+      }
+    }
+  });
 });

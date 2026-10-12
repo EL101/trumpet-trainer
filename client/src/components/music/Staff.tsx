@@ -50,6 +50,8 @@ export type StaffProps = Omit<BoxProps, "children" | "width" | "color"> & {
 
 const LINE_HEIGHT = 100;
 const ANNOTATED_LINE_HEIGHT = 124;
+/** How long labels take to slide in or out, and the staff to grow or shrink round them. */
+const LABEL_MS = 100;
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 /** Treble staff rendered with VexFlow, with optional per-note intonation colouring and cursor. */
@@ -72,10 +74,33 @@ export function Staff({
   const measuredWidth = useElementWidth(ref, width == null);
   const W = width ?? measuredWidth;
 
+  // Labels taken away slide out before the staff is redrawn without them, and labels
+  // added slide in (not for viewers who'd rather not see motion). Until labels are first
+  // added or taken away, the staff's height doesn't animate, so it doesn't on load.
+  const [lastLabels, setLastLabels] = useState(labels);
+  const [leaving, setLeaving] = useState<readonly string[] | null>(null);
+  const [labelsToggled, setLabelsToggled] = useState(false);
+  if (labels !== lastLabels) {
+    setLastLabels(labels);
+    if (!labels !== !lastLabels) setLabelsToggled(true);
+    setLeaving(!labels && lastLabels && !prefersReducedMotion() ? lastLabels : null);
+  }
+  const shownLabels = labels ?? leaving ?? undefined;
+  const labelsDrawn = useRef(!!labels);
+
+  useEffect(() => {
+    if (!leaving) return;
+    ref.current?.querySelectorAll<SVGElement>("[data-label]").forEach((el) => {
+      el.style.animation = `sink-out ${LABEL_MS}ms ease-in forwards`;
+    });
+    const timer = setTimeout(() => setLeaving(null), LABEL_MS);
+    return () => clearTimeout(timer);
+  }, [leaving]);
+
   const measures = useMemo(() => parseMeasures(notes, timeSig), [notes, timeSig]);
   const perLine = resolveMeasuresPerLine(measuresPerLine, measures.length);
   const lineCount = Math.max(1, Math.ceil(measures.length / perLine));
-  const showText = !!labels || !!annotate;
+  const showText = !!shownLabels || !!annotate;
   const lineHeight = showText ? ANNOTATED_LINE_HEIGHT : LINE_HEIGHT;
   const height = Math.ceil(lineCount * lineHeight * scale);
   // Notes far above or below the staff can reach past the lines' allotted height; the
@@ -117,10 +142,20 @@ export function Staff({
     svg.style.overflow = "visible";
     if (cursor != null) drawCursor(svg, placed, cursor);
     if (showText) {
-      drawLabels(svg, placed, (i) =>
-        labels ? (labels[i] ?? "") : cents?.[i] != null ? formatCents(cents[i]!, false) : "",
+      const riseIn = !!shownLabels && !labelsDrawn.current && !prefersReducedMotion();
+      drawLabels(
+        svg,
+        placed,
+        (i) =>
+          shownLabels
+            ? (shownLabels[i] ?? "")
+            : cents?.[i] != null
+              ? formatCents(cents[i]!, false)
+              : "",
+        riseIn,
       );
     }
+    labelsDrawn.current = !!shownLabels;
     setDrawnHeight(fitToContent(svg, W, height, scale));
     return () => {
       host.innerHTML = "";
@@ -137,7 +172,7 @@ export function Staff({
     barlines,
     cents,
     cursor,
-    labels,
+    shownLabels,
     noteColor,
     showText,
   ]);
@@ -147,6 +182,10 @@ export function Staff({
       ref={ref}
       width={width != null ? `${width}px` : "100%"}
       height={`${Math.max(height, drawnHeight)}px`}
+      transitionProperty={labelsToggled ? "height" : undefined}
+      transitionDuration={`${LABEL_MS}ms`}
+      transitionTimingFunction="ease-out"
+      _motionReduce={{ transition: "none" }}
       {...rest}
     />
   );
@@ -168,6 +207,10 @@ function fitToContent(svg: SVGSVGElement, width: number, height: number, scale: 
   svg.setAttribute("height", String(fitted));
   svg.style.height = `${fitted}px`;
   return fitted;
+}
+
+function prefersReducedMotion() {
+  return !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 }
 
 /** Tracks an element's content width (only when `enabled`). */
@@ -546,7 +589,13 @@ function drawCursor(svg: SVGSVGElement, placed: Placed[], cursor: number) {
   svg.insertBefore(band, svg.firstChild);
 }
 
-function drawLabels(svg: SVGSVGElement, placed: Placed[], textFor: (i: number) => string) {
+/** Writes `textFor(i)` under each note, sliding the text up into place if `riseIn`. */
+function drawLabels(
+  svg: SVGSVGElement,
+  placed: Placed[],
+  textFor: (i: number) => string,
+  riseIn: boolean,
+) {
   placed.forEach((p, i) => {
     if (p.rest) return;
     const text = textFor(i);
@@ -555,11 +604,12 @@ function drawLabels(svg: SVGSVGElement, placed: Placed[], textFor: (i: number) =
     const color = p.color === roles.fg.DEFAULT ? roles.fg.muted : p.color;
     const t = svgEl(
       "text",
-      { x: noteCenterX(p.note), y, "text-anchor": "middle", "font-size": 10 },
+      { x: noteCenterX(p.note), y, "text-anchor": "middle", "font-size": 10, "data-label": "" },
       {
         fill: color,
         "font-family": "var(--chakra-fonts-body)",
         "font-variant-numeric": "tabular-nums",
+        ...(riseIn ? { animation: `rise-in ${LABEL_MS}ms ease-out backwards` } : {}),
       },
     );
     t.textContent = text;
