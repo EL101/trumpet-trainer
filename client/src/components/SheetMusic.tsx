@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Factory, Barline, Accidental, StaveTie, type StemmableNote } from "vexflow";
+import { Factory, Barline, Accidental, Curve, StaveTie, type StemmableNote } from "vexflow";
 import { Box, type BoxProps } from "@chakra-ui/react";
 import { splitNotes } from "../utils/splitNotes";
 import { getKeySig } from "@/utils/generateMusic";
@@ -32,16 +32,21 @@ export function SheetMusic({ notes, timeSig, musicKey, ...rest }: SheetMusicProp
     const score = factory.EasyScore();
 
     const start = 0;
-    // Every note in order, with whether it's tied to the next, for drawing ties at the end.
-    const sequence: { note: StemmableNote; tied: boolean }[] = [];
+    // Every note in order, with its tie and slur marks, for drawing ties and slurs at the end.
+    const sequence: { note: StemmableNote; marks: string[] }[] = [];
     for (let i = 0; i < measures.length; i++) {
-      // EasyScore can't read the "~" tie marks, so they're taken off here.
-      const tokens = measures[i].split(",").map((token) => token.trim());
-      const measureNotes = tokens.map((token) => token.replace(/~$/, "")).join(", ");
+      // EasyScore can't read the tie and slur marks ("(C4/q~)"), so they're taken off here.
+      const tokens = measures[i]
+        .split(",")
+        .map((token) => /^(\(?)(.*?)(~?\)?)$/.exec(token.trim())!);
+      const measureNotes = tokens.map(([, , body]) => body).join(", ");
       const system = factory.System({ x: width * i + start, y: yOffset, width: width });
 
       const allNotes = score.notes(measureNotes);
-      allNotes.forEach((note, k) => sequence.push({ note, tied: tokens[k].endsWith("~") }));
+      allNotes.forEach((note, k) => {
+        const [, open, , close] = tokens[k];
+        sequence.push({ note, marks: [...open, ...close] });
+      });
       const beamGroups: (typeof allNotes)[] = [];
       let currentGroup: typeof allNotes = [];
 
@@ -81,17 +86,24 @@ export function SheetMusic({ notes, timeSig, musicKey, ...rest }: SheetMusicProp
     }
 
     factory.draw();
-    sequence.forEach(({ note, tied }, i) => {
+    let slurStart: StemmableNote | null = null;
+    sequence.forEach(({ note, marks }, i) => {
       const next = sequence[i + 1];
-      if (!tied || !next) return;
-      new StaveTie({
-        first_note: note,
-        last_note: next.note,
-        first_indices: [0],
-        last_indices: [0],
-      })
-        .setContext(factory.getContext())
-        .draw();
+      if (marks.includes("~") && next) {
+        new StaveTie({
+          first_note: note,
+          last_note: next.note,
+          first_indices: [0],
+          last_indices: [0],
+        })
+          .setContext(factory.getContext())
+          .draw();
+      }
+      if (marks.includes("(")) slurStart = note;
+      if (marks.includes(")") && slurStart) {
+        new Curve(slurStart, note, {}).setContext(factory.getContext()).draw();
+        slurStart = null;
+      }
     });
 
     if (!container) return;

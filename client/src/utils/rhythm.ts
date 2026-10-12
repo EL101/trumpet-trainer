@@ -77,9 +77,14 @@ export type Rhythm = Vocabulary & {
   beat: number;
 };
 
-export function rhythmFor(timeSig: string, difficulty: Difficulty): Rhythm {
+/** Whether the time signature's beat is a dotted quarter, split in three (6/8, 9/8, 12/8, 3/8). */
+export function isCompound(timeSig: string) {
   const [beats, unit] = timeSig.split("/").map(Number);
-  const compound = unit === 8 && beats % 3 === 0;
+  return unit === 8 && beats % 3 === 0;
+}
+
+export function rhythmFor(timeSig: string, difficulty: Difficulty): Rhythm {
+  const compound = isCompound(timeSig);
   return {
     ...VOCABULARIES[compound ? "compound" : "simple"][difficulty],
     beat: compound ? 1.5 : 1,

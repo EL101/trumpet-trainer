@@ -114,7 +114,8 @@ export function melody(
   style: MelodyStyle,
   restChance = 0,
 ): NoteEvent[] {
-  const reach = tonicReach(pitches, tonic, style);
+  const midi = (pitch: string) => Note.midi(pitch)!;
+  const reach = tonicReach(pitches, tonic, (a, b) => withinLeap(midi(b) - midi(a), style));
   const played: string[] = [];
   const events = lengths.map((quarters, i): NoteEvent => {
     const leapsLeft = lengths.length - 1 - i;
@@ -131,19 +132,24 @@ export function melody(
 }
 
 /**
- * For a number of leaps, the notes from which a tonic can be reached in that many leaps
- * or fewer: the tonics themselves for 0, the notes a leap away from one for 1, and so on.
+ * For a number of moves, the notes from which a tonic can be reached in exactly that many
+ * moves, where `canMove(from, to)` says which moves are allowed: the tonics themselves for
+ * 0, the notes a move away from one for 1, and so on. (When repeating a note counts as a
+ * move, that's the same as "in that many moves or fewer".)
  */
-function tonicReach(pitches: readonly string[], tonic: string, style: MelodyStyle) {
-  const midi = (pitch: string) => Note.midi(pitch)!;
+export function tonicReach(
+  pitches: readonly string[],
+  tonic: string,
+  canMove: (from: string, to: string) => boolean,
+) {
   const reach = [new Set(pitches.filter((pitch) => Note.pitchClass(pitch) === tonic))];
-  return (leaps: number) => {
-    while (reach.length <= leaps && reach[reach.length - 1].size < pitches.length) {
+  return (moves: number) => {
+    // Once every note can reach a tonic, every note can for any number of moves more.
+    while (reach.length <= moves && reach[reach.length - 1].size < pitches.length) {
       const nearer = [...reach[reach.length - 1]];
-      const next = pitches.filter((p) => nearer.some((q) => withinLeap(midi(q) - midi(p), style)));
-      reach.push(new Set(next));
+      reach.push(new Set(pitches.filter((p) => nearer.some((q) => canMove(p, q)))));
     }
-    return reach[Math.min(leaps, reach.length - 1)];
+    return reach[Math.min(moves, reach.length - 1)];
   };
 }
 

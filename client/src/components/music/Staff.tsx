@@ -4,6 +4,7 @@ import {
   Accidental,
   Barline,
   Beam,
+  Curve,
   Dot,
   Flow,
   Formatter,
@@ -182,7 +183,15 @@ function useElementWidth(ref: React.RefObject<HTMLElement | null>, enabled: bool
   return w;
 }
 
-type Placed = { note: StaveNote; stave: Stave; color: string; rest: boolean; tied: boolean };
+type Placed = {
+  note: StaveNote;
+  stave: Stave;
+  color: string;
+  rest: boolean;
+  tied: boolean;
+  slurStart: boolean;
+  slurEnd: boolean;
+};
 
 /** One bar, built and formatted but not yet drawn. */
 type Bar = { stave: Stave; voice: Voice; beams: Beam[] };
@@ -194,6 +203,8 @@ const STAFF_BOTTOM = 70;
 const LINE_GAP = 12;
 /** Room the per-note text takes below the lowest note or the staff (see `drawLabels`). */
 const LABEL_ROOM = 42;
+/** Room a slur's arc takes above a line's highest note (see `drawSlurs`). */
+const SLUR_ROOM = 24;
 
 function drawMeasures(
   ctx: RenderContext,
@@ -216,6 +227,7 @@ function drawMeasures(
   const staveOpts = { space_above_staff_ln: 3, space_below_staff_ln: 3 };
   const placed: Placed[] = [];
   const lines: Bar[][] = [];
+  const slurredLines = new Set<number>();
   let index = 0;
 
   // Build every line first (at y = 0) so each one's reach above and below the staff is
@@ -223,6 +235,7 @@ function drawMeasures(
   for (let start = 0, line = 0; start < measures.length; start += perLine, line++) {
     const bars = measures.slice(start, start + perLine);
     const isLastLine = start + perLine >= measures.length;
+    if (bars.flat().some((p) => p.slurStart || p.slurEnd)) slurredLines.add(line);
 
     // Measure how much room the clef / key / time take so bars get equal note space.
     const probe = new Stave(0, 0, 300, staveOpts).addClef("treble");
@@ -277,7 +290,8 @@ function drawMeasures(
           n.setFlagStyle(style);
           n.setLedgerLineStyle(style);
           n.getModifiers().forEach((m) => m.setStyle(style));
-          placed.push({ note: n, stave, color, rest: bar[k].rest, tied: bar[k].tied });
+          const { rest, tied, slurStart, slurEnd } = bar[k];
+          placed.push({ note: n, stave, color, rest, tied, slurStart, slurEnd });
         });
         return { stave, voice, beams };
       }),
@@ -289,7 +303,7 @@ function drawMeasures(
   let y = 0;
   let prevBottom = 0;
   lines.forEach((bars, line) => {
-    const { top, bottom } = lineExtent(bars, opts.showText);
+    const { top, bottom } = lineExtent(bars, opts.showText, slurredLines.has(line));
     if (line > 0) y = Math.max(y + lineHeight, y + prevBottom - top + LINE_GAP);
     prevBottom = bottom;
 
@@ -304,6 +318,7 @@ function drawMeasures(
     });
   });
   drawTies(ctx, placed);
+  drawSlurs(ctx, placed);
   return placed;
 }
 
@@ -342,9 +357,10 @@ function beamByGroup(notes: StaveNote[], groups: ReturnType<typeof Beam.getDefau
 
 /**
  * How far a line's notes reach above and below the staff, relative to its stave's y:
- * note heads plus stems (a beam can stretch a stem a little past its usual length).
+ * note heads plus stems (a beam can stretch a stem a little past its usual length), and
+ * the arc over them if the line has slurs.
  */
-function lineExtent(bars: Bar[], showText: boolean) {
+function lineExtent(bars: Bar[], showText: boolean, slurred: boolean) {
   let top = STAFF_TOP;
   let bottom = STAFF_BOTTOM;
   let lowest = STAFF_BOTTOM;
@@ -361,6 +377,7 @@ function lineExtent(bars: Bar[], showText: boolean) {
     }
   }
   if (showText) bottom = Math.max(bottom, lowest + LABEL_ROOM);
+  if (slurred) top -= SLUR_ROOM;
   return { top, bottom };
 }
 
@@ -391,6 +408,102 @@ function drawTies(ctx: RenderContext, placed: Placed[]) {
       tie.setStyle({ fillStyle: p.color, strokeStyle: p.color }).setContext(ctx).draw();
     });
   });
+}
+
+/**
+ * Draws each slur, from a note that starts one to the next that ends one, in the first
+ * note's colour. It arcs over the notes, or under their heads if every stem points up. A
+ * slur across a line break is drawn in parts: off the end of one line, into the next.
+ */
+function drawSlurs(ctx: RenderContext, placed: Placed[]) {
+  let start = -1;
+  placed.forEach((p, i) => {
+    if (p.slurStart) start = i;
+    if (!p.slurEnd || start < 0) return;
+    const slurred = placed.slice(start, i + 1);
+    start = -1;
+    const above = slurred.some(({ note }) => note.getStemDirection() !== Stem.UP);
+    // Notes heard under the slur, split into one run per line of music.
+    const lines: Placed[][] = [];
+    for (const q of slurred) {
+      const line = lines[lines.length - 1];
+      if (line && line[0].stave.getY() === q.stave.getY()) line.push(q);
+      else lines.push([q]);
+    }
+    lines.forEach((line, l) => {
+      const from = l === 0 ? line[0].note : null;
+      const to = l === lines.length - 1 ? line[line.length - 1].note : null;
+      // A part that starts or ends at a line break takes its height from its other end.
+      const first = from ?? to!;
+      const last = to ?? from!;
+      // Over a stem pointing up, a slur above starts from the stem's tip, not the head.
+      const end = (note: StaveNote) =>
+        above && note.getStemDirection() === Stem.UP
+          ? Curve.Position.NEAR_TOP
+          : Curve.Position.NEAR_HEAD;
+      const endY = (note: StaveNote) =>
+        note.getStemExtents()[end(note) === Curve.Position.NEAR_TOP ? "topY" : "baseY"];
+      const x0 = from ? from.getTieRightX() : line[0].stave.getTieStartX();
+      const x1 = to ? to.getTieLeftX() : line[line.length - 1].stave.getTieEndX();
+      const [bowStart, bowEnd] = slurBow(line, above, x0, endY(first), x1, endY(last));
+      // VexFlow bends a slur toward the stems of its last note; flip it when that's wrong.
+      const curve = new Curve(from!, to!, {
+        position: end(first),
+        position_end: end(last),
+        invert: above === (last.getStemDirection() === Stem.UP),
+        y_shift: SLUR_GAP,
+        cps: [
+          { x: 0, y: bowStart },
+          { x: 0, y: bowEnd },
+        ],
+      });
+      ctx.save();
+      ctx.setFillStyle(slurred[0].color);
+      ctx.setStrokeStyle(slurred[0].color);
+      curve.setContext(ctx).draw();
+      ctx.restore();
+    });
+  });
+}
+
+/** How far a slur's ends sit off the notes they start and end on. */
+const SLUR_GAP = 10;
+
+/**
+ * How far a slur from (x0, y0) to (x1, y1) should bow out at its start and at its end
+ * (its two control points' offsets): more the longer it is, and on each side, enough to
+ * clear every note under it. A high note just before a low last note lifts the end's
+ * side alone, so the slur stays over it and then drops to the last note.
+ */
+function slurBow(line: Placed[], above: boolean, x0: number, y0: number, x1: number, y1: number) {
+  const side = above ? -1 : 1;
+  const [from, to] = [y0 + SLUR_GAP * side, y1 + SLUR_GAP * side];
+  let start = Math.min(30, 10 + (x1 - x0) * 0.02);
+  let end = start;
+  for (const { note, rest } of line) {
+    const t = (noteCenterX(note) - x0) / (x1 - x0);
+    if (rest || t <= 0 || t >= 1) continue;
+    const heads = note.getYs();
+    const stemUp = note.getStemDirection() === Stem.UP;
+    // The note's outer edge on the slur's side: a stem's tip, or the edge of its head.
+    const edge = above
+      ? stemUp
+        ? note.getStemExtents().topY
+        : Math.min(...heads) - 5
+      : Math.max(...heads) + 5;
+    const straight = from + (to - from) * t;
+    const overlap = side * (edge + 4 * side - straight);
+    // At t along it, the curve bulges out from the straight line between its ends by
+    // 3t(1 - t) times a blend of the two offsets: (1 - t) of the start's, t of the end's.
+    const u = Math.min(0.95, Math.max(0.05, t));
+    const [weightStart, weightEnd] = [3 * (1 - u) * (1 - u) * u, 3 * (1 - u) * u * u];
+    const short = overlap - (weightStart * start + weightEnd * end);
+    if (short <= 0) continue;
+    // Lift the side the note is nearer; lifting only adds to the bulge everywhere.
+    if (u < 0.5) start += short / weightStart;
+    else end += short / weightEnd;
+  }
+  return [Math.min(start, 150), Math.min(end, 150)];
 }
 
 function svgEl(

@@ -9,6 +9,8 @@ describe("parseNote", () => {
       dotted: false,
       rest: false,
       tied: false,
+      slurStart: false,
+      slurEnd: false,
     });
     expect(parseNote("G4/16.", "q")).toEqual({
       key: "g/4",
@@ -16,6 +18,8 @@ describe("parseNote", () => {
       dotted: true,
       rest: false,
       tied: false,
+      slurStart: false,
+      slurEnd: false,
     });
     expect(parseNote("B4/8/r.", "q")).toEqual({
       key: "b/4",
@@ -23,6 +27,8 @@ describe("parseNote", () => {
       dotted: true,
       rest: true,
       tied: false,
+      slurStart: false,
+      slurEnd: false,
     });
   });
 
@@ -37,6 +43,8 @@ describe("parseNote", () => {
       dotted: true,
       rest: false,
       tied: true,
+      slurStart: false,
+      slurEnd: false,
     });
     expect(parseNote("A4~", "8")).toMatchObject({ key: "a/4", duration: "8", tied: true });
   });
@@ -49,6 +57,23 @@ describe("parseMeasures", () => {
     expect(bars[0].map((n) => n.duration)).toEqual(["h", "h"]);
     expect(bars[1].map((n) => n.duration)).toEqual(["q", "q", "h"]);
     expect(bars[1][2].rest).toBe(true);
+  });
+});
+
+describe("parseNote with slurs", () => {
+  it("reads ( as a slur's start and ) as its end, after any tie", () => {
+    expect(parseNote("(C4/q", "q")).toMatchObject({ key: "c/4", slurStart: true, slurEnd: false });
+    expect(parseNote("G4/q)", "q")).toMatchObject({ key: "g/4", slurStart: false, slurEnd: true });
+    expect(parseNote("G4/h~)", "q")).toMatchObject({
+      duration: "h",
+      tied: true,
+      slurEnd: true,
+    });
+    expect(parseNote("(A4)", "8")).toMatchObject({
+      duration: "8",
+      slurStart: true,
+      slurEnd: true,
+    });
   });
 });
 
@@ -66,8 +91,24 @@ describe("parseMeasures with dotted rests", () => {
     const bars = parseMeasures("B4/8/r., C4", "3/8");
     expect(bars).toHaveLength(1);
     expect(bars[0]).toEqual([
-      { key: "b/4", duration: "8", dotted: true, rest: true, tied: false },
-      { key: "c/4", duration: "8", dotted: true, rest: false, tied: false },
+      {
+        key: "b/4",
+        duration: "8",
+        dotted: true,
+        rest: true,
+        tied: false,
+        slurStart: false,
+        slurEnd: false,
+      },
+      {
+        key: "c/4",
+        duration: "8",
+        dotted: true,
+        rest: false,
+        tied: false,
+        slurStart: false,
+        slurEnd: false,
+      },
     ]);
   });
 });

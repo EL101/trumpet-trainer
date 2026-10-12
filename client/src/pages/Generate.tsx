@@ -45,6 +45,7 @@ import {
   RANGE_NOTES,
 } from "@/utils/generateMusic";
 import { clearHistory, getInitialHistory, insertToHistory } from "@/utils/history";
+import { generateLipSlurs } from "@/utils/lipSlurs";
 import { getInitialLibrary, saveToLibrary } from "@/utils/library";
 import { splitNotes } from "@/utils/splitNotes";
 import {
@@ -72,6 +73,8 @@ const GENERATORS: Partial<Record<ExerciseType, (settings: Settings) => string>> 
   // The margin only offers long tones at low or high difficulty (see TYPE_DIFFICULTIES).
   LONG_TONES: ({ measures, timeSig, key, range, difficulty }) =>
     generateLongTones(measures, timeSig, key, range, difficulty === "HIGH" ? "HIGH" : "LOW"),
+  LIP_SLURS: ({ measures, timeSig, key, range, difficulty }) =>
+    generateLipSlurs(measures, timeSig, key, range, difficulty),
   SCALES: ({ timeSig, key, range, difficulty }) =>
     generateScaleExercise(timeSig, key, range, difficulty),
   RANDOM: ({ measures, timeSig, key, range, difficulty }) =>
@@ -653,7 +656,7 @@ function SettingsMargin({ settings, onChange, onGenerate, ...rest }: SettingsMar
       >
         <PageHeader title="Generate" hideFrom="lg" mb="sm" />
 
-        <Field label="Exercise type" helper="Lip slurs and etudes are on the way.">
+        <Field label="Exercise type" helper="Etudes are on the way.">
           <RadioGroup
             aria-label="Exercise type"
             orientation="grid"

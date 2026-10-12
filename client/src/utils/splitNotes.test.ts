@@ -106,6 +106,18 @@ describe("splitNotes", () => {
     });
   });
 
+  describe("slurs", () => {
+    it("measures slurred notes by their values and keeps the marks", () => {
+      const result = splitNotes("(C4/q, G4/q, C5/q, G4/q), (E4/h, D4/h)", "4/4");
+      expect(result).toEqual(["(C4/q, G4/q, C5/q, G4/q)", "(E4/h, D4/h)"]);
+    });
+
+    it("keeps the marks on a carried duration that opens a bar", () => {
+      const result = splitNotes("C4/h, D4, (E4, F4)", "4/4");
+      expect(result).toEqual(["C4/h, D4", "(E4/h, F4)"]);
+    });
+  });
+
   describe("dotted notes", () => {
     it("handles dotted half note (3 beats) + quarter note (1 beat) in 4/4", () => {
       const result = splitNotes("C4/h., D4/q", "4/4");

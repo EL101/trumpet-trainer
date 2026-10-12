@@ -71,7 +71,7 @@ const RANGE_THRESHOLDS = Object.fromEntries(
 ) as Record<Range, (number | null)[]>;
 
 /** Every note of the key's scale inside the range, lowest first. */
-function scaleNotesInRange(key: Key, range: Range): string[] {
+export function scaleNotesInRange(key: Key, range: Range): string[] {
   const [low, high] = RANGE_THRESHOLDS[range];
   return Scale.get(key)
     .notes.flatMap((note) => [3, 4, 5, 6].map((octave) => `${note}${octave}`))
