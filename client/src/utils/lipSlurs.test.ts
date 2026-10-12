@@ -3,16 +3,21 @@ import { describe, expect, it } from "vitest";
 import { TIME_SIGNATURES } from "@/lib/generatorOptions";
 import { DIFFICULTIES, RANGES, type Difficulty, type Key } from "@/schema";
 import { RANGE_NOTES, scaleNotesInRange } from "./generateMusic";
-import { generateLipSlurs, lipSlurFingerings, partialsApart } from "./lipSlurs";
+import { generateLipSlurs, lipSlurFingerings, partialDistances, partialsApart } from "./lipSlurs";
 import { splitNotes } from "./splitNotes";
 
-const PARTIAL_LEAP: Record<Difficulty, number> = { LOW: 1, MED: 2, HIGH: Infinity };
+const SLUR_PARTIALS: Record<Difficulty, { min: number; max: number }> = {
+  LOW: { min: 1, max: 1 },
+  MED: { min: 1, max: 2 },
+  HIGH: { min: 2, max: Infinity },
+};
 
 const pitchesOf = (notes: string) =>
   notes.split(", ").map((token) => token.replace(/[()]/g, "").split("/")[0]);
 
 type Moves = {
-  slurs: number[];
+  /** For each slur on one fingering, how many partials apart its notes are on each. */
+  slurs: number[][];
   changes: { steps: number; groupStart: boolean }[];
   total: number;
 };
@@ -38,7 +43,7 @@ function generateMoves(key: Key, difficulty: Difficulty, timeSig: string): Moves
     const pitches = pitchesOf(generateLipSlurs(8, timeSig, key, "MED", difficulty));
     pitches.slice(1).forEach((pitch, i) => {
       const apart = partialsApart(pitches[i], pitch);
-      if (apart !== null) slurs.push(apart);
+      if (apart !== null) slurs.push(partialDistances(pitches[i], pitch));
       else {
         const steps = Math.abs(scale.indexOf(pitch) - scale.indexOf(pitches[i]));
         changes.push({ steps, groupStart: (i + 1) % groupSize === 0 });
@@ -54,6 +59,11 @@ describe("partialsApart", () => {
     expect(partialsApart("G4", "E5")).toBe(2); // open, over C5
     expect(partialsApart("C4", "C6")).toBe(5); // open, skipping the out-of-tune 7th
     expect(partialsApart("B4", "D5")).toBe(1); // 1 and 3
+  });
+
+  it("lists the distance on every fingering that plays both notes", () => {
+    expect(partialDistances("G4", "C5")).toEqual([1]); // open
+    expect(partialDistances("C5", "D5")).toEqual([]);
   });
 
   it("is null when no one fingering plays both notes", () => {
@@ -103,9 +113,9 @@ describe("generateLipSlurs", () => {
     for (const key of ["C major", "Eb major", "A minor"] as const) {
       for (const difficulty of DIFFICULTIES) {
         const { slurs, changes } = moves(key, difficulty);
-        for (const apart of slurs) {
-          expect(apart).toBeGreaterThan(0);
-          expect(apart).toBeLessThanOrEqual(PARTIAL_LEAP[difficulty]);
+        const { min, max } = SLUR_PARTIALS[difficulty];
+        for (const distances of slurs) {
+          expect(distances.some((apart) => apart >= min && apart <= max)).toBe(true);
         }
         for (const { steps } of changes) expect([1, 2]).toContain(steps);
       }

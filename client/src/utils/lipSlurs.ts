@@ -21,7 +21,11 @@ type Fingering = keyof typeof FINGERINGS;
 const FINGERING_NAMES: Fingering[] = ["0", "1", "2", "12", "13", "23", "123"];
 
 /** How many partials apart the notes of a slur on one fingering can be, at each difficulty. */
-const PARTIAL_LEAP: Record<Difficulty, number> = { LOW: 1, MED: 2, HIGH: Infinity };
+const SLUR_PARTIALS: Record<Difficulty, { min: number; max: number }> = {
+  LOW: { min: 1, max: 1 }, // the next partial: G4 to C5
+  MED: { min: 1, max: 2 }, // one or two: G4 to C5 or E5
+  HIGH: { min: 2, max: Infinity }, // two or more: G4 to E5, C4 to C5
+};
 
 /** The share of moves that change fingering. The rest slur on one fingering. */
 const CHANGE_SHARE = 0.1;
@@ -40,15 +44,20 @@ function partialOn(pitch: string, fingering: Fingering): number | null {
   return partial < 0 ? null : partial;
 }
 
+/** How many partials apart two notes are on each fingering that plays both. */
+export function partialDistances(a: string, b: string): number[] {
+  return FINGERING_NAMES.flatMap((fingering) => {
+    const [pa, pb] = [partialOn(a, fingering), partialOn(b, fingering)];
+    return pa === null || pb === null ? [] : [Math.abs(pa - pb)];
+  });
+}
+
 /**
  * How many partials apart two notes are on the fingering that brings them closest, or
  * null if no one fingering plays both (so moving between them changes fingering).
  */
 export function partialsApart(a: string, b: string): number | null {
-  const apart = FINGERING_NAMES.flatMap((fingering) => {
-    const [pa, pb] = [partialOn(a, fingering), partialOn(b, fingering)];
-    return pa === null || pb === null ? [] : [Math.abs(pa - pb)];
-  });
+  const apart = partialDistances(a, b);
   return apart.length ? Math.min(...apart) : null;
 }
 
@@ -59,11 +68,11 @@ function randomElement<T>(items: readonly T[]): T {
 /**
  * Lip slurs, all quarter notes (eighths in 6/8, 9/8, 12/8 and 3/8), over the bars asked
  * for, every note in the key and range, with a slur over each bar. About 90% of moves
- * slur to another note on the same fingering, as far as the difficulty allows (the next
- * partial at low, two at medium, any at high); the rest change fingering by a step or a
- * third (see `CHANGE_THIRDS`). Fingering changes come only at the start of a bar (a
- * beat in compound meters), so each group of notes stays on one fingering. The last note
- * is the tonic.
+ * slur to another note on the same fingering, as far as the difficulty sets (the next
+ * partial at low, one or two at medium, two or more at high; see `SLUR_PARTIALS`); the
+ * rest change fingering by a step or a third (see `CHANGE_THIRDS`). Fingering changes
+ * come only at the start of a bar (a beat in compound meters), so each group of notes
+ * stays on one fingering. The last note is the tonic.
  */
 export function generateLipSlurs(
   bars: number,
@@ -78,7 +87,8 @@ export function generateLipSlurs(
   const groupSize = compound ? 3 : perBar;
   // Changes can only come once a group, so they're likelier there to make up the share.
   const changeChance = Math.min(1, CHANGE_SHARE * groupSize);
-  const leap = PARTIAL_LEAP[difficulty];
+  const { min, max } = SLUR_PARTIALS[difficulty];
+  const slurSpan = (apart: number) => apart >= min && apart <= max;
   const pitches = scaleNotesInRange(key, range);
   const scaleSteps = (a: string, b: string) => Math.abs(pitches.indexOf(a) - pitches.indexOf(b));
 
@@ -87,7 +97,7 @@ export function generateLipSlurs(
     const from = partialOn(pitch, fingering)!;
     return pitches.filter((p) => {
       const to = partialOn(p, fingering);
-      return p !== pitch && to !== null && Math.abs(to - from) <= leap;
+      return p !== pitch && to !== null && slurSpan(Math.abs(to - from));
     });
   };
   /** The fingerings `pitch` can slur somewhere from. */
@@ -100,10 +110,7 @@ export function generateLipSlurs(
     return randomElement(FINGERING_NAMES.filter((f) => partialOn(pitch, f) !== null));
   };
   const tonic = Scale.get(key).tonic!;
-  const isSlur = (a: string, b: string) => {
-    const apart = partialsApart(a, b);
-    return a !== b && apart !== null && apart <= leap;
-  };
+  const isSlur = (a: string, b: string) => a !== b && partialDistances(a, b).some(slurSpan);
   // A change of fingering is a step or a third, onto a note that can slur on from there
   // (so it doesn't force another change straight away), or onto the tonic to end.
   const isChange = (a: string, b: string) =>
