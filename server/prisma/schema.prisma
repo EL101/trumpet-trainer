@@ -85,12 +85,44 @@ model User {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  avatar  UserAvatar?
-  history History[]
-  library Library[]
+  avatar           UserAvatar?
+  history          History[]
+  library          Library[]
+  etudeGenerations EtudeGeneration[]
 
   @@index([isAnonymous, lastSeenAt], map: "idx_users_anonymous_last_seen")
   @@map("users")
+}
+
+/// Where an etude request has got to. PENDING holds the user's place in their
+/// daily quota while Claude writes; FAILED rows still cost money but don't use
+/// up the quota, since the user got nothing for them.
+enum EtudeStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+
+  @@map("etude_status")
+}
+
+/// One request to Claude for an etude. Drives the per-user daily quota and the
+/// global daily spend cap, and records what each etude really cost.
+model EtudeGeneration {
+  id           String      @id @default(uuid())
+  userId       String      @map("user_id")
+  status       EtudeStatus @default(PENDING)
+  model        String
+  inputTokens  Int         @default(0) @map("input_tokens")
+  outputTokens Int         @default(0) @map("output_tokens")
+  /// Millionths of a dollar, so sums stay exact.
+  costMicros   Int         @default(0) @map("cost_micros")
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt], map: "idx_etude_generations_user_created")
+  @@index([createdAt], map: "idx_etude_generations_created")
+  @@map("etude_generations")
 }
 
 /// Uploaded avatar bytes, split out so the hot users row stays small.

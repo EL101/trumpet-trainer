@@ -3,6 +3,7 @@ import cors from "cors";
 import historyRouter from "./routes/history.js";
 import libraryRouter from "./routes/library.js";
 import profileRouter from "./routes/profile.js";
+import etudesRouter from "./routes/etudes.js";
 import { AVATAR_BODY_LIMIT } from "./avatar.js";
 
 export const app = express();
@@ -24,3 +25,4 @@ app.get("/", (_req: Request, res: Response) => {
 app.use("/api/history", historyRouter);
 app.use("/api/library", libraryRouter);
 app.use("/api/profile", profileRouter);
+app.use("/api/etudes", etudesRouter);

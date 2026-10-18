@@ -7,6 +7,12 @@ export {
   type ExerciseTable,
 } from "./exercise.js";
 export {
+  EtudeRequestSchema,
+  ETUDE_MEASURES,
+  ETUDE_CHARACTERS,
+  type EtudeRequest,
+} from "./etude.js";
+export {
   GuestTokenSchema,
   AvatarUploadSchema,
   type GuestTokenInput,
