@@ -3,7 +3,9 @@ import { costMicros } from "../src/etudes/claude.js";
 import { outputSchema } from "../src/etudes/generate.js";
 import {
   allowedDurations,
+  difficultyProblems,
   findProblems,
+  measureEtude,
   pitchesInRange,
   type EtudeOptions,
   type NoteEvent,
@@ -119,5 +121,77 @@ describe("costMicros", () => {
 
   it("prices an unknown model like the dearest", () => {
     expect(costMicros("claude-new-model", 1_000, 1_000)).toBe(60_000);
+  });
+});
+
+describe("measureEtude", () => {
+  it("counts short notes, leaps, span and notes outside the key", () => {
+    const bars = [
+      [n("F4", 0.5), n("Bb4", 0.5), n("D5", 1), n("E5", 2)],
+      [n("Bb4", 0.25), n("C5", 0.25), n("D5", 0.5), n(null, 1), n("F4", 2)],
+    ];
+    expect(measureEtude(bars, "Bb major")).toEqual({
+      notes: 8,
+      shortShare: 5 / 8,
+      sixteenths: 2,
+      leaps: 3, // F4 up to Bb4, E5 down to Bb4, D5 down to F4 across the rest
+      wideLeaps: 1,
+      largestLeap: 9,
+      span: 11,
+      chromatic: 1, // E natural
+    });
+  });
+
+  it("counts the raised 6th and 7th of a minor key as in the key", () => {
+    const bars = [[n("E5", 1), n("F#5", 1), n("G5", 2)]];
+    expect(measureEtude(bars, "G minor").chromatic).toBe(0);
+  });
+});
+
+describe("difficultyProblems", () => {
+  const plain = [
+    [n("Bb4", 2), n("C5", 2)],
+    [n("D5", 2), n("Bb4", 2)],
+  ];
+
+  it("says how an etude falls short of advanced", () => {
+    const problems = difficultyProblems(plain, { ...options, difficulty: "HIGH" });
+    expect(problems).toContain(
+      "Only 0% of the notes are eighths or shorter; this difficulty needs at least 40%.",
+    );
+    expect(problems).toContain("It only spans 4 semitones; use at least an 11th of the range.");
+    expect(problems).toContain("It has 0 notes outside the key; this difficulty needs at least 2.");
+  });
+
+  it("asks nothing of a beginner etude but keeping leaps small and using a 5th", () => {
+    expect(difficultyProblems(plain, { ...options, difficulty: "LOW" })).toEqual([
+      "It only spans 4 semitones; use at least a 5th of the range.",
+    ]);
+    const leapy = [[n("Bb4", 2), n("Bb5", 2)], [n("Bb4", 4)]];
+    expect(difficultyProblems(leapy, { ...options, difficulty: "LOW" })).toContain(
+      "Its widest leap is an octave; keep leaps to a 5th or less.",
+    );
+  });
+
+  it("only asks for sixteenths where the meter and difficulty allow them", () => {
+    const problems = difficultyProblems(plain, { ...options, difficulty: "MED" });
+    expect(problems.some((p) => p.includes("sixteenths"))).toBe(false);
+  });
+});
+
+describe("userMessage targets", () => {
+  it("lists advanced difficulty's targets", () => {
+    const text = userMessage({ ...options, difficulty: "HIGH" });
+    expect(text).toContain("Difficulty: advanced. Make it genuinely demanding");
+    expect(text).toContain("- At least 4 sixteenths or dotted eighths, mostly in runs.");
+    expect(text).toContain("- At least 6 leaps of a 4th or more, 3 of them a 5th or wider.");
+    expect(text).toContain("- At least 2 notes outside the key (accidentals).");
+  });
+
+  it("asks a beginner etude only to keep leaps small and cover a 5th", () => {
+    const text = userMessage({ ...options, difficulty: "LOW" });
+    expect(text).toContain(
+      "Targets:\n- No leap wider than a 5th.\n- The lowest and highest notes are at least a 5th apart.",
+    );
   });
 });

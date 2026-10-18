@@ -445,7 +445,7 @@ function CurrentExercise({
                 Writing your etude…
               </Text>
               <Text fontSize="13px" color="fg.subtle">
-                This usually takes 10 to 40 seconds.
+                This can take up to a minute.
               </Text>
             </Flex>
           ) : exercise ? (

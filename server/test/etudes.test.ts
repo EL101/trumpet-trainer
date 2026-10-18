@@ -16,11 +16,19 @@ vi.mock("../src/etudes/claude.js", async (importOriginal) => ({
 
 const n = (pitch: string | null, quarters: number): NoteEvent => ({ pitch, quarters });
 
-/** Four bars of 4/4 in Bb major that pass every check. */
+/** Four bars of 4/4 in Bb major that pass every check, and meet medium difficulty's targets. */
 const GOOD_BARS = [
-  [n("D4", 2), n("F4", 1), n(null, 1)],
-  [n("G4", 1.5), n("A4", 0.5), n("Bb4", 2)],
-  [n("C5", 1), n("D5", 1), n("C5", 1), n("A4", 1)],
+  [n("F4", 0.5), n("Bb4", 0.5), n("D5", 1), n("F5", 2)],
+  [n("Eb5", 0.5), n("C5", 0.5), n("A4", 1), n("F4", 2)],
+  [n("D4", 1), n("F4", 0.5), n("Bb4", 0.5), n("D5", 1), n(null, 1)],
+  [n("F4", 2), n("Bb4", 2)],
+];
+
+/** Four bars that pass every check but are far too easy for advanced. */
+const EASY_BARS = [
+  [n("Bb4", 2), n("C5", 2)],
+  [n("D5", 2), n("C5", 2)],
+  [n("Bb4", 1), n("C5", 1), n("D5", 2)],
   [n("Bb4", 4)],
 ];
 
@@ -104,6 +112,22 @@ describe("POST /api/etudes", () => {
     expect(retry[2].content).toContain("Bar 1 adds up to 3 quarter notes");
     const [row] = await rows(uid);
     expect(row).toMatchObject({ inputTokens: 2_000, outputTokens: 4_000, costMicros: 2_200 });
+  });
+
+  it("asks again when an etude is too easy for its difficulty, then keeps the retry", async () => {
+    claude.create.mockResolvedValue(reply(EASY_BARS));
+
+    const res = await post(tokenFor(googleClaims(newUid())), { ...body, difficulty: "HIGH" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.bars).toEqual(EASY_BARS);
+    expect(claude.create).toHaveBeenCalledTimes(2);
+    const [first, second] = claude.create.mock.calls.map((call) => call[0]);
+    expect(first.output_config.effort).toBe("medium");
+    expect(first.messages[0].content).toContain(
+      "At least 40% of the notes are eighths or shorter.",
+    );
+    expect(second.messages[2].content).toContain("this difficulty needs at least 40%");
   });
 
   it("gives up after two bad attempts with 502, without using up the quota", async () => {

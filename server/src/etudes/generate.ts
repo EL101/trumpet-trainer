@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ETUDE_MODEL } from "./claude.js";
 import {
   allowedDurations,
+  difficultyProblems,
   findProblems,
   pitchesInRange,
   type EtudeOptions,
@@ -66,10 +67,16 @@ const ReplySchema = z.object({
 /** First attempt, plus one more that's told what was wrong with the first. */
 const MAX_ATTEMPTS = 2;
 
+/** Harder etudes get more thought: meeting their targets while staying musical takes it. */
+const EFFORT = { LOW: "low", MED: "low", HIGH: "medium" } as const;
+
 /**
  * Ask Claude for an etude and check it. Returns bars that pass every check in
  * `findProblems`, or throws an EtudeFailure saying what went wrong and what it
- * cost. `focus` passes straight through to the prompt.
+ * cost. Falling short of the difficulty's targets (`difficultyProblems`) also
+ * earns a retry, but an etude still short of them after it is kept: a playable
+ * etude a little easier than asked beats none. `focus` passes straight through
+ * to the prompt.
  */
 export async function writeEtude(
   client: Anthropic,
@@ -93,7 +100,10 @@ export async function writeEtude(
         max_tokens: 16000,
         system: SYSTEM_PROMPT,
         messages,
-        output_config: { effort: "low", format: { type: "json_schema", schema } },
+        output_config: {
+          effort: EFFORT[options.difficulty],
+          format: { type: "json_schema", schema },
+        },
       });
     } catch (err) {
       throw apiFailure(err, usage);
@@ -113,11 +123,14 @@ export async function writeEtude(
 
     const bars = parseBars(response);
     problems = bars ? findProblems(bars, options) : ["The reply wasn't in the required format."];
-    if (problems.length === 0) return { bars: bars!, usage };
+    const tooEasy = bars ? difficultyProblems(bars, options) : [];
+    if (problems.length === 0 && (tooEasy.length === 0 || attempt === MAX_ATTEMPTS)) {
+      return { bars: bars!, usage };
+    }
 
     messages.push(
       { role: "assistant", content: response.content },
-      { role: "user", content: fixMessage(problems) },
+      { role: "user", content: fixMessage([...problems, ...tooEasy]) },
     );
   }
 

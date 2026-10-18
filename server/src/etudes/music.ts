@@ -102,6 +102,150 @@ export function allowedDurations(difficulty: Difficulty, timeSig: string): numbe
   return durations.filter((q) => q <= barLength(timeSig));
 }
 
+/**
+ * What makes an etude as hard as its difficulty says, as things that can be counted.
+ * The prompt states them and `difficultyProblems` checks them, so the two can't drift.
+ * A leap is 5 semitones (a 4th) or more between neighbouring notes; a wide leap is 7
+ * (a 5th) or more; the span is the distance from the lowest note to the highest.
+ */
+export type DifficultyTargets = {
+  /** Share of notes that are eighths or shorter. */
+  minShortShare: number;
+  /** Sixteenths or dotted eighths, when the difficulty allows them. */
+  minSixteenths: number;
+  minLeaps: number;
+  minWideLeaps: number;
+  /** No leap wider than this, in semitones. */
+  maxLeap: number;
+  minSpan: number;
+  /** Notes outside the key (raised 6ths and 7ths in minor count as in the key). */
+  minChromatic: number;
+};
+
+export const DIFFICULTY_TARGETS: Record<Difficulty, DifficultyTargets> = {
+  LOW: {
+    minShortShare: 0,
+    minSixteenths: 0,
+    minLeaps: 0,
+    minWideLeaps: 0,
+    maxLeap: 7,
+    minSpan: 7,
+    minChromatic: 0,
+  },
+  MED: {
+    minShortShare: 0.25,
+    minSixteenths: 0,
+    minLeaps: 3,
+    minWideLeaps: 1,
+    maxLeap: 12,
+    minSpan: 12,
+    minChromatic: 0,
+  },
+  HIGH: {
+    minShortShare: 0.4,
+    minSixteenths: 4,
+    minLeaps: 6,
+    minWideLeaps: 3,
+    maxLeap: 15,
+    minSpan: 17,
+    minChromatic: 2,
+  },
+};
+
+const INTERVAL_NAMES: Record<number, string> = {
+  5: "a 4th",
+  7: "a 5th",
+  12: "an octave",
+  15: "a 10th",
+  17: "an 11th",
+};
+
+/** "an octave", or "12 semitones" for a distance with no name above. */
+export const intervalName = (semitones: number) =>
+  INTERVAL_NAMES[semitones] ?? `${semitones} semitones`;
+
+const MAJOR_STEPS = [0, 2, 4, 5, 7, 9, 11];
+// Natural minor, plus the raised 6th and 7th of melodic and harmonic minor.
+const MINOR_STEPS = [0, 2, 3, 5, 7, 8, 9, 10, 11];
+
+/** Pitch classes (0 = C) that belong to the key. */
+function keyPitchClasses(musicKey: string): Set<number> {
+  const [tonic, quality] = musicKey.split(" ");
+  const root = midi(`${tonic}4`)! % 12;
+  const steps = quality === "minor" ? MINOR_STEPS : MAJOR_STEPS;
+  return new Set(steps.map((s) => (root + s) % 12));
+}
+
+/** The counts `DIFFICULTY_TARGETS` are about, for one etude. */
+export function measureEtude(bars: readonly (readonly NoteEvent[])[], musicKey: string) {
+  const notes = bars.flat().filter((e) => e.pitch !== null);
+  const pitches = notes.map((e) => midi(e.pitch!)!);
+  const steps = pitches.slice(1).map((p, i) => Math.abs(p - pitches[i]));
+  const inKey = keyPitchClasses(musicKey);
+  return {
+    notes: notes.length,
+    shortShare: notes.length ? notes.filter((e) => e.quarters <= 0.5).length / notes.length : 0,
+    sixteenths: notes.filter((e) => e.quarters === 0.25 || e.quarters === 0.75).length,
+    leaps: steps.filter((s) => s >= 5).length,
+    wideLeaps: steps.filter((s) => s >= 7).length,
+    largestLeap: Math.max(0, ...steps),
+    span: pitches.length ? Math.max(...pitches) - Math.min(...pitches) : 0,
+    chromatic: pitches.filter((p) => !inKey.has(p % 12)).length,
+  };
+}
+
+/**
+ * Where an etude falls short of (or, for beginners, goes past) its difficulty, as
+ * sentences Claude can act on. Unlike `findProblems`, these don't make an etude
+ * unusable: an etude still short of them after its retry is kept.
+ */
+export function difficultyProblems(
+  bars: readonly (readonly NoteEvent[])[],
+  options: EtudeOptions,
+): string[] {
+  const target = DIFFICULTY_TARGETS[options.difficulty];
+  const m = measureEtude(bars, options.musicKey);
+  const sixteenthsAllowed = allowedDurations(options.difficulty, options.timeSig).includes(0.25);
+  const problems: string[] = [];
+
+  if (m.shortShare < target.minShortShare) {
+    problems.push(
+      `Only ${Math.round(m.shortShare * 100)}% of the notes are eighths or shorter; this difficulty needs at least ${target.minShortShare * 100}%.`,
+    );
+  }
+  if (sixteenthsAllowed && m.sixteenths < target.minSixteenths) {
+    problems.push(
+      `It has ${m.sixteenths} sixteenths or dotted eighths; this difficulty needs at least ${target.minSixteenths}.`,
+    );
+  }
+  if (m.leaps < target.minLeaps) {
+    problems.push(
+      `It has ${m.leaps} leaps of a 4th or more; this difficulty needs at least ${target.minLeaps}.`,
+    );
+  }
+  if (m.wideLeaps < target.minWideLeaps) {
+    problems.push(
+      `It has ${m.wideLeaps} leaps of a 5th or more; this difficulty needs at least ${target.minWideLeaps}.`,
+    );
+  }
+  if (m.largestLeap > target.maxLeap) {
+    problems.push(
+      `Its widest leap is ${intervalName(m.largestLeap)}; keep leaps to ${intervalName(target.maxLeap)} or less.`,
+    );
+  }
+  if (m.span < target.minSpan) {
+    problems.push(
+      `It only spans ${intervalName(m.span)}; use at least ${intervalName(target.minSpan)} of the range.`,
+    );
+  }
+  if (m.chromatic < target.minChromatic) {
+    problems.push(
+      `It has ${m.chromatic} notes outside the key; this difficulty needs at least ${target.minChromatic}.`,
+    );
+  }
+  return problems;
+}
+
 /** What an etude is asked for. Matches the request body of POST /api/etudes. */
 export type EtudeOptions = {
   musicKey: string;
