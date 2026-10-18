@@ -57,8 +57,8 @@ src/
 │   ├── tokens.ts          Fonts, spacing, radii, shadows, sizes; registers the roles.
 │   ├── textStyles.ts      Type scale: display.*, heading.*, kicker, meta, figure.*
 │   ├── globalCss.ts       Page background, heading font, focus ring, text selection.
-│   ├── keyframes.ts       Entrance animations (rise-in, pop-in, wipe-in, draw-on, …) and
-│   │                      one exit (sink-out).
+│   ├── keyframes.ts       Entrance animations (rise-in, pop-in, wipe-in, draw-on, …), one
+│   │                      exit (sink-out) and one loop for waiting (write-note).
 │   ├── recipes/           Variant definitions per component (button primary/secondary/…)
 │   └── index.ts           Builds the Chakra `system` and re-exports everything.
 │
@@ -82,7 +82,8 @@ src/
 ├── lib/                   Pure helpers for the new UI (intonation colours, formatting,
 │                          the generator's keys, time signatures and labels).
 ├── utils/                 App logic: music generation (generateMusic, lipSlurs, built on
-│                          rhythm, melody and notate), API calls, history, library,
+│                          rhythm, melody and notate), etudes (written by Claude on the
+│                          server, fetched by etudes.ts), API calls, history, library,
 │                          profile, image handling.
 ├── hooks/                 usePitch (microphone), useMetronome, usePersistedState
 ├── auth/                  Firebase sign-in: useAuth() for state; auth.ts signs in, links

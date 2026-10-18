@@ -37,6 +37,20 @@ export type TimeSignature = (typeof TIME_SIGNATURES)[number];
 
 export const MEASURE_LIMITS = { min: 1, max: 8 } as const;
 
+/** Bars an etude can be. Mirrors the server's ETUDE_MEASURES: phrases need room. */
+export const ETUDE_MEASURE_LIMITS = { min: 4, max: 16 } as const;
+
+/** The bars each exercise type can be. */
+export function measureLimitsFor(type: ExerciseType): { min: number; max: number } {
+  return type === "ETUDES" ? ETUDE_MEASURE_LIMITS : MEASURE_LIMITS;
+}
+
+/** `measures`, moved inside the type's limits if it's outside them. */
+export function measuresFor(type: ExerciseType, measures: number): number {
+  const { min, max } = measureLimitsFor(type);
+  return Math.min(max, Math.max(min, measures));
+}
+
 export const EXERCISE_TYPE_LABELS: Record<ExerciseType, string> = {
   LONG_TONES: "Long tones",
   SCALES: "Scales",

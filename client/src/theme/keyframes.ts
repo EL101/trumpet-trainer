@@ -1,10 +1,10 @@
 import { defineKeyframes } from "@chakra-ui/react";
 
 /**
- * Entrance animations, and one exit. Most entrances have only a `from` frame, so they
- * animate to however the element already looks. Run them with fill-mode `backwards`
- * (hidden during the delay, back to normal styles afterwards) and gate them behind
- * `_motionSafe`.
+ * Entrance animations, one exit, and one loop for waiting. Most entrances have only a
+ * `from` frame, so they animate to however the element already looks. Run them with
+ * fill-mode `backwards` (hidden during the delay, back to normal styles afterwards) and
+ * gate them behind `_motionSafe`.
  */
 export const keyframes = defineKeyframes({
   /** Fade in from transparent to the element's own opacity. */
@@ -26,5 +26,15 @@ export const keyframes = defineKeyframes({
   "wipe-in": {
     from: { clipPath: "inset(-50% 100% -50% 0)" },
     to: { clipPath: "inset(-50% 0 -50% 0)" },
+  },
+  /**
+   * Waiting: a note is written in, held, then fades for the next round. Loop it
+   * (`infinite`), staggering each note's delay so they appear one after another.
+   */
+  "write-note": {
+    "0%": { opacity: 0, transform: "translateY(3px)" },
+    "15%": { opacity: 1, transform: "translateY(0)" },
+    "70%": { opacity: 1 },
+    "90%, 100%": { opacity: 0 },
   },
 });
