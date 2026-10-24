@@ -4,6 +4,8 @@ import request from "supertest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db.js";
 import type { NoteEvent } from "../src/etudes/music.js";
+import { etudesSettled } from "../src/etudes/run.js";
+import { STALE_AFTER_MS } from "../src/queries/etudes.js";
 import { googleClaims, guestClaims, tokenFor } from "./firebaseMock.js";
 import { createUser, newUid } from "./helpers.js";
 
@@ -23,6 +25,9 @@ const GOOD_BARS = [
   [n("D4", 1), n("F4", 0.5), n("Bb4", 0.5), n("D5", 1), n(null, 1)],
   [n("F4", 2), n("Bb4", 2)],
 ];
+/** GOOD_BARS as history stores them. */
+const GOOD_NOTES =
+  "F4/8, Bb4/8, D5/q, F5/h, Eb5/8, C5/8, A4/q, F4/h, D4/q, F4/8, Bb4/8, D5/q, B4/q/r, F4/h, Bb4/h";
 
 /** Four bars that pass every check but are far too easy for advanced. */
 const EASY_BARS = [
@@ -47,11 +52,22 @@ const reply = (bars: unknown, usage = { input_tokens: 1_000, output_tokens: 2_00
   usage,
 });
 
+const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
+
 const post = (token: string, data: object = body) =>
-  request(app)
-    .post("/api/etudes")
-    .set({ Authorization: `Bearer ${token}` })
-    .send(data);
+  request(app).post("/api/etudes").set(auth(token)).send(data);
+
+const get = (token: string, path: string) =>
+  request(app).get(`/api/etudes${path}`).set(auth(token));
+
+/** Start an etude, let it finish, and return how it ended as GET /api/etudes/:id reports it. */
+async function generate(token: string, data: object = body) {
+  const started = await post(token, data);
+  await etudesSettled();
+  if (started.status !== 202) return { started, finished: null };
+  const finished = await get(token, `/${started.body.etude.id}`);
+  return { started, finished };
+}
 
 const rows = (userId: string) => prisma.etudeGeneration.findMany({ where: { userId } });
 
@@ -60,20 +76,39 @@ beforeEach(() => {
   claude.available = true;
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await etudesSettled();
   vi.unstubAllEnvs();
 });
 
 describe("POST /api/etudes", () => {
-  it("returns the etude and records what it cost", async () => {
+  it("answers at once, then writes the etude, saves it to history and records its cost", async () => {
     const uid = newUid();
+    const token = tokenFor(googleClaims(uid));
     claude.create.mockResolvedValueOnce(reply(GOOD_BARS));
 
-    const res = await post(tokenFor(googleClaims(uid)));
+    const { started, finished } = await generate(token);
 
-    expect(res.status).toBe(200);
-    expect(res.body.bars).toEqual(GOOD_BARS);
-    expect(res.body.quota).toMatchObject({ limit: 10, remaining: 9 });
+    expect(started.status).toBe(202);
+    expect(started.body.etude).toMatchObject({ status: "PENDING", exercise: null });
+    expect(started.body.quota).toMatchObject({ limit: 10, remaining: 9 });
+
+    expect(finished!.status).toBe(200);
+    expect(finished!.body.etude).toMatchObject({
+      status: "SUCCEEDED",
+      error: null,
+      exercise: {
+        exerciseType: "ETUDES",
+        notes: GOOD_NOTES,
+        musicKey: "Bb major",
+        timeSig: "4/4",
+        noteRange: "MED",
+        difficulty: "MED",
+        generationNum: 1,
+      },
+    });
+    const history = await prisma.history.findMany({ where: { userId: uid } });
+    expect(history).toHaveLength(1);
     const [row] = await rows(uid);
     // Haiku 5.5: 1,000 tokens in at $0.10/M and 2,000 out at $0.50/M.
     expect(row).toMatchObject({
@@ -82,12 +117,13 @@ describe("POST /api/etudes", () => {
       inputTokens: 1_000,
       outputTokens: 2_000,
       costMicros: 1_100,
+      exerciseId: history[0].exerciseId,
     });
   });
 
   it("sends a schema that limits pitches to the range and values to the difficulty", async () => {
     claude.create.mockResolvedValueOnce(reply(GOOD_BARS));
-    await post(tokenFor(googleClaims(newUid())));
+    await generate(tokenFor(googleClaims(newUid())));
 
     const params = claude.create.mock.calls[0][0];
     expect(params.model).toBe("claude-haiku-5-5");
@@ -103,9 +139,9 @@ describe("POST /api/etudes", () => {
       .mockResolvedValueOnce(reply([[n("D4", 3)], ...GOOD_BARS.slice(1)]))
       .mockResolvedValueOnce(reply(GOOD_BARS));
 
-    const res = await post(tokenFor(googleClaims(uid)));
+    const { finished } = await generate(tokenFor(googleClaims(uid)));
 
-    expect(res.status).toBe(200);
+    expect(finished!.body.etude.status).toBe("SUCCEEDED");
     const retry = claude.create.mock.calls[1][0].messages;
     expect(retry).toHaveLength(3);
     expect(retry[1].role).toBe("assistant");
@@ -117,10 +153,12 @@ describe("POST /api/etudes", () => {
   it("asks again when an etude is too easy for its difficulty, then keeps the retry", async () => {
     claude.create.mockResolvedValue(reply(EASY_BARS));
 
-    const res = await post(tokenFor(googleClaims(newUid())), { ...body, difficulty: "HIGH" });
+    const { finished } = await generate(tokenFor(googleClaims(newUid())), {
+      ...body,
+      difficulty: "HIGH",
+    });
 
-    expect(res.status).toBe(200);
-    expect(res.body.bars).toEqual(EASY_BARS);
+    expect(finished!.body.etude.status).toBe("SUCCEEDED");
     expect(claude.create).toHaveBeenCalledTimes(2);
     const [first, second] = claude.create.mock.calls.map((call) => call[0]);
     expect(first.output_config.effort).toBe("medium");
@@ -130,15 +168,20 @@ describe("POST /api/etudes", () => {
     expect(second.messages[2].content).toContain("this difficulty needs at least 40%");
   });
 
-  it("gives up after two bad attempts with 502, without using up the quota", async () => {
+  it("records a failure with its message, without using up the quota or saving anything", async () => {
     const uid = newUid();
     claude.create.mockResolvedValue(reply([[n("Bb4", 4)]]));
 
-    const res = await post(tokenFor(googleClaims(uid)));
+    const { finished } = await generate(tokenFor(googleClaims(uid)));
 
-    expect(res.status).toBe(502);
     expect(claude.create).toHaveBeenCalledTimes(2);
-    expect(res.body.quota).toMatchObject({ remaining: 10 });
+    expect(finished!.body.etude).toMatchObject({
+      status: "FAILED",
+      error: "Couldn't write a usable etude this time. Try again.",
+      exercise: null,
+    });
+    expect(finished!.body.quota).toMatchObject({ remaining: 10 });
+    expect(await prisma.history.count({ where: { userId: uid } })).toBe(0);
     const [row] = await rows(uid);
     expect(row).toMatchObject({ status: "FAILED", costMicros: 2_200 });
   });
@@ -149,27 +192,31 @@ describe("POST /api/etudes", () => {
       stop_reason: "end_turn",
       usage: { input_tokens: 10, output_tokens: 10 },
     });
-    const res = await post(tokenFor(googleClaims(newUid())));
-    expect(res.status).toBe(502);
+    const { finished } = await generate(tokenFor(googleClaims(newUid())));
+    expect(finished!.body.etude.status).toBe("FAILED");
   });
 
   it("doesn't retry a refusal", async () => {
     claude.create.mockResolvedValue({ ...reply(GOOD_BARS), stop_reason: "refusal" });
-    const res = await post(tokenFor(googleClaims(newUid())));
-    expect(res.status).toBe(502);
+    const { finished } = await generate(tokenFor(googleClaims(newUid())));
+    expect(finished!.body.etude.status).toBe("FAILED");
     expect(claude.create).toHaveBeenCalledTimes(1);
   });
 
-  it("answers 503 when Anthropic is busy, and keeps no record of a call that cost nothing", async () => {
+  it("says so when Anthropic is busy, at no cost", async () => {
     const uid = newUid();
     claude.create.mockRejectedValue(
       new Anthropic.RateLimitError(429, undefined, "rate limited", new Headers()),
     );
 
-    const res = await post(tokenFor(googleClaims(uid)));
+    const { finished } = await generate(tokenFor(googleClaims(uid)));
 
-    expect(res.status).toBe(503);
-    expect(await rows(uid)).toHaveLength(0);
+    expect(finished!.body.etude).toMatchObject({
+      status: "FAILED",
+      error: "The etude writer can't be reached right now. Try again in a minute.",
+    });
+    const [row] = await rows(uid);
+    expect(row.costMicros).toBe(0);
   });
 
   it("answers 503 when no API credentials are set up", async () => {
@@ -191,14 +238,98 @@ describe("POST /api/etudes", () => {
   });
 });
 
+describe("an etude being written", () => {
+  /** Claude's reply waits until `finish` is called, so the etude stays pending meanwhile. */
+  function holdReply() {
+    let finish!: () => void;
+    claude.create.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = () => resolve(reply(GOOD_BARS));
+      }),
+    );
+    return () => finish();
+  }
+
+  it("is reported by GET /api/etudes/quota, so a reloaded page can wait for it", async () => {
+    const token = tokenFor(googleClaims(newUid()));
+    const finish = holdReply();
+    const started = await post(token);
+
+    const during = await get(token, "/quota");
+    expect(during.body).toMatchObject({
+      remaining: 9,
+      pending: { id: started.body.etude.id, status: "PENDING" },
+    });
+
+    finish();
+    await etudesSettled();
+    expect((await get(token, "/quota")).body.pending).toBeNull();
+  });
+
+  it("keeps a second from starting until it's done", async () => {
+    const token = tokenFor(googleClaims(newUid()));
+    const finish = holdReply();
+    const started = await post(token);
+
+    const second = await post(token);
+
+    expect(second.status).toBe(409);
+    expect(second.body.etude.id).toBe(started.body.etude.id);
+    finish();
+  });
+
+  it("is given up as interrupted once it's been pending too long, returning its quota", async () => {
+    const uid = newUid();
+    await createUser(uid);
+    const stale = await prisma.etudeGeneration.create({
+      data: {
+        userId: uid,
+        model: "claude-haiku-5-5",
+        createdAt: new Date(Date.now() - STALE_AFTER_MS - 1000),
+      },
+    });
+    const token = tokenFor(googleClaims(uid));
+
+    const res = await get(token, `/${stale.id}`);
+
+    expect(res.body.etude).toMatchObject({
+      status: "FAILED",
+      error: "Writing that etude was interrupted. Try again.",
+    });
+    expect(res.body.quota.remaining).toBe(10);
+  });
+
+  it("is the only one per user the database allows", async () => {
+    const uid = newUid();
+    await createUser(uid);
+    const pending = { userId: uid, model: "claude-haiku-5-5" };
+    await prisma.etudeGeneration.create({ data: pending });
+    await prisma.etudeGeneration.create({ data: { ...pending, status: "FAILED" } });
+
+    await expect(prisma.etudeGeneration.create({ data: pending })).rejects.toMatchObject({
+      code: "P2002",
+    });
+  });
+
+  it("is only shown to its own user", async () => {
+    const finish = holdReply();
+    const started = await post(tokenFor(googleClaims(newUid())));
+
+    const res = await get(tokenFor(googleClaims(newUid())), `/${started.body.etude.id}`);
+
+    expect(res.status).toBe(404);
+    finish();
+  });
+});
+
 describe("etude quota", () => {
   it("stops a user at the daily limit with 429 and when a slot frees", async () => {
     vi.stubEnv("ETUDE_DAILY_LIMIT", "2");
     const token = tokenFor(googleClaims(newUid()));
     claude.create.mockResolvedValue(reply(GOOD_BARS));
 
-    expect((await post(token)).status).toBe(200);
-    expect((await post(token)).status).toBe(200);
+    expect((await generate(token)).started.status).toBe(202);
+    expect((await generate(token)).started.status).toBe(202);
     const res = await post(token);
 
     expect(res.status).toBe(429);
@@ -211,9 +342,7 @@ describe("etude quota", () => {
     const token = tokenFor(guestClaims(newUid("guest")));
 
     const res = await post(token);
-    const quota = await request(app)
-      .get("/api/etudes/quota")
-      .set({ Authorization: `Bearer ${token}` });
+    const quota = await get(token, "/quota");
 
     expect(res.status).toBe(403);
     expect(res.body.error).toMatch(/Profile and settings/);
@@ -235,37 +364,37 @@ describe("etude quota", () => {
     });
     claude.create.mockResolvedValue(reply(GOOD_BARS));
 
-    expect((await post(tokenFor(googleClaims(uid)))).status).toBe(200);
+    expect((await generate(tokenFor(googleClaims(uid)))).started.status).toBe(202);
   });
 
-  it("lets only the limit through when requests arrive at once", async () => {
-    vi.stubEnv("ETUDE_DAILY_LIMIT", "2");
+  it("starts only one etude when requests arrive at once", async () => {
     const uid = newUid();
     await createUser(uid);
     const token = tokenFor(googleClaims(uid));
-    claude.create.mockResolvedValue(reply(GOOD_BARS));
+    // Claude doesn't answer until every request is in, so the first stays pending.
+    let finish!: () => void;
+    const answered = new Promise<void>((resolve) => (finish = resolve));
+    claude.create.mockImplementation(() => answered.then(() => reply(GOOD_BARS)));
 
     const statuses = (await Promise.all(Array.from({ length: 6 }, () => post(token)))).map(
       (r) => r.status,
     );
+    finish();
 
-    expect(statuses.filter((s) => s === 200)).toHaveLength(2);
-    expect(statuses.filter((s) => s === 429)).toHaveLength(4);
-    expect(await rows(uid)).toHaveLength(2);
+    expect(statuses.filter((s) => s === 202)).toHaveLength(1);
+    expect(statuses.filter((s) => s === 409)).toHaveLength(5);
+    expect(await rows(uid)).toHaveLength(1);
   });
 
   it("GET /api/etudes/quota reports what's left", async () => {
-    const uid = newUid();
-    const token = tokenFor(googleClaims(uid));
+    const token = tokenFor(googleClaims(newUid()));
     claude.create.mockResolvedValue(reply(GOOD_BARS));
-    await post(token);
+    await generate(token);
 
-    const res = await request(app)
-      .get("/api/etudes/quota")
-      .set({ Authorization: `Bearer ${token}` });
+    const res = await get(token, "/quota");
 
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ limit: 10, remaining: 9 });
+    expect(res.body).toMatchObject({ limit: 10, remaining: 9, pending: null });
   });
 });
 

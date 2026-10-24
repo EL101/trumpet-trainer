@@ -1,12 +1,13 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { EtudeRequestSchema } from "../schema/index.js";
-import { anthropic, costMicros, ETUDE_MODEL } from "../etudes/claude.js";
-import { EtudeFailure, writeEtude, type TokenUsage } from "../etudes/generate.js";
+import { z } from "zod";
+import { anthropic, ETUDE_MODEL } from "../etudes/claude.js";
+import { startEtude } from "../etudes/run.js";
 import {
   etudeQuota,
-  finishEtude,
-  releaseEtude,
+  findEtude,
+  pendingEtude,
   reserveEtude,
   spendTodayMicros,
 } from "../queries/etudes.js";
@@ -37,15 +38,26 @@ function refuseGuests(req: Request, res: Response, next: NextFunction) {
 /** Spend across all users, per UTC day, after which etudes pause until midnight. */
 const dailySpendCapMicros = () => envNumber("ETUDE_DAILY_SPEND_USD", 5) * 1_000_000;
 
+/**
+ * The user's quota, and the etude they're waiting for if there is one, so a page
+ * that was reloaded or left mid-etude can pick it up again.
+ */
 router.get("/quota", requireAuth, refuseGuests, async (req: Request, res: Response) => {
   try {
-    res.json(await etudeQuota(req.user!.uid, dailyLimit()));
+    const uid = req.user!.uid;
+    const [quota, pending] = await Promise.all([etudeQuota(uid, dailyLimit()), pendingEtude(uid)]);
+    res.json({ ...quota, pending });
   } catch (err) {
     console.error("Failed to load etude quota:", err);
     res.status(500).json({ error: "Failed to load etude quota" });
   }
 });
 
+/**
+ * Start an etude. Answers 202 straight away: Claude writes it in the background
+ * and the server saves it to the user's history, so leaving or reloading the page
+ * loses nothing. GET /api/etudes/:id says when it's done.
+ */
 router.post("/", requireAuth, refuseGuests, async (req: Request, res: Response) => {
   const parsed = EtudeRequestSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -72,56 +84,39 @@ router.post("/", requireAuth, refuseGuests, async (req: Request, res: Response) 
     return res.status(500).json({ error: "Failed to start the etude" });
   }
 
-  const { reserved, quota } = reservation;
-  if (!reserved) {
-    return res.status(429).json({
-      error: `You've used all ${limit} etudes for today.`,
+  const { reserved, pending, quota } = reservation;
+  if (pending) {
+    return res.status(409).json({
+      error: "An etude is already being written. It'll be ready shortly.",
+      etude: pending,
       quota,
     });
   }
-
-  try {
-    const { bars, usage } = await writeEtude(client, parsed.data);
-    await settle(reserved.id, "SUCCEEDED", usage);
-    res.json({ bars, quota });
-  } catch (err) {
-    const usage = err instanceof EtudeFailure ? err.usage : { inputTokens: 0, outputTokens: 0 };
-    console.error("Failed to write an etude:", err);
-    await settle(reserved.id, "FAILED", usage);
-    const after = await etudeQuota(uid, limit).catch(() => quota);
-
-    if (err instanceof EtudeFailure && err.kind === "unavailable") {
-      return res.status(503).json({
-        error: "The etude writer can't be reached right now. Try again in a minute.",
-        quota: after,
-      });
-    }
-    if (err instanceof EtudeFailure && err.kind === "bad_output") {
-      return res.status(502).json({
-        error: "Couldn't write a usable etude this time. Try again.",
-        quota: after,
-      });
-    }
-    res.status(500).json({ error: "Failed to write the etude", quota: after });
+  if (!reserved) {
+    return res.status(429).json({ error: `You've used all ${limit} etudes for today.`, quota });
   }
+
+  startEtude(client, reserved.id, uid, parsed.data);
+  res.status(202).json({
+    etude: { id: reserved.id, status: reserved.status, error: null, exercise: null },
+    quota,
+  });
 });
 
-/**
- * Record what a request cost. One that spent nothing is dropped altogether; a
- * failed one that did spend stays, so it counts toward the spend cap, but not
- * toward the user's quota. Never throws: the user's response matters more.
- */
-async function settle(id: string, status: "SUCCEEDED" | "FAILED", usage: TokenUsage) {
+/** How an etude request is getting on, with the history row it was saved as once it's done. */
+router.get("/:id", requireAuth, refuseGuests, async (req: Request, res: Response) => {
+  const id = z.uuid().safeParse(req.params.id);
+  if (!id.success) return res.status(404).json({ error: "No such etude" });
+
   try {
-    if (status === "FAILED" && usage.inputTokens === 0 && usage.outputTokens === 0) {
-      await releaseEtude(id);
-    } else {
-      const cost = costMicros(ETUDE_MODEL, usage.inputTokens, usage.outputTokens);
-      await finishEtude(id, status, { ...usage, costMicros: cost });
-    }
+    const uid = req.user!.uid;
+    const etude = await findEtude(uid, id.data);
+    if (!etude) return res.status(404).json({ error: "No such etude" });
+    res.json({ etude, quota: await etudeQuota(uid, dailyLimit()) });
   } catch (err) {
-    console.error(`Failed to record etude ${id} as ${status}:`, err);
+    console.error("Failed to load etude:", err);
+    res.status(500).json({ error: "Failed to load the etude" });
   }
-}
+});
 
 export default router;

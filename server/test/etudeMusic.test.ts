@@ -4,6 +4,7 @@ import { outputSchema } from "../src/etudes/generate.js";
 import {
   allowedDurations,
   difficultyProblems,
+  etudeNotes,
   findProblems,
   measureEtude,
   pitchesInRange,
@@ -193,5 +194,16 @@ describe("userMessage targets", () => {
     expect(text).toContain(
       "Targets:\n- No leap wider than a 5th.\n- The lowest and highest notes are at least a 5th apart.",
     );
+  });
+});
+
+describe("etudeNotes", () => {
+  it("writes bars as the client's notate() does, dotted values and rests included", () => {
+    const bars = [
+      [n("D4", 1.5), n("Eb4", 0.5), n(null, 2)],
+      [n("F4", 0.75), n("G4", 0.25), n(null, 1.5), n("Bb4", 1)],
+      [n("Bb4", 4)],
+    ];
+    expect(etudeNotes(bars)).toBe("D4/q., Eb4/8, B4/h/r, F4/8., G4/16, B4/q/r., Bb4/q, Bb4/w");
   });
 });

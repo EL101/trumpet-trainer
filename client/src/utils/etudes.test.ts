@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { User } from "firebase/auth";
-import { etudeNotes, requestEtude, type EtudeRequest } from "./etudes";
+import { fetchEtude, startEtude, type EtudeJob, type EtudeRequest } from "./etudes";
 
 const user = { getIdToken: async () => "token" } as unknown as User;
 
@@ -13,6 +13,7 @@ const request: EtudeRequest = {
 };
 
 const quota = { limit: 10, remaining: 9, resetsAt: "2026-10-18T12:00:00.000Z" };
+const pending: EtudeJob = { id: "etude-1", status: "PENDING", error: null, exercise: null };
 
 /** Answer every fetch with `status` and `body` as JSON. */
 function respond(status: number, body: unknown) {
@@ -26,30 +27,26 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("etudeNotes", () => {
-  it("writes the bars out in the app's note format, dotted values and rests included", () => {
-    const bars = [
-      [
-        { pitch: "D4", quarters: 1.5 },
-        { pitch: "Eb4", quarters: 0.5 },
-        { pitch: null, quarters: 2 },
-      ],
-      [{ pitch: "Bb4", quarters: 4 }],
-    ];
-    expect(etudeNotes(bars, "4/4")).toBe("D4/q., Eb4/8, B4/h/r, Bb4/w");
-  });
-});
-
-describe("requestEtude", () => {
-  it("returns the etude's notes and the quota", async () => {
-    respond(200, { bars: [[{ pitch: "Bb4", quarters: 4 }]], quota });
-    expect(await requestEtude(user, request)).toEqual({ ok: true, notes: "Bb4/w", quota });
+describe("startEtude", () => {
+  it("returns the job the server started, and the quota", async () => {
+    respond(202, { etude: pending, quota });
+    expect(await startEtude(user, request)).toEqual({ ok: true, job: pending, quota });
   });
 
-  it("passes on the server's message and quota when it refuses", async () => {
+  it("passes on the etude already being written when the server refuses a second", async () => {
+    respond(409, { error: "An etude is already being written.", etude: pending, quota });
+    expect(await startEtude(user, request)).toEqual({
+      ok: false,
+      message: "An etude is already being written.",
+      job: pending,
+      quota,
+    });
+  });
+
+  it("passes on the server's message when it refuses", async () => {
     const used = { ...quota, remaining: 0 };
     respond(429, { error: "You've used all 10 etudes for today.", quota: used });
-    expect(await requestEtude(user, request)).toEqual({
+    expect(await startEtude(user, request)).toMatchObject({
       ok: false,
       message: "You've used all 10 etudes for today.",
       quota: used,
@@ -58,10 +55,9 @@ describe("requestEtude", () => {
 
   it("falls back to its own message when the server sends none", async () => {
     respond(500, null);
-    const result = await requestEtude(user, request);
-    expect(result).toMatchObject({
+    expect(await startEtude(user, request)).toMatchObject({
       ok: false,
-      message: "Couldn't write an etude this time. Try again.",
+      message: "Couldn't start an etude this time. Try again.",
     });
   });
 
@@ -73,9 +69,35 @@ describe("requestEtude", () => {
         throw new TypeError("Failed to fetch");
       }),
     );
-    expect(await requestEtude(user, request)).toEqual({
+    expect(await startEtude(user, request)).toEqual({
       ok: false,
       message: "Couldn't reach the server. Check your connection and try again.",
     });
+  });
+});
+
+describe("fetchEtude", () => {
+  it("returns how the etude is getting on", async () => {
+    const done: EtudeJob = { ...pending, status: "FAILED", error: "Try again." };
+    respond(200, { etude: done, quota });
+    expect(await fetchEtude(user, "etude-1")).toEqual({ etude: done, quota });
+  });
+
+  it("reports an etude the server doesn't know as failed, so nothing waits for it", async () => {
+    respond(404, { error: "No such etude" });
+    expect(await fetchEtude(user, "etude-1")).toEqual({
+      etude: {
+        id: "etude-1",
+        status: "FAILED",
+        error: "That etude can't be found any more. Try generating another.",
+        exercise: null,
+      },
+    });
+  });
+
+  it("returns null when it can't find out, so the caller asks again later", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    respond(500, null);
+    expect(await fetchEtude(user, "etude-1")).toBeNull();
   });
 });

@@ -246,6 +246,36 @@ export function difficultyProblems(
   return problems;
 }
 
+/** Each note value an etude can use, in the app's note format. */
+const NOTE_VALUES: Record<number, string> = {
+  4: "w",
+  3: "h.",
+  2: "h",
+  1.5: "q.",
+  1: "q",
+  0.75: "8.",
+  0.5: "8",
+  0.25: "16",
+};
+
+/**
+ * An etude's bars in the app's note format, as history stores it and the client's
+ * Staff reads it: "D4/q., Eb4/8, B4/h/r, Bb4/w". Matches what the client's notate()
+ * writes for the same notes; every etude note fits in its bar and in one value, so
+ * no ties are needed.
+ */
+export function etudeNotes(bars: readonly (readonly NoteEvent[])[]): string {
+  return bars
+    .flat()
+    .map(({ pitch, quarters }) => {
+      const value = NOTE_VALUES[quarters];
+      if (!value) throw new Error(`No note value lasts ${quarters} quarter notes`);
+      if (pitch !== null) return `${pitch}/${value}`;
+      return value.endsWith(".") ? `B4/${value.slice(0, -1)}/r.` : `B4/${value}/r`;
+    })
+    .join(", ");
+}
+
 /** What an etude is asked for. Matches the request body of POST /api/etudes. */
 export type EtudeOptions = {
   musicKey: string;
