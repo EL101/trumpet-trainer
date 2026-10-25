@@ -2,6 +2,7 @@ import {
   Center,
   Flex,
   Heading,
+  Image,
   Spinner,
   Text,
   useBreakpointValue,
@@ -12,6 +13,7 @@ import { FirebaseError } from "firebase/app";
 import { useEffect, useRef, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { signInAsGuest, signInWithGoogle } from "@/auth/auth";
+import googleIcon from "@/assets/google-icon.svg";
 import { useAuth } from "@/auth/useAuth";
 import { IntonationLegend, Staff } from "@/components/music";
 import { Button, Rule } from "@/components/primitives";
@@ -219,6 +221,7 @@ function SignInChoices({ appearAt }: { appearAt: number }) {
           disabled={pending === "guest"}
           onClick={() => signIn("google")}
         >
+          <Image src={googleIcon} alt="" boxSize="16px" />
           Sign in with Google
         </Button>
         <Text as="span" textStyle="epigraph" color="fg.muted" textAlign="center">
