@@ -48,6 +48,9 @@ import {
   RANGE_NOTES,
 } from "@/utils/generateMusic";
 import {
+  ETUDE_LOST_MESSAGE,
+  ETUDE_WAIT_LIMIT_MS,
+  etudeCheckDelay,
   fetchEtude,
   fetchEtudeStatus,
   startEtude,
@@ -139,9 +142,6 @@ const riseIn = (i: number) => ({
 const SETTINGS_ENTRANCE = Object.fromEntries(
   Array.from({ length: ENTER_ITEMS }, (_, i) => [`& > :nth-child(${i + 1})`, riseIn(i)]),
 );
-
-/** How often to ask the server whether the etude being written is done. */
-const ETUDE_CHECK_MS = 3000;
 
 /** History's entrance: the rule wipes in, then the loaded entries rise in one by one. */
 const HISTORY_WIPE_MS = 400;
@@ -248,15 +248,28 @@ export function Generate() {
   useEffect(() => {
     if (!etudeJob || !user) return;
     const controller = new AbortController();
+    // Asks that fail back off, and past the wait limit the page stops waiting, so a
+    // server that can't be reached doesn't leave the plate writing for ever.
+    const giveUpAt = Date.now() + ETUDE_WAIT_LIMIT_MS;
+    let failures = 0;
     let timer: ReturnType<typeof setTimeout>;
     const check = async () => {
       const result = await fetchEtude(user, etudeJob, controller.signal);
       if (controller.signal.aborted) return;
       if (result?.quota) setEtudeQuota(result.quota);
-      if (result && result.etude.status !== "PENDING") etudeDone(result.etude);
-      else timer = setTimeout(check, ETUDE_CHECK_MS);
+      if (result && result.etude.status !== "PENDING") {
+        etudeDone(result.etude);
+        return;
+      }
+      if (Date.now() >= giveUpAt) {
+        setEtudeJob(null);
+        setEtudeError(ETUDE_LOST_MESSAGE);
+        return;
+      }
+      failures = result ? 0 : failures + 1;
+      timer = setTimeout(check, etudeCheckDelay(failures));
     };
-    timer = setTimeout(check, ETUDE_CHECK_MS);
+    timer = setTimeout(check, etudeCheckDelay(0));
     return () => {
       clearTimeout(timer);
       controller.abort();

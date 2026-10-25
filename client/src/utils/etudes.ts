@@ -44,6 +44,27 @@ export type EtudeStart =
 const OFFLINE_MESSAGE = "Couldn't reach the server. Check your connection and try again.";
 const FAILED_MESSAGE = "Couldn't start an etude this time. Try again.";
 const GONE_MESSAGE = "That etude can't be found any more. Try generating another.";
+const SIGNED_OUT_MESSAGE =
+  "You're no longer signed in to the account writing this etude. Sign back in to find it in your history.";
+/** Shown when the page stops waiting because the server couldn't be asked. */
+export const ETUDE_LOST_MESSAGE =
+  "Couldn't check on your etude. If it gets written, it'll be in your history.";
+
+/** How often to ask after an etude being written, and the most to wait between asks. */
+const ETUDE_CHECK_MS = 3000;
+const ETUDE_CHECK_MAX_MS = 30_000;
+
+/**
+ * How long to wait for an etude before giving up on it. The server gives up on an
+ * etude 5 minutes after it started (its STALE_AFTER_MS), so any answer after that
+ * says it's done; this is for when no answer comes at all.
+ */
+export const ETUDE_WAIT_LIMIT_MS = 6 * 60 * 1000;
+
+/** The wait before the next ask, doubling with each ask in a row that failed. */
+export function etudeCheckDelay(failures: number): number {
+  return Math.min(ETUDE_CHECK_MAX_MS, ETUDE_CHECK_MS * 2 ** failures);
+}
 
 /**
  * Ask the server to write an etude. Never throws: a refusal comes back with the
@@ -74,8 +95,9 @@ export async function startEtude(
 
 /**
  * How an etude request is getting on, or null if that couldn't be found out just
- * now (worth asking again). A request the server doesn't know comes back failed,
- * so nothing waits on it for ever.
+ * now (worth asking again). A request the server doesn't know, or won't answer
+ * for this user (signed out, or now a guest), comes back failed, since asking
+ * again can't help.
  */
 export async function fetchEtude(
   user: User | undefined | null,
@@ -88,6 +110,9 @@ export async function fetchEtude(
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) {
       return { etude: { id, status: "FAILED", error: GONE_MESSAGE, exercise: null } };
+    }
+    if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+      return { etude: { id, status: "FAILED", error: SIGNED_OUT_MESSAGE, exercise: null } };
     }
     if (!(error instanceof Error && error.name === "AbortError")) {
       console.error("fetch etude error:", error);

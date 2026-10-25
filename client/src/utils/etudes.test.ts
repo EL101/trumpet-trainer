@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { User } from "firebase/auth";
-import { fetchEtude, startEtude, type EtudeJob, type EtudeRequest } from "./etudes";
+import {
+  etudeCheckDelay,
+  fetchEtude,
+  startEtude,
+  type EtudeJob,
+  type EtudeRequest,
+} from "./etudes";
 
 const user = { getIdToken: async () => "token" } as unknown as User;
 
@@ -95,9 +101,35 @@ describe("fetchEtude", () => {
     });
   });
 
+  it.each([401, 403])(
+    "reports an etude this user can't see (%i) as failed, since asking again won't help",
+    async (status) => {
+      respond(status, { error: "Session expired" });
+      expect(await fetchEtude(user, "etude-1")).toEqual({
+        etude: {
+          id: "etude-1",
+          status: "FAILED",
+          error:
+            "You're no longer signed in to the account writing this etude. Sign back in to find it in your history.",
+          exercise: null,
+        },
+      });
+    },
+  );
+
   it("returns null when it can't find out, so the caller asks again later", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     respond(500, null);
     expect(await fetchEtude(user, "etude-1")).toBeNull();
+  });
+});
+
+describe("etudeCheckDelay", () => {
+  it("asks every 3 seconds while asking works", () => {
+    expect(etudeCheckDelay(0)).toBe(3000);
+  });
+
+  it("doubles the wait with each failed ask in a row, up to 30 seconds", () => {
+    expect([1, 2, 3, 4, 10].map(etudeCheckDelay)).toEqual([6000, 12_000, 24_000, 30_000, 30_000]);
   });
 });
