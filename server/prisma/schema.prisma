@@ -116,7 +116,8 @@ model EtudeGeneration {
   model        String
   inputTokens  Int         @default(0) @map("input_tokens")
   outputTokens Int         @default(0) @map("output_tokens")
-  /// Millionths of a dollar, so sums stay exact.
+  /// Millionths of a dollar, so sums stay exact. Until the etude is written, the
+  /// most it can cost, so the spend cap counts etudes still being written.
   costMicros   Int         @default(0) @map("cost_micros")
   /// The history row the etude was saved as, once it succeeded.
   exerciseId   String?     @map("exercise_id") @db.Uuid

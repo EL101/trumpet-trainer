@@ -56,10 +56,11 @@ const ETUDE_CHECK_MAX_MS = 30_000;
 
 /**
  * How long to wait for an etude before giving up on it. The server gives up on an
- * etude 5 minutes after it started (its STALE_AFTER_MS), so any answer after that
- * says it's done; this is for when no answer comes at all.
+ * etude 10 minutes after it started (its STALE_AFTER_MS), so any answer after that
+ * says it's done; this is for when no answer comes at all. Keep it longer than the
+ * server's, or the page stops waiting for an etude that can still finish.
  */
-export const ETUDE_WAIT_LIMIT_MS = 6 * 60 * 1000;
+export const ETUDE_WAIT_LIMIT_MS = 11 * 60 * 1000;
 
 /** The wait before the next ask, doubling with each ask in a row that failed. */
 export function etudeCheckDelay(failures: number): number {
@@ -122,13 +123,17 @@ export async function fetchEtude(
 }
 
 /**
- * The user's etude quota, and the etude being written for them if there is one,
- * so a page opened mid-etude can wait for it. Null if it couldn't be loaded.
+ * The user's quota, the etude being written for them if there is one (so a page
+ * opened mid-etude can wait for it), and whether this server can write etudes at
+ * all. Mirrors GET /api/etudes/quota.
  */
+export type EtudeStatus = EtudeQuota & { pending: EtudeJob | null; enabled: boolean };
+
+/** The user's EtudeStatus, or null if it couldn't be loaded. */
 export async function fetchEtudeStatus(
   user: User | undefined | null,
   signal?: AbortSignal,
-): Promise<(EtudeQuota & { pending: EtudeJob | null }) | null> {
+): Promise<EtudeStatus | null> {
   try {
     const res = await authedFetch("/api/etudes/quota", user, { signal });
     return res ? await res.json() : null;

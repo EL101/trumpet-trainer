@@ -2,8 +2,10 @@ import { Router, Request, Response, NextFunction } from "express";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { EtudeRequestSchema } from "../schema/index.js";
 import { z } from "zod";
-import { anthropic, ETUDE_MODEL } from "../etudes/claude.js";
+import { anthropic, costMicros, ETUDE_MODEL } from "../etudes/claude.js";
+import { MAX_USAGE } from "../etudes/generate.js";
 import { startEtude } from "../etudes/run.js";
+import { envNumber } from "../env.js";
 import {
   etudeQuota,
   findEtude,
@@ -13,13 +15,6 @@ import {
 } from "../queries/etudes.js";
 
 const router = Router();
-
-/** A non-negative number from the environment, or `fallback` when it's unset or invalid. */
-function envNumber(name: string, fallback: number): number {
-  const raw = process.env[name];
-  const value = Number(raw);
-  return raw && Number.isFinite(value) && value >= 0 ? value : fallback;
-}
 
 /** Etudes a user can generate in 24 hours. */
 const dailyLimit = () => envNumber("ETUDE_DAILY_LIMIT", 10);
@@ -39,14 +34,22 @@ function refuseGuests(req: Request, res: Response, next: NextFunction) {
 const dailySpendCapMicros = () => envNumber("ETUDE_DAILY_SPEND_USD", 5) * 1_000_000;
 
 /**
+ * What an etude is booked at against the cap until it's written: the most it can
+ * cost. Its real cost replaces this once it's done, so etudes being written count
+ * towards the cap, and one cut off by a restart is never counted as free.
+ */
+const bookedCostMicros = costMicros(ETUDE_MODEL, MAX_USAGE.inputTokens, MAX_USAGE.outputTokens);
+
+/**
  * The user's quota, and the etude they're waiting for if there is one, so a page
- * that was reloaded or left mid-etude can pick it up again.
+ * that was reloaded or left mid-etude can pick it up again. `enabled` says whether
+ * this server can write etudes at all, so the page can say so before anyone asks.
  */
 router.get("/quota", requireAuth, refuseGuests, async (req: Request, res: Response) => {
   try {
     const uid = req.user!.uid;
     const [quota, pending] = await Promise.all([etudeQuota(uid, dailyLimit()), pendingEtude(uid)]);
-    res.json({ ...quota, pending });
+    res.json({ ...quota, pending, enabled: anthropic() !== null });
   } catch (err) {
     console.error("Failed to load etude quota:", err);
     res.status(500).json({ error: "Failed to load etude quota" });
@@ -73,12 +76,16 @@ router.post("/", requireAuth, refuseGuests, async (req: Request, res: Response) 
 
   let reservation;
   try {
-    if ((await spendTodayMicros()) >= dailySpendCapMicros()) {
+    // Refused if this etude, at the most it can cost, could take spending past the cap.
+    if ((await spendTodayMicros()) + bookedCostMicros > dailySpendCapMicros()) {
       return res.status(503).json({
         error: "Etude generation is paused until midnight UTC. Try again tomorrow.",
       });
     }
-    reservation = await reserveEtude(uid, limit, ETUDE_MODEL);
+    reservation = await reserveEtude(uid, limit, {
+      model: ETUDE_MODEL,
+      costMicros: bookedCostMicros,
+    });
   } catch (err) {
     console.error("Failed to reserve an etude:", err);
     return res.status(500).json({ error: "Failed to start the etude" });

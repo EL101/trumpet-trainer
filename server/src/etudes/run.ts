@@ -13,12 +13,17 @@ const FAILURE_MESSAGES: Record<EtudeFailure["kind"], string> = {
   unexpected: "Something went wrong writing the etude. Try again.",
 };
 
-/** Etudes being written in this process. */
-const running = new Set<Promise<void>>();
+/** Etudes being written in this process, by id. Each leaves once it's settled. */
+const running = new Map<string, Promise<void>>();
 
 /** Resolves once every etude being written now has finished. For tests and shutdown. */
 export function etudesSettled(): Promise<unknown> {
-  return Promise.all(running);
+  return Promise.all(running.values());
+}
+
+/** The etudes this process is still writing, for shutdown to mark as interrupted. */
+export function runningEtudeIds(): string[] {
+  return [...running.keys()];
 }
 
 /**
@@ -33,8 +38,8 @@ export function startEtude(
   userId: string,
   options: EtudeOptions,
 ): void {
-  const job = runEtude(client, id, userId, options).finally(() => running.delete(job));
-  running.add(job);
+  const job = runEtude(client, id, userId, options).finally(() => running.delete(id));
+  running.set(id, job);
 }
 
 async function runEtude(client: Anthropic, id: string, userId: string, options: EtudeOptions) {
@@ -55,7 +60,11 @@ async function runEtude(client: Anthropic, id: string, userId: string, options: 
       noteRange: options.noteRange,
       difficulty: options.difficulty,
     });
-    await finishEtude(id, { status: "SUCCEEDED", exerciseId: row.exerciseId }, spent());
+    await finishEtude(
+      id,
+      { status: "SUCCEEDED", exerciseId: row.exerciseId, error: null },
+      spent(),
+    );
   } catch (err) {
     if (err instanceof EtudeFailure) usage = err.usage;
     console.error(`Failed to write etude ${id}:`, err);

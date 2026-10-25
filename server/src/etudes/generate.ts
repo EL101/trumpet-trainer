@@ -67,6 +67,24 @@ const ReplySchema = z.object({
 /** First attempt, plus one more that's told what was wrong with the first. */
 const MAX_ATTEMPTS = 2;
 
+/** The longest one reply can be, thinking included. */
+const MAX_TOKENS = 16000;
+
+/**
+ * A generous bound on the tokens sent with each attempt besides earlier replies:
+ * the system prompt, the output schema, the request and the list of fixes.
+ */
+const PROMPT_TOKENS = 4000;
+
+/**
+ * The most tokens one etude can use. Each attempt's reply is capped at MAX_TOKENS,
+ * and each attempt resends the prompt with every earlier reply.
+ */
+export const MAX_USAGE: TokenUsage = {
+  inputTokens: MAX_ATTEMPTS * PROMPT_TOKENS + (MAX_ATTEMPTS - 1) * MAX_TOKENS,
+  outputTokens: MAX_ATTEMPTS * MAX_TOKENS,
+};
+
 /** Harder etudes get more thought: meeting their targets while staying musical takes it. */
 const EFFORT = { LOW: "low", MED: "low", HIGH: "medium" } as const;
 
@@ -97,7 +115,7 @@ export async function writeEtude(
       // that would lose the usage of a call that's already been paid for.
       response = await client.messages.create({
         model: ETUDE_MODEL,
-        max_tokens: 16000,
+        max_tokens: MAX_TOKENS,
         system: SYSTEM_PROMPT,
         messages,
         output_config: {

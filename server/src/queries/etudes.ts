@@ -6,12 +6,16 @@ import { isUniqueViolation } from "./conflicts.js";
 export const QUOTA_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 /**
- * An etude still pending after this long was cut off (the server restarted while
- * writing it): two attempts of at most a minute each are long finished by then.
+ * An etude still pending after this long was cut off: the server crashed or was
+ * killed while writing it. (A clean shutdown marks its own etudes failed, with
+ * failInterruptedEtudes.) The longest a write can take is about 4 minutes: two attempts, each
+ * a call of up to a minute that the SDK retries once on a timeout. This leaves
+ * room for that. One that does finish later still counts (see finishEtude).
  */
-export const STALE_AFTER_MS = 5 * 60 * 1000;
+export const STALE_AFTER_MS = 10 * 60 * 1000;
 
 const STALE_MESSAGE = "Writing that etude was interrupted. Try again.";
+const RESTART_MESSAGE = "The server restarted while writing your etude. Try again.";
 
 /** Requests that use up quota: still being written, or delivered. */
 const COUNTED: EtudeStatus[] = [EtudeStatus.PENDING, EtudeStatus.SUCCEEDED];
@@ -44,7 +48,10 @@ async function quotaWithin(userId: string, limit: number): Promise<QuotaStatus> 
   };
 }
 
-/** Mark the user's pending etudes that were cut off as failed, giving their quota back. */
+/**
+ * Mark the user's pending etudes that were cut off as failed, giving their quota
+ * back. Each keeps its booked cost, since what it spent before it stopped is unknown.
+ */
 function failStale(userId: string) {
   return prisma.etudeGeneration.updateMany({
     where: {
@@ -99,15 +106,20 @@ export async function findEtude(userId: string, id: string): Promise<EtudeView |
  * written (`pending`), or when none are left. Only one etude per user can be
  * pending (a unique index), so of two requests at once only one gets in, and the
  * quota can't be overshot either; the other is told about the one that did.
+ * `costMicros` is what it's booked at against the spend cap until it's written.
  */
-export async function reserveEtude(userId: string, limit: number, model: string) {
+export async function reserveEtude(
+  userId: string,
+  limit: number,
+  booking: { model: string; costMicros: number },
+) {
   await failStale(userId);
   const [quota, pending] = await Promise.all([quotaWithin(userId, limit), pendingEtude(userId)]);
   if (pending) return { reserved: null, pending, quota };
   if (quota.remaining === 0) return { reserved: null, pending: null, quota };
 
   try {
-    const reserved = await prisma.etudeGeneration.create({ data: { userId, model } });
+    const reserved = await prisma.etudeGeneration.create({ data: { userId, ...booking } });
     const resetsAt = quota.resetsAt ?? new Date(reserved.createdAt.getTime() + QUOTA_WINDOW_MS);
     return {
       reserved,
@@ -123,17 +135,23 @@ export async function reserveEtude(userId: string, limit: number, model: string)
 
 /**
  * Record how a request ended and what it cost: the history row it was saved as,
- * or the message to show for its failure.
+ * or the message to show for its failure. This overwrites a request already given
+ * up as stale, so an etude that finishes late still counts and its cost is still
+ * recorded; a success clears the stale message.
  */
 export function finishEtude(
   id: string,
-  outcome: { status: "SUCCEEDED"; exerciseId: string } | { status: "FAILED"; error: string },
+  outcome:
+    { status: "SUCCEEDED"; exerciseId: string; error: null } | { status: "FAILED"; error: string },
   spent: { inputTokens: number; outputTokens: number; costMicros: number },
 ) {
   return prisma.etudeGeneration.update({ where: { id }, data: { ...outcome, ...spent } });
 }
 
-/** What every etude since midnight UTC has cost, in millionths of a dollar. */
+/**
+ * What every etude since midnight UTC has cost, in millionths of a dollar. Etudes
+ * still being written count at their booked cost.
+ */
 export async function spendTodayMicros(now = new Date()): Promise<number> {
   const midnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const { _sum } = await prisma.etudeGeneration.aggregate({
@@ -141,4 +159,16 @@ export async function spendTodayMicros(now = new Date()): Promise<number> {
     _sum: { costMicros: true },
   });
   return _sum.costMicros ?? 0;
+}
+
+/**
+ * Mark etudes this process was writing when it shut down as failed, so their
+ * players hear now rather than at the stale cutoff. Only ones still pending: one
+ * that finished meanwhile keeps its result. Each keeps its booked cost.
+ */
+export function failInterruptedEtudes(ids: readonly string[]) {
+  return prisma.etudeGeneration.updateMany({
+    where: { id: { in: [...ids] }, status: EtudeStatus.PENDING },
+    data: { status: EtudeStatus.FAILED, error: RESTART_MESSAGE },
+  });
 }

@@ -4,8 +4,11 @@ import request from "supertest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db.js";
 import type { NoteEvent } from "../src/etudes/music.js";
-import { etudesSettled } from "../src/etudes/run.js";
-import { STALE_AFTER_MS } from "../src/queries/etudes.js";
+import { costMicros, ETUDE_MODEL } from "../src/etudes/claude.js";
+import { MAX_USAGE } from "../src/etudes/generate.js";
+import { etudesSettled, runningEtudeIds } from "../src/etudes/run.js";
+import { failInterruptedEtudes, STALE_AFTER_MS } from "../src/queries/etudes.js";
+import { shutdown } from "../src/shutdown.js";
 import { googleClaims, guestClaims, tokenFor } from "./firebaseMock.js";
 import { createUser, newUid } from "./helpers.js";
 
@@ -70,6 +73,17 @@ async function generate(token: string, data: object = body) {
 }
 
 const rows = (userId: string) => prisma.etudeGeneration.findMany({ where: { userId } });
+
+/** Claude's reply waits until `finish` is called, so the etude stays pending meanwhile. */
+function holdReply() {
+  let finish!: () => void;
+  claude.create.mockReturnValueOnce(
+    new Promise((resolve) => {
+      finish = () => resolve(reply(GOOD_BARS));
+    }),
+  );
+  return () => finish();
+}
 
 beforeEach(() => {
   claude.create.mockReset();
@@ -226,6 +240,13 @@ describe("POST /api/etudes", () => {
     expect(claude.create).not.toHaveBeenCalled();
   });
 
+  it("tells GET /api/etudes/quota whether etudes can be written here", async () => {
+    const token = tokenFor(googleClaims(newUid()));
+    expect((await get(token, "/quota")).body.enabled).toBe(true);
+    claude.available = false;
+    expect((await get(token, "/quota")).body.enabled).toBe(false);
+  });
+
   it("rejects a key it doesn't know, without calling Claude", async () => {
     const res = await post(tokenFor(googleClaims(newUid())), { ...body, musicKey: "H major" });
     expect(res.status).toBe(400);
@@ -239,17 +260,6 @@ describe("POST /api/etudes", () => {
 });
 
 describe("an etude being written", () => {
-  /** Claude's reply waits until `finish` is called, so the etude stays pending meanwhile. */
-  function holdReply() {
-    let finish!: () => void;
-    claude.create.mockReturnValueOnce(
-      new Promise((resolve) => {
-        finish = () => resolve(reply(GOOD_BARS));
-      }),
-    );
-    return () => finish();
-  }
-
   it("is reported by GET /api/etudes/quota, so a reloaded page can wait for it", async () => {
     const token = tokenFor(googleClaims(newUid()));
     const finish = holdReply();
@@ -297,6 +307,40 @@ describe("an etude being written", () => {
       error: "Writing that etude was interrupted. Try again.",
     });
     expect(res.body.quota.remaining).toBe(10);
+  });
+
+  it("still counts if it finishes after being given up, with its cost recorded", async () => {
+    const uid = newUid();
+    const token = tokenFor(googleClaims(uid));
+    const finish = holdReply();
+    const started = await post(token);
+    const id: string = started.body.etude.id;
+    // Pretend it's been running past the cutoff, so the next request gives it up.
+    await prisma.etudeGeneration.update({
+      where: { id },
+      data: { createdAt: new Date(Date.now() - STALE_AFTER_MS - 1000) },
+    });
+    expect((await get(token, `/${id}`)).body.etude.status).toBe("FAILED");
+
+    finish();
+    await etudesSettled();
+
+    const res = await get(token, `/${id}`);
+    expect(res.body.etude).toMatchObject({ status: "SUCCEEDED", error: null });
+    expect(res.body.etude.exercise.notes).toBe(GOOD_NOTES);
+    const [row] = await rows(uid);
+    expect(row.costMicros).toBeGreaterThan(0);
+  });
+
+  it("is tracked as running in this process until it settles", async () => {
+    const finish = holdReply();
+    const started = await post(tokenFor(googleClaims(newUid())));
+    const id: string = started.body.etude.id;
+
+    expect(runningEtudeIds()).toContain(id);
+    finish();
+    await etudesSettled();
+    expect(runningEtudeIds()).not.toContain(id);
   });
 
   it("is the only one per user the database allows", async () => {
@@ -399,6 +443,33 @@ describe("etude quota", () => {
 });
 
 describe("daily spend cap", () => {
+  /** What an etude is booked at until it's written. */
+  const booked = costMicros(ETUDE_MODEL, MAX_USAGE.inputTokens, MAX_USAGE.outputTokens);
+
+  it("books an etude at the most it can cost until it's written, then at what it cost", async () => {
+    const uid = newUid();
+    const finish = holdReply();
+    await post(tokenFor(googleClaims(uid)));
+    expect((await rows(uid))[0].costMicros).toBe(booked);
+
+    finish();
+    await etudesSettled();
+    expect((await rows(uid))[0].costMicros).toBe(1_100);
+  });
+
+  it("counts etudes still being written towards it", async () => {
+    // Room for one etude at its booked cost, but not two.
+    vi.stubEnv("ETUDE_DAILY_SPEND_USD", String((booked * 1.5) / 1_000_000));
+    const finish = holdReply();
+    expect((await post(tokenFor(googleClaims(newUid())))).status).toBe(202);
+
+    const res = await post(tokenFor(googleClaims(newUid())));
+
+    expect(res.status).toBe(503);
+    expect(res.body.error).toMatch(/paused until midnight UTC/);
+    finish();
+  });
+
   it("pauses etudes for everyone once today's spending reaches it", async () => {
     vi.stubEnv("ETUDE_DAILY_SPEND_USD", "1");
     const other = newUid();
@@ -417,5 +488,76 @@ describe("daily spend cap", () => {
     expect(res.status).toBe(503);
     expect(res.body.error).toMatch(/paused until midnight UTC/);
     expect(claude.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("failInterruptedEtudes", () => {
+  it("fails only the given etudes that are still pending", async () => {
+    const uid = newUid();
+    const other = newUid();
+    await createUser(uid);
+    await createUser(other);
+    const make = (userId: string, status: "PENDING" | "SUCCEEDED") =>
+      prisma.etudeGeneration.create({ data: { userId, model: "claude-haiku-5-5", status } });
+    const mine = await make(uid, "PENDING");
+    const done = await make(uid, "SUCCEEDED");
+    const theirs = await make(other, "PENDING");
+
+    const { count } = await failInterruptedEtudes([mine.id, done.id]);
+
+    expect(count).toBe(1);
+    const status = async (id: string) =>
+      prisma.etudeGeneration.findUniqueOrThrow({
+        where: { id },
+        select: { status: true, error: true },
+      });
+    expect(await status(mine.id)).toEqual({
+      status: "FAILED",
+      error: "The server restarted while writing your etude. Try again.",
+    });
+    expect(await status(done.id)).toEqual({ status: "SUCCEEDED", error: null });
+    expect(await status(theirs.id)).toEqual({ status: "PENDING", error: null });
+  });
+});
+
+describe("shutdown", () => {
+  /** A server of our own to stop, since supertest's close by themselves. */
+  async function listening() {
+    const server = app.listen(0);
+    await new Promise((resolve) => server.once("listening", resolve));
+    return server;
+  }
+
+  beforeEach(() => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+
+  it("stops listening and marks etudes still running after the grace period as interrupted", async () => {
+    const uid = newUid();
+    const finish = holdReply();
+    await post(tokenFor(googleClaims(uid)));
+    const server = await listening();
+
+    await shutdown(server, 50);
+
+    expect(server.listening).toBe(false);
+    expect((await rows(uid))[0]).toMatchObject({
+      status: "FAILED",
+      error: "The server restarted while writing your etude. Try again.",
+    });
+    finish();
+  });
+
+  it("lets an etude that finishes within the grace period keep its result", async () => {
+    const uid = newUid();
+    const finish = holdReply();
+    await post(tokenFor(googleClaims(uid)));
+    const server = await listening();
+
+    const stopped = shutdown(server, 10_000);
+    finish();
+    await stopped;
+
+    expect((await rows(uid))[0]).toMatchObject({ status: "SUCCEEDED", error: null });
   });
 });

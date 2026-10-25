@@ -20,6 +20,7 @@ import {
   Input,
   Kicker,
   NativeSelect,
+  notify,
   RadioGroup,
   Rule,
   SectionHeading,
@@ -279,6 +280,49 @@ export default function DesignPreview() {
               B♭ trumpet · since 2 June 2026
             </Text>
           </Bookplate>
+        </Flex>
+      </Section>
+
+      <Section title="Notices">
+        <Text color="fg.muted" mb="md">
+          Shown in the bottom-right corner by <code>notify()</code>. Errors stay until closed.
+        </Text>
+        <Flex gap="sm" wrap="wrap">
+          <Button
+            onClick={() =>
+              notify({
+                tone: "success",
+                title: "Your etude is ready",
+                description: "B♭ major · 4/4 · Medium difficulty",
+                link: { to: "/generate", label: "Open Generate" },
+              })
+            }
+          >
+            Success
+          </Button>
+          <Button
+            onClick={() =>
+              notify({
+                tone: "error",
+                title: "Couldn't write your etude",
+                description: "The etude writer can't be reached right now. Try again in a minute.",
+              })
+            }
+          >
+            Error
+          </Button>
+          <Button
+            onClick={() =>
+              notify({
+                tone: "info",
+                title: "Your etude was cleared",
+                description:
+                  "History was cleared before your etude arrived, so it wasn't kept. It still counts towards today's etudes.",
+              })
+            }
+          >
+            Info
+          </Button>
         </Flex>
       </Section>
 

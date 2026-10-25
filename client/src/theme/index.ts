@@ -24,3 +24,4 @@ export { cardRecipe } from "./recipes/card";
 export { inputRecipe, textareaRecipe } from "./recipes/input";
 export { segmentedRecipe, radioRecipe, choiceGridRecipe } from "./recipes/choice";
 export { bookplateRecipe } from "./recipes/bookplate";
+export { toastRecipe } from "./recipes/toast";

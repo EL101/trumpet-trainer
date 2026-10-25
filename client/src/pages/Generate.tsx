@@ -15,6 +15,7 @@ import { Bookmark, BookmarkCheck, ChevronDown, ChevronUp, Eye, EyeOff, Play } fr
 import { useContext, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import { AuthUserContext } from "@/auth/AuthUserContext";
+import { useEtudes } from "@/etudes/useEtudes";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { AppShell, PageHeader } from "@/components/layout";
 import { ExerciseMeta, PitchText, Staff } from "@/components/music";
@@ -47,16 +48,7 @@ import {
   generateScaleExercise,
   RANGE_NOTES,
 } from "@/utils/generateMusic";
-import {
-  ETUDE_LOST_MESSAGE,
-  ETUDE_WAIT_LIMIT_MS,
-  etudeCheckDelay,
-  fetchEtude,
-  fetchEtudeStatus,
-  startEtude,
-  type EtudeJob,
-  type EtudeQuota,
-} from "@/utils/etudes";
+import type { EtudeQuota } from "@/utils/etudes";
 import { clearHistory, getInitialHistory, insertToHistory } from "@/utils/history";
 import { generateLipSlurs, lipSlurFingerings } from "@/utils/lipSlurs";
 import { getInitialLibrary, saveToLibrary } from "@/utils/library";
@@ -105,16 +97,17 @@ const KEYLESS: ReadonlySet<ExerciseType> = new Set(["LIP_SLURS"]);
 
 /**
  * Types that can be picked: those made here, and etudes, which Claude writes on the
- * server for signed-in players only (the server refuses guests too).
+ * server for signed-in players only (the server refuses guests too), when the server
+ * is set up to write them.
  */
-const canGenerate = (type: ExerciseType, isGuest: boolean) =>
-  type === "ETUDES" ? !isGuest : !!GENERATORS[type];
+const canGenerate = (type: ExerciseType, isGuest: boolean, etudesOff: boolean) =>
+  type === "ETUDES" ? !isGuest && !etudesOff : !!GENERATORS[type];
 
-const typeOptions = (isGuest: boolean): ChoiceOption<ExerciseType>[] =>
+const typeOptions = (isGuest: boolean, etudesOff: boolean): ChoiceOption<ExerciseType>[] =>
   EXERCISE_TYPES.map((t) => ({
     value: t,
     label: EXERCISE_TYPE_LABELS[t],
-    disabled: !canGenerate(t, isGuest),
+    disabled: !canGenerate(t, isGuest, etudesOff),
   }));
 
 const DEFAULT_SETTINGS: Settings = {
@@ -205,76 +198,38 @@ export function Generate() {
     });
   };
 
-  // Etudes are written by Claude on the server, in the background: it saves each
-  // one to history itself, so leaving or reloading the page loses nothing. The page
-  // asks after the one being written until it's done.
-  const [etudeJob, setEtudeJob] = useState<string | null>(null);
-  // Between pressing Generate and the server answering, before there's a job.
-  const [startingEtude, setStartingEtude] = useState(false);
-  const writing = startingEtude || etudeJob !== null;
+  // Etudes are written by Claude on the server, in the background, and saved to
+  // history there. EtudesProvider waits on the one being written and says when it's
+  // done, wherever the player is; this page only puts it in place.
+  const {
+    writing,
+    quota: etudeQuota,
+    available: etudesAvailable,
+    start: startEtude,
+    refresh: refreshEtudes,
+    onFinished,
+  } = useEtudes();
+  // Why the server wouldn't start the last etude. How a started one ends is a notice.
   const [etudeError, setEtudeError] = useState<string | null>(null);
-  const [etudeQuota, setEtudeQuota] = useState<EtudeQuota | null>(null);
   const isGuest = !!user?.isAnonymous;
   const etudesChosen = settings.type === "ETUDES";
 
-  // On arriving, and each time etudes are chosen (slots free up as the day goes
-  // on): the quota, and an etude still being written from before a reload or a
-  // trip to another page, to wait for again.
+  // Each time etudes are chosen, look again: slots free up as the day goes on.
   useEffect(() => {
-    if (!user || user.isAnonymous) return;
-    const controller = new AbortController();
-    fetchEtudeStatus(user, controller.signal).then((status) => {
-      if (!status) return;
-      const { pending, ...quota } = status;
-      setEtudeQuota(quota);
-      if (pending) setEtudeJob(pending.id);
-    });
-    return () => controller.abort();
-  }, [etudesChosen, user]);
+    if (etudesChosen) refreshEtudes();
+  }, [etudesChosen, refreshEtudes]);
 
-  /** The etude is done: put it in history, and on the plate if the plate is waiting for it. */
-  const etudeDone = (job: EtudeJob) => {
-    setEtudeJob(null);
-    if (job.status === "FAILED") {
-      setEtudeError(job.error);
-      return;
-    }
-    const exercise = job.exercise;
-    if (!exercise) return; // History was cleared while it was written.
-    setHistory((prev) => ({ ...prev, [exercise.generationNum]: exercise }));
-    setGenerated((current) => current ?? exercise);
-  };
-
-  useEffect(() => {
-    if (!etudeJob || !user) return;
-    const controller = new AbortController();
-    // Asks that fail back off, and past the wait limit the page stops waiting, so a
-    // server that can't be reached doesn't leave the plate writing for ever.
-    const giveUpAt = Date.now() + ETUDE_WAIT_LIMIT_MS;
-    let failures = 0;
-    let timer: ReturnType<typeof setTimeout>;
-    const check = async () => {
-      const result = await fetchEtude(user, etudeJob, controller.signal);
-      if (controller.signal.aborted) return;
-      if (result?.quota) setEtudeQuota(result.quota);
-      if (result && result.etude.status !== "PENDING") {
-        etudeDone(result.etude);
-        return;
-      }
-      if (Date.now() >= giveUpAt) {
-        setEtudeJob(null);
-        setEtudeError(ETUDE_LOST_MESSAGE);
-        return;
-      }
-      failures = result ? 0 : failures + 1;
-      timer = setTimeout(check, etudeCheckDelay(failures));
-    };
-    timer = setTimeout(check, etudeCheckDelay(0));
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [etudeJob, user]);
+  // A finished etude joins history, and the plate if the plate is waiting for it.
+  useEffect(
+    () =>
+      onFinished((job) => {
+        const exercise = job.exercise;
+        if (job.status !== "SUCCEEDED" || !exercise) return;
+        setHistory((prev) => ({ ...prev, [exercise.generationNum]: exercise }));
+        setGenerated((current) => current ?? exercise);
+      }),
+    [onFinished],
+  );
 
   /** Take the exercise off the plate; it stays in the list below once it's numbered. */
   const clearPlate = (next: MusicInfo | null) => {
@@ -288,20 +243,16 @@ export function Generate() {
     if (writing) return;
     // The plate waits for the etude; whatever was on it moves down to the list.
     clearPlate(null);
-    setStartingEtude(true);
     showPlate();
-    const result = await startEtude(user, {
+    const result = await startEtude({
       musicKey: key,
       timeSig,
       measures,
       noteRange: range,
       difficulty,
     });
-    setStartingEtude(false);
-    if (result.quota) setEtudeQuota(result.quota);
-    // Refused because one is already being written: wait for that one instead.
-    if (result.job) setEtudeJob(result.job.id);
-    else if (!result.ok) setEtudeError(result.message);
+    // Refused because one is already being written: that's the one to wait for.
+    if (!result.ok && !result.job) setEtudeError(result.message);
   };
 
   const handleGenerate = () => {
@@ -446,6 +397,7 @@ export function Generate() {
         writing={writing}
         etudeQuota={etudeQuota}
         isGuest={isGuest}
+        etudesOff={etudesAvailable === false}
         order={{ base: -1, lg: 0 }}
       />
     </AppShell>
@@ -520,7 +472,7 @@ function CurrentExercise({
               <Text textStyle="epigraph" color="fg.muted" mt="sm">
                 Writing your etude…
               </Text>
-              <Text fontSize="13px" color="fg.subtle">
+              <Text textStyle="meta" color="fg.subtle">
                 This can take up to a minute.
               </Text>
             </Flex>
@@ -549,12 +501,12 @@ function CurrentExercise({
         </Plate>
 
         {error && (
-          <Text role="alert" fontSize="14px" color="fg.error">
+          <Text role="alert" textStyle="body" color="fg.error">
             {error}
           </Text>
         )}
         {writingBehind && (
-          <Text role="status" fontSize="14px" color="fg.muted">
+          <Text role="status" textStyle="body" color="fg.muted">
             Your etude is still being written. It'll appear under Earlier when it's ready.
           </Text>
         )}
@@ -780,7 +732,7 @@ function ClearHistoryButton({
         <Dialog.Positioner>
           <Dialog.Content maxWidth="440px" p="lg" gap="md" borderWidth="1px" borderColor="border">
             <Dialog.Title textStyle="heading.md">Clear history?</Dialog.Title>
-            <Dialog.Description fontSize="14px" color="fg.muted">
+            <Dialog.Description textStyle="body" color="fg.muted">
               {keepsPlate
                 ? "Every earlier exercise is removed. The one on the plate stays and becomes No. 1."
                 : "Every exercise you've generated is removed."}{" "}
@@ -817,6 +769,8 @@ type SettingsMarginProps = Omit<FlexProps, "onChange"> & {
   etudeQuota: EtudeQuota | null;
   /** Guests can't generate etudes; they're pointed to sign in instead. */
   isGuest: boolean;
+  /** Whether this server can't write etudes (it has no Claude credentials). */
+  etudesOff: boolean;
 };
 
 /** The right-hand margin: every generator setting, with Generate at its foot. */
@@ -827,6 +781,7 @@ function SettingsMargin({
   writing,
   etudeQuota,
   isGuest,
+  etudesOff,
   ...rest
 }: SettingsMarginProps) {
   const [allKeys, setAllKeys] = useState(false);
@@ -887,6 +842,8 @@ function SettingsMargin({
                 </chakra.a>
                 .
               </>
+            ) : etudesOff ? (
+              "Etudes can't be written on this server right now."
             ) : etudes ? (
               "Claude writes each etude for you, which takes a little while."
             ) : undefined
@@ -895,7 +852,7 @@ function SettingsMargin({
           <RadioGroup
             aria-label="Exercise type"
             orientation="grid"
-            options={typeOptions(isGuest)}
+            options={typeOptions(isGuest, etudesOff)}
             value={settings.type}
             // A difficulty or length the type doesn't come in moves to the nearest it does.
             onChange={(type) =>
@@ -985,13 +942,13 @@ function SettingsMargin({
           size="lg"
           fullWidth
           // Other types can be generated while an etude is being written.
-          disabled={etudes && (writing || outOfEtudes)}
+          disabled={etudes && (writing || outOfEtudes || etudesOff)}
           onClick={onGenerate}
         >
           {etudes && writing ? "Writing etude…" : "Generate"}
         </Button>
         {etudes && etudeQuota && (
-          <Text fontSize="12px" color="fg.muted" mt="sm" textAlign="center">
+          <Text textStyle="meta" color="fg.muted" mt="sm" textAlign="center">
             <EtudesLeft quota={etudeQuota} />
           </Text>
         )}
