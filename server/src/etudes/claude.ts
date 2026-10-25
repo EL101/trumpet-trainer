@@ -24,8 +24,8 @@ let client: Anthropic | null | undefined;
 
 /**
  * The shared client, or null when no credentials are set up, so the route can
- * say so instead of failing on every request. Etudes are requested from a
- * waiting browser, so a slow call gives up after a minute and is retried once.
+ * say so instead of failing on every request. A slow call gives up after a minute
+ * and is retried once, which bounds how long an etude can take (see STALE_AFTER_MS).
  */
 export function anthropic(): Anthropic | null {
   if (client === undefined) {

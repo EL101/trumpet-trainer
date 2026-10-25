@@ -2,7 +2,9 @@
  * The musical rules an etude is written and checked against: written ranges for
  * Bb trumpet, note values per difficulty, and the checks run on what Claude
  * returns. Mirrors the client's generator vocabulary (RANGE_NOTES, keys, time
- * signatures), which lives in client/src/utils and client/src/lib.
+ * signatures, note format), which lives in client/src/utils, client/src/lib and
+ * client/src/schema; client/src/utils/etudeMirror.test.ts checks the two agree.
+ * Keep this file free of imports, so that test can load it.
  */
 
 export const PITCH_CLASSES = [
@@ -35,6 +37,9 @@ export type Difficulty = (typeof DIFFICULTIES)[number];
 
 export const TIME_SIGNATURES = ["4/4", "3/4", "2/4", "2/2", "6/8", "3/8", "9/8", "12/8"] as const;
 export type TimeSignature = (typeof TIME_SIGNATURES)[number];
+
+/** Bars an etude can be. Longer etudes cost more and take longer to write. */
+export const ETUDE_MEASURES = { min: 4, max: 16, default: 8 } as const;
 
 /** Lowest and highest written note for each range. Mirrors the client's RANGE_NOTES. */
 export const RANGE_NOTES: Record<Range, readonly [string, string]> = {

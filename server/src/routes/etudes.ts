@@ -8,6 +8,7 @@ import { startEtude } from "../etudes/run.js";
 import { envNumber } from "../env.js";
 import {
   etudeQuota,
+  failStaleEtudes,
   findEtude,
   pendingEtude,
   reserveEtude,
@@ -48,6 +49,7 @@ const bookedCostMicros = costMicros(ETUDE_MODEL, MAX_USAGE.inputTokens, MAX_USAG
 router.get("/quota", requireAuth, refuseGuests, async (req: Request, res: Response) => {
   try {
     const uid = req.user!.uid;
+    await failStaleEtudes(uid);
     const [quota, pending] = await Promise.all([etudeQuota(uid, dailyLimit()), pendingEtude(uid)]);
     res.json({ ...quota, pending, enabled: anthropic() !== null });
   } catch (err) {
@@ -117,6 +119,7 @@ router.get("/:id", requireAuth, refuseGuests, async (req: Request, res: Response
 
   try {
     const uid = req.user!.uid;
+    await failStaleEtudes(uid);
     const etude = await findEtude(uid, id.data);
     if (!etude) return res.status(404).json({ error: "No such etude" });
     res.json({ etude, quota: await etudeQuota(uid, dailyLimit()) });

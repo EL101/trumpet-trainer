@@ -1,14 +1,12 @@
 import { z } from "zod";
 import {
   DIFFICULTIES,
+  ETUDE_MEASURES,
   KEY_PATTERN,
   RANGES,
   TIME_SIGNATURES,
   type EtudeOptions,
 } from "../etudes/music.js";
-
-/** Bars an etude can be. Longer etudes cost more and take longer to write. */
-export const ETUDE_MEASURES = { min: 4, max: 16, default: 8 } as const;
 
 /** Moods an etude can be asked for. A fixed list, so user text never reaches the prompt. */
 export const ETUDE_CHARACTERS = ["lyrical", "march", "technical", "dance"] as const;

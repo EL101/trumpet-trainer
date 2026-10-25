@@ -27,7 +27,8 @@ export type QuotaStatus = {
   resetsAt: Date | null;
 };
 
-async function quotaWithin(userId: string, limit: number): Promise<QuotaStatus> {
+/** The user's quota. Run failStaleEtudes first, so etudes cut off give their slots back. */
+export async function etudeQuota(userId: string, limit: number): Promise<QuotaStatus> {
   const where = {
     userId,
     status: { in: COUNTED },
@@ -51,8 +52,9 @@ async function quotaWithin(userId: string, limit: number): Promise<QuotaStatus> 
 /**
  * Mark the user's pending etudes that were cut off as failed, giving their quota
  * back. Each keeps its booked cost, since what it spent before it stopped is unknown.
+ * Run it once per request, before reading the user's quota or etudes.
  */
-function failStale(userId: string) {
+export function failStaleEtudes(userId: string) {
   return prisma.etudeGeneration.updateMany({
     where: {
       userId,
@@ -79,14 +81,8 @@ async function withExercise(row: {
 
 export type EtudeView = Awaited<ReturnType<typeof withExercise>>;
 
-export async function etudeQuota(userId: string, limit: number) {
-  await failStale(userId);
-  return quotaWithin(userId, limit);
-}
-
-/** The user's etude being written now, if there is one. */
+/** The user's etude being written now, if there is one. Run failStaleEtudes first. */
 export async function pendingEtude(userId: string): Promise<EtudeView | null> {
-  await failStale(userId);
   const row = await prisma.etudeGeneration.findFirst({
     where: { userId, status: EtudeStatus.PENDING },
     orderBy: { createdAt: "desc" },
@@ -94,9 +90,11 @@ export async function pendingEtude(userId: string): Promise<EtudeView | null> {
   return row ? withExercise(row) : null;
 }
 
-/** One of the user's etude requests, or null if there's no such request of theirs. */
+/**
+ * One of the user's etude requests, or null if there's no such request of theirs.
+ * Run failStaleEtudes first, so one that was cut off doesn't show as still pending.
+ */
 export async function findEtude(userId: string, id: string): Promise<EtudeView | null> {
-  await failStale(userId);
   const row = await prisma.etudeGeneration.findFirst({ where: { id, userId } });
   return row ? withExercise(row) : null;
 }
@@ -113,8 +111,9 @@ export async function reserveEtude(
   limit: number,
   booking: { model: string; costMicros: number },
 ) {
-  await failStale(userId);
-  const [quota, pending] = await Promise.all([quotaWithin(userId, limit), pendingEtude(userId)]);
+  // Cut-off etudes first, so they neither block this one nor use up its quota.
+  await failStaleEtudes(userId);
+  const [quota, pending] = await Promise.all([etudeQuota(userId, limit), pendingEtude(userId)]);
   if (pending) return { reserved: null, pending, quota };
   if (quota.remaining === 0) return { reserved: null, pending: null, quota };
 

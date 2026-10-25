@@ -420,7 +420,7 @@ function useFingeringLabels(exercise: MusicInfo | null, show: boolean) {
 
 /** The exercise just generated (or brought back), on a plate, with what to do with it. */
 function CurrentExercise({
-  exercise: current,
+  exercise,
   pendingType,
   writing,
   writingBehind,
@@ -450,7 +450,6 @@ function CurrentExercise({
   onToggleFingerings: () => void;
   ref: Ref<HTMLDivElement>;
 }) {
-  const exercise = writing ? null : current;
   const fingerings = useFingeringLabels(exercise, showFingerings);
   return (
     <Grid ref={ref} templateColumns={ENTRY_COLUMNS} gap="md" scrollMarginTop="2xl">
