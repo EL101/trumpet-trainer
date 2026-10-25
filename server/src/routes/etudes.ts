@@ -4,7 +4,7 @@ import { EtudeRequestSchema } from "../schema/index.js";
 import { z } from "zod";
 import { anthropic, costMicros, ETUDE_MODEL } from "../etudes/claude.js";
 import { MAX_USAGE } from "../etudes/generate.js";
-import { startEtude } from "../etudes/run.js";
+import { acceptingEtudes, startEtude } from "../etudes/run.js";
 import { envNumber } from "../env.js";
 import {
   etudeQuota,
@@ -74,6 +74,10 @@ router.post("/", requireAuth, refuseGuests, async (req: Request, res: Response) 
   const client = anthropic();
   if (!client) {
     return res.status(503).json({ error: "Etude generation isn't set up on this server." });
+  }
+  // Shutting down: an etude started now would only be cut off.
+  if (!acceptingEtudes()) {
+    return res.status(503).json({ error: "The server is restarting. Try again in a moment." });
   }
 
   let reservation;

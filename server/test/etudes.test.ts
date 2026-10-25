@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import net, { type AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import { app } from "../src/app.js";
@@ -6,7 +7,7 @@ import { prisma } from "../src/db.js";
 import type { NoteEvent } from "../src/etudes/music.js";
 import { costMicros, ETUDE_MODEL } from "../src/etudes/claude.js";
 import { MAX_USAGE } from "../src/etudes/generate.js";
-import { etudesSettled, runningEtudeIds } from "../src/etudes/run.js";
+import { acceptEtudes, etudesSettled, runningEtudeIds } from "../src/etudes/run.js";
 import { failInterruptedEtudes, STALE_AFTER_MS } from "../src/queries/etudes.js";
 import { shutdown } from "../src/shutdown.js";
 import { googleClaims, guestClaims, tokenFor } from "./firebaseMock.js";
@@ -92,6 +93,8 @@ beforeEach(() => {
 
 afterEach(async () => {
   await etudesSettled();
+  // A shutdown test stops this process taking etudes; the next test needs them back.
+  acceptEtudes(true);
   vi.unstubAllEnvs();
 });
 
@@ -559,5 +562,35 @@ describe("shutdown", () => {
     await stopped;
 
     expect((await rows(uid))[0]).toMatchObject({ status: "SUCCEEDED", error: null });
+  });
+
+  it("refuses new etudes while it waits for the ones being written", async () => {
+    const finish = holdReply();
+    await post(tokenFor(googleClaims(newUid())));
+    const stopped = shutdown(await listening(), 10_000);
+
+    const res = await post(tokenFor(googleClaims(newUid())));
+
+    expect(res.status).toBe(503);
+    expect(res.body.error).toBe("The server is restarting. Try again in a moment.");
+    finish();
+    await stopped;
+  });
+
+  it("doesn't wait on a connection left open, and closes it at the end", async () => {
+    const server = await listening();
+    // A request still arriving keeps its connection busy, so close() alone leaves it open.
+    const socket = net.connect((server.address() as AddressInfo).port);
+    await new Promise((resolve) => socket.once("connect", resolve));
+    socket.write("GET /api/etudes/quota HTTP/1.1\r\nHost: localhost\r\n");
+    // Closing it resets the connection, which is the point.
+    socket.on("error", () => {});
+    const socketClosed = new Promise((resolve) => socket.once("close", resolve));
+
+    const started = Date.now();
+    await shutdown(server, 5_000);
+
+    expect(Date.now() - started).toBeLessThan(1_000);
+    await socketClosed;
   });
 });

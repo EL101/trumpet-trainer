@@ -16,6 +16,16 @@ const FAILURE_MESSAGES: Record<EtudeFailure["kind"], string> = {
 /** Etudes being written in this process, by id. Each leaves once it's settled. */
 const running = new Map<string, Promise<void>>();
 
+/** Whether this process takes new etudes. Shutdown turns it off. */
+let accepting = true;
+
+/** Stop (or, in tests, resume) taking new etudes. POST /api/etudes refuses while off. */
+export function acceptEtudes(accept: boolean): void {
+  accepting = accept;
+}
+
+export const acceptingEtudes = () => accepting;
+
 /** Resolves once every etude being written now has finished. For tests and shutdown. */
 export function etudesSettled(): Promise<unknown> {
   return Promise.all(running.values());
