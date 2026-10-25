@@ -39,7 +39,7 @@ jobs:
       DATABASE_URL: postgresql://trumpet:trumpet@localhost:5433/trumpet_trainer_test
     services:
       postgres:
-        image: public.ecr.aws/docker/library/postgres:16.8
+        image: postgres:16.8
         env:
           POSTGRES_USER: trumpet
           POSTGRES_PASSWORD: trumpet
