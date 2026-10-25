@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { getKeySig, PRACTICAL_MAJOR, PRACTICAL_MINOR } from "@/utils/generateMusic";
-import { difficultyFor, isCommonKey, KEY_ROWS, keyChoices } from "./generatorOptions";
+import {
+  difficultyFor,
+  isCommonKey,
+  KEY_ROWS,
+  keyChoices,
+  measureLimitsFor,
+  measuresFor,
+} from "./generatorOptions";
 
 describe("KEY_ROWS", () => {
   it("offers every key the generator plays in, once each", () => {
@@ -52,5 +59,17 @@ describe("difficultyFor", () => {
 
   it("falls back to the type's lowest when it doesn't come in that difficulty", () => {
     expect(difficultyFor("LONG_TONES", "MED")).toBe("LOW");
+  });
+});
+
+describe("measuresFor", () => {
+  it("keeps a length inside the type's limits", () => {
+    expect(measuresFor("RANDOM", 4)).toBe(4);
+    expect(measuresFor("ETUDES", 12)).toBe(12);
+  });
+
+  it("moves a length outside them to the nearest limit", () => {
+    expect(measuresFor("ETUDES", 2)).toBe(4);
+    expect(measuresFor("RANDOM", 16)).toBe(measureLimitsFor("RANDOM").max);
   });
 });

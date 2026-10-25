@@ -57,8 +57,8 @@ src/
 │   ├── tokens.ts          Fonts, spacing, radii, shadows, sizes; registers the roles.
 │   ├── textStyles.ts      Type scale: display.*, heading.*, kicker, meta, figure.*
 │   ├── globalCss.ts       Page background, heading font, focus ring, text selection.
-│   ├── keyframes.ts       Entrance animations (rise-in, pop-in, wipe-in, draw-on, …) and
-│   │                      one exit (sink-out).
+│   ├── keyframes.ts       Entrance animations (rise-in, pop-in, wipe-in, draw-on, …), one
+│   │                      exit (sink-out) and one loop for waiting (write-note).
 │   ├── recipes/           Variant definitions per component (button primary/secondary/…)
 │   └── index.ts           Builds the Chakra `system` and re-exports everything.
 │
@@ -66,7 +66,8 @@ src/
 │   ├── primitives/        Generic building blocks. Import from "@/components/primitives".
 │   │                      Button, IconButton, Card, Tag, Input, NativeSelect, Field,
 │   │                      SegmentedControl, RadioGroup, ChoiceGrid, Stepper, Rule,
-│   │                      Kicker, Stat, SectionHeading, Bookplate
+│   │                      Kicker, Stat, SectionHeading, Bookplate, Toaster (mounted once
+│   │                      in App.tsx; show a corner notice with notify())
 │   ├── music/             Trumpet-specific UI. Import from "@/components/music".
 │   │                      Staff (VexFlow notation with per-note intonation colour and a
 │   │                      playback cursor), PitchReadout, ScoreFigure,
@@ -75,19 +76,22 @@ src/
 │   ├── layout/            Page frames. Import from "@/components/layout".
 │   │                      AppShell (sidebar + content), FocusShell (no sidebar, for the
 │   │                      player), Sidebar, PageHeader
-│   ├── ui/                Chakra's generated setup (provider, toaster, tooltip). Rarely touched.
+│   ├── ui/                Chakra's generated setup (provider, tooltip). Rarely touched.
 │   └── *.tsx              OLD components. See "Old vs new" below.
 │
 ├── pages/                 One file per route; routes are declared in App.tsx.
 ├── lib/                   Pure helpers for the new UI (intonation colours, formatting,
 │                          the generator's keys, time signatures and labels).
 ├── utils/                 App logic: music generation (generateMusic, lipSlurs, built on
-│                          rhythm, melody and notate), API calls, history, library,
+│                          rhythm, melody and notate), etudes (written by Claude on the
+│                          server, fetched by etudes.ts), API calls, history, library,
 │                          profile, image handling.
 ├── hooks/                 usePitch (microphone), useMetronome, usePersistedState
 ├── auth/                  Firebase sign-in: useAuth() for state; auth.ts signs in, links
 │                          a guest to Google, and signs out
 ├── profile/               The signed-in user's profile: useProfile()
+├── etudes/                The etude being written, app-wide: useEtudes() starts one,
+│                          waits on it, and posts a notice when it's done
 └── schema/                Shared TypeScript types (exercises, music, profile)
 ```
 

@@ -13,7 +13,9 @@ import {
 } from "@chakra-ui/react";
 import { Bookmark, BookmarkCheck, ChevronDown, ChevronUp, Eye, EyeOff, Play } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
+import { Link as RouterLink } from "react-router-dom";
 import { AuthUserContext } from "@/auth/AuthUserContext";
+import { useEtudes } from "@/etudes/useEtudes";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { AppShell, PageHeader } from "@/components/layout";
 import { ExerciseMeta, PitchText, Staff } from "@/components/music";
@@ -33,7 +35,8 @@ import {
   EXERCISE_TYPE_LABELS,
   isCommonKey,
   keyChoices,
-  MEASURE_LIMITS,
+  measureLimitsFor,
+  measuresFor,
   RANGE_LABELS,
   TIME_SIGNATURES,
   TYPE_DIFFICULTIES,
@@ -45,6 +48,7 @@ import {
   generateScaleExercise,
   RANGE_NOTES,
 } from "@/utils/generateMusic";
+import type { EtudeQuota } from "@/utils/etudes";
 import { clearHistory, getInitialHistory, insertToHistory } from "@/utils/history";
 import { generateLipSlurs, lipSlurFingerings } from "@/utils/lipSlurs";
 import { getInitialLibrary, saveToLibrary } from "@/utils/library";
@@ -69,7 +73,7 @@ type Settings = {
   difficulty: Difficulty;
 };
 
-/** The notes for each type built so far. The other types can't be picked yet. */
+/** The notes for each type made in the browser. Etudes come from the server instead. */
 const GENERATORS: Partial<Record<ExerciseType, (settings: Settings) => string>> = {
   // The margin only offers long tones at low or high difficulty (see TYPE_DIFFICULTIES).
   LONG_TONES: ({ measures, timeSig, key, range, difficulty }) =>
@@ -91,11 +95,20 @@ const SETS_OWN_LENGTH: ReadonlySet<ExerciseType> = new Set(["SCALES"]);
  */
 const KEYLESS: ReadonlySet<ExerciseType> = new Set(["LIP_SLURS"]);
 
-const TYPE_OPTIONS: readonly ChoiceOption<ExerciseType>[] = EXERCISE_TYPES.map((t) => ({
-  value: t,
-  label: EXERCISE_TYPE_LABELS[t],
-  disabled: !GENERATORS[t],
-}));
+/**
+ * Types that can be picked: those made here, and etudes, which Claude writes on the
+ * server for signed-in players only (the server refuses guests too), when the server
+ * is set up to write them.
+ */
+const canGenerate = (type: ExerciseType, isGuest: boolean, etudesOff: boolean) =>
+  type === "ETUDES" ? !isGuest && !etudesOff : !!GENERATORS[type];
+
+const typeOptions = (isGuest: boolean, etudesOff: boolean): ChoiceOption<ExerciseType>[] =>
+  EXERCISE_TYPES.map((t) => ({
+    value: t,
+    label: EXERCISE_TYPE_LABELS[t],
+    disabled: !canGenerate(t, isGuest, etudesOff),
+  }));
 
 const DEFAULT_SETTINGS: Settings = {
   type: "RANDOM",
@@ -185,7 +198,71 @@ export function Generate() {
     });
   };
 
+  // Etudes are written by Claude on the server, in the background, and saved to
+  // history there. EtudesProvider waits on the one being written and says when it's
+  // done, wherever the player is; this page only puts it in place.
+  const {
+    writing,
+    quota: etudeQuota,
+    available: etudesAvailable,
+    start: startEtude,
+    refresh: refreshEtudes,
+    onFinished,
+  } = useEtudes();
+  // Why the server wouldn't start the last etude. How a started one ends is a notice.
+  const [etudeError, setEtudeError] = useState<string | null>(null);
+  const isGuest = !!user?.isAnonymous;
+  const etudesChosen = settings.type === "ETUDES";
+
+  // Each time etudes are chosen, look again: slots free up as the day goes on.
+  useEffect(() => {
+    if (etudesChosen) refreshEtudes();
+  }, [etudesChosen, refreshEtudes]);
+
+  // A finished etude joins history, and the plate if the plate is waiting for it.
+  useEffect(
+    () =>
+      onFinished((job) => {
+        const exercise = job.exercise;
+        if (job.status !== "SUCCEEDED" || !exercise) return;
+        setHistory((prev) => ({ ...prev, [exercise.generationNum]: exercise }));
+        setGenerated((current) => current ?? exercise);
+      }),
+    [onFinished],
+  );
+
+  /** Take the exercise off the plate; it stays in the list below once it's numbered. */
+  const clearPlate = (next: MusicInfo | null) => {
+    if (generated?.generationNum && !history[generated.generationNum]) {
+      setHistory((prev) => ({ ...prev, [generated.generationNum]: generated }));
+    }
+    setGenerated(next);
+  };
+
+  const generateEtude = async ({ key, timeSig, measures, range, difficulty }: Settings) => {
+    if (writing) return;
+    // The plate waits for the etude; whatever was on it moves down to the list.
+    clearPlate(null);
+    showPlate();
+    const result = await startEtude({
+      musicKey: key,
+      timeSig,
+      measures,
+      noteRange: range,
+      difficulty,
+    });
+    // Refused because one is already being written: that's the one to wait for.
+    if (!result.ok && !result.job) setEtudeError(result.message);
+  };
+
   const handleGenerate = () => {
+    setIntro(false);
+    setEtudeError(null);
+    if (settings.type === "ETUDES") {
+      void generateEtude(settings);
+      return;
+    }
+
     const { type, key, timeSig, range, difficulty } = settings;
     const generate = GENERATORS[type];
     if (!generate) return;
@@ -202,7 +279,6 @@ export function Generate() {
       generationNum: 0,
     };
 
-    setIntro(false);
     setGenerated(exercise);
     saveToHistory(exercise);
     showPlate();
@@ -210,11 +286,7 @@ export function Generate() {
 
   const handleOpen = (exercise: MusicInfo) => {
     setIntro(false);
-    // The exercise leaving the plate joins the list below it (once it's numbered).
-    if (generated?.generationNum && !history[generated.generationNum]) {
-      setHistory((prev) => ({ ...prev, [generated.generationNum]: generated }));
-    }
-    setGenerated(exercise);
+    clearPlate(exercise);
     showPlate();
   };
 
@@ -263,6 +335,9 @@ export function Generate() {
           ref={plateRef}
           exercise={generated}
           pendingType={settings.type}
+          writing={writing && !generated}
+          writingBehind={writing && !!generated}
+          error={etudeError}
           perLine={perLine}
           saved={!!generated && isSaved(generated)}
           onSaved={(exercise) => setLibrary((prev) => [...prev, exercise])}
@@ -319,6 +394,10 @@ export function Generate() {
         settings={settings}
         onChange={(patch) => setSettings((prev) => ({ ...prev, ...patch }))}
         onGenerate={handleGenerate}
+        writing={writing}
+        etudeQuota={etudeQuota}
+        isGuest={isGuest}
+        etudesOff={etudesAvailable === false}
         order={{ base: -1, lg: 0 }}
       />
     </AppShell>
@@ -343,6 +422,9 @@ function useFingeringLabels(exercise: MusicInfo | null, show: boolean) {
 function CurrentExercise({
   exercise,
   pendingType,
+  writing,
+  writingBehind,
+  error,
   perLine,
   saved,
   onSaved,
@@ -353,6 +435,12 @@ function CurrentExercise({
   exercise: MusicInfo | null;
   /** The type Generate will make, titling the plate while it's empty. */
   pendingType: ExerciseType;
+  /** Whether the plate is waiting for an etude being written. */
+  writing: boolean;
+  /** Whether an etude is being written while another exercise is on the plate. */
+  writingBehind: boolean;
+  /** Why the last etude couldn't be written, if it couldn't. */
+  error: string | null;
   perLine?: number;
   /** Whether the exercise is already in the library. */
   saved: boolean;
@@ -371,13 +459,23 @@ function CurrentExercise({
       <Flex direction="column" gap="md" minWidth={0}>
         <Flex justify="space-between" align="baseline" gap="md" wrap="wrap">
           <Heading as="h2" textStyle="heading.md" m={0}>
-            {EXERCISE_TYPE_LABELS[exercise?.exerciseType ?? pendingType]}
+            {EXERCISE_TYPE_LABELS[writing ? "ETUDES" : (exercise?.exerciseType ?? pendingType)]}
           </Heading>
           {exercise && <ExerciseDetails exercise={exercise} long />}
         </Flex>
 
         <Plate>
-          {exercise ? (
+          {writing ? (
+            <Flex direction="column" align="center" gap="xs" py="xl" role="status">
+              <WritingNotes />
+              <Text textStyle="epigraph" color="fg.muted" mt="sm">
+                Writing your etude…
+              </Text>
+              <Text textStyle="meta" color="fg.subtle">
+                This can take up to a minute.
+              </Text>
+            </Flex>
+          ) : exercise ? (
             <Staff
               key={exercise.id}
               notes={exercise.notes}
@@ -400,6 +498,17 @@ function CurrentExercise({
             </Text>
           )}
         </Plate>
+
+        {error && (
+          <Text role="alert" textStyle="body" color="fg.error">
+            {error}
+          </Text>
+        )}
+        {writingBehind && (
+          <Text role="status" textStyle="body" color="fg.muted">
+            Your etude is still being written. It'll appear under Earlier when it's ready.
+          </Text>
+        )}
 
         <Flex gap="sm" wrap="wrap">
           {/* The practice view isn't built yet. */}
@@ -622,7 +731,7 @@ function ClearHistoryButton({
         <Dialog.Positioner>
           <Dialog.Content maxWidth="440px" p="lg" gap="md" borderWidth="1px" borderColor="border">
             <Dialog.Title textStyle="heading.md">Clear history?</Dialog.Title>
-            <Dialog.Description fontSize="14px" color="fg.muted">
+            <Dialog.Description textStyle="body" color="fg.muted">
               {keepsPlate
                 ? "Every earlier exercise is removed. The one on the plate stays and becomes No. 1."
                 : "Every exercise you've generated is removed."}{" "}
@@ -653,10 +762,27 @@ type SettingsMarginProps = Omit<FlexProps, "onChange"> & {
   settings: Settings;
   onChange: (patch: Partial<Settings>) => void;
   onGenerate: () => void;
+  /** Whether an etude is being written; another waits for it. */
+  writing: boolean;
+  /** Etudes left today, once known. */
+  etudeQuota: EtudeQuota | null;
+  /** Guests can't generate etudes; they're pointed to sign in instead. */
+  isGuest: boolean;
+  /** Whether this server can't write etudes (it has no Claude credentials). */
+  etudesOff: boolean;
 };
 
 /** The right-hand margin: every generator setting, with Generate at its foot. */
-function SettingsMargin({ settings, onChange, onGenerate, ...rest }: SettingsMarginProps) {
+function SettingsMargin({
+  settings,
+  onChange,
+  onGenerate,
+  writing,
+  etudeQuota,
+  isGuest,
+  etudesOff,
+  ...rest
+}: SettingsMarginProps) {
   const [allKeys, setAllKeys] = useState(false);
   // Once a key from the longer list is chosen, keep the list open so it stays visible.
   const rareKey = !isCommonKey(settings.key);
@@ -668,6 +794,9 @@ function SettingsMargin({ settings, onChange, onGenerate, ...rest }: SettingsMar
   }));
   const [low, high] = RANGE_NOTES[settings.range];
   const ownLength = SETS_OWN_LENGTH.has(settings.type);
+  const measureLimits = measureLimitsFor(settings.type);
+  const etudes = settings.type === "ETUDES";
+  const outOfEtudes = etudes && etudeQuota?.remaining === 0;
 
   return (
     <Flex
@@ -701,15 +830,36 @@ function SettingsMargin({ settings, onChange, onGenerate, ...rest }: SettingsMar
       >
         <PageHeader title="Generate" hideFrom="lg" mb="sm" />
 
-        <Field label="Exercise type" helper="Etudes are on the way.">
+        <Field
+          label="Exercise type"
+          helper={
+            isGuest ? (
+              <>
+                Etudes need an account.{" "}
+                <chakra.a asChild color="accent.fg" textDecoration="underline">
+                  <RouterLink to="/profile">Sign in from Profile and settings</RouterLink>
+                </chakra.a>
+                .
+              </>
+            ) : etudesOff ? (
+              "Etudes can't be written on this server right now."
+            ) : etudes ? (
+              "Claude writes each etude for you, which takes a little while."
+            ) : undefined
+          }
+        >
           <RadioGroup
             aria-label="Exercise type"
             orientation="grid"
-            options={TYPE_OPTIONS}
+            options={typeOptions(isGuest, etudesOff)}
             value={settings.type}
-            // A type that doesn't come in the chosen difficulty falls back to its lowest.
+            // A difficulty or length the type doesn't come in moves to the nearest it does.
             onChange={(type) =>
-              onChange({ type, difficulty: difficultyFor(type, settings.difficulty) })
+              onChange({
+                type,
+                difficulty: difficultyFor(type, settings.difficulty),
+                measures: measuresFor(type, settings.measures),
+              })
             }
           />
         </Field>
@@ -755,8 +905,8 @@ function SettingsMargin({ settings, onChange, onGenerate, ...rest }: SettingsMar
         >
           <Stepper
             aria-label="Measures"
-            min={MEASURE_LIMITS.min}
-            max={MEASURE_LIMITS.max}
+            min={measureLimits.min}
+            max={measureLimits.max}
             disabled={ownLength}
             value={settings.measures}
             onChange={(measures) => onChange({ measures })}
@@ -786,10 +936,81 @@ function SettingsMargin({ settings, onChange, onGenerate, ...rest }: SettingsMar
       </Flex>
 
       <Box pt="md" pb="xl" ps="xl" pe="2xl" _motionSafe={riseIn(ENTER_ITEMS)}>
-        <Button variant="primary" size="lg" fullWidth onClick={onGenerate}>
-          Generate
+        <Button
+          variant="primary"
+          size="lg"
+          fullWidth
+          // Other types can be generated while an etude is being written.
+          disabled={etudes && (writing || outOfEtudes || etudesOff)}
+          onClick={onGenerate}
+        >
+          {etudes && writing ? "Writing etude…" : "Generate"}
         </Button>
+        {etudes && etudeQuota && (
+          <Text textStyle="meta" color="fg.muted" mt="sm" textAlign="center">
+            <EtudesLeft quota={etudeQuota} />
+          </Text>
+        )}
       </Box>
     </Flex>
+  );
+}
+
+/** "7 of 10 etudes left today", or when the next one frees up once they're used. */
+function EtudesLeft({ quota }: { quota: EtudeQuota }) {
+  if (quota.remaining > 0) {
+    return `${quota.remaining} of ${quota.limit} ${quota.limit === 1 ? "etude" : "etudes"} left today`;
+  }
+  if (!quota.resetsAt) return "No etudes left today.";
+  const resets = new Date(quota.resetsAt);
+  const at = resets.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  // The window is a rolling 24 hours, so the next one is often tomorrow.
+  const day = resets.toDateString() === new Date().toDateString() ? "" : "tomorrow ";
+  return `No etudes left today. Another ${day}at ${at}.`;
+}
+
+/**
+ * A few notes written onto a staff one after another, on a loop, while an etude is on
+ * its way. Without motion the notes simply stand there.
+ */
+function WritingNotes() {
+  const notes = [
+    { x: 22, y: 26 },
+    { x: 46, y: 20 },
+    { x: 70, y: 14 },
+    { x: 94, y: 20 },
+  ];
+  return (
+    <Box color="fg.subtle" aria-hidden>
+      <svg width="168" height="56" viewBox="0 0 120 40">
+        {[8, 14, 20, 26, 32].map((y) => (
+          <line key={y} x1="4" x2="116" y1={y} y2={y} stroke="currentColor" strokeWidth="0.75" />
+        ))}
+        {notes.map(({ x, y }, i) => (
+          <chakra.g
+            key={x}
+            color="accent.solid"
+            _motionSafe={{ animation: `write-note 2.4s ease-out ${i * 0.3}s infinite backwards` }}
+          >
+            <ellipse
+              cx={x}
+              cy={y}
+              rx="4.6"
+              ry="3.3"
+              transform={`rotate(-20 ${x} ${y})`}
+              fill="currentColor"
+            />
+            <line
+              x1={x + 4.2}
+              x2={x + 4.2}
+              y1={y - 1}
+              y2={y - 17}
+              stroke="currentColor"
+              strokeWidth="1.2"
+            />
+          </chakra.g>
+        ))}
+      </svg>
+    </Box>
   );
 }

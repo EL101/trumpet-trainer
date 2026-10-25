@@ -30,15 +30,6 @@ export type LibraryEntry = MusicInfo & {
   createdAt: string;
 };
 
-/** The knobs that drive generation. */
-export type ExerciseParams = {
-  timeSig: string;
-  measures: number;
-  musicKey: Key;
-  noteRange: Range;
-  difficulty: Difficulty;
-};
-
 /** Body sent to POST /api/history, which picks the number. Mirrors the server's HistoryInputSchema. */
 export type HistoryInput = {
   exerciseId: string;

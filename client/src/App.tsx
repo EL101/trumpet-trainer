@@ -1,6 +1,8 @@
 import "./App.css";
 import AuthUserProvider from "./auth/AuthUserProvider";
 import ProfileProvider from "./profile/ProfileProvider";
+import EtudesProvider from "./etudes/EtudesProvider";
+import { Toaster } from "@/components/primitives";
 import LandingPage from "./pages/LandingPage";
 import PitchTest from "./pages/PitchTest";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
@@ -20,43 +22,46 @@ function App() {
     <BrowserRouter>
       <AuthUserProvider>
         <ProfileProvider>
-          <Routes>
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/test" element={<PitchTest />} />
-            {import.meta.env.DEV && <Route path="/design" element={<DesignPreview />} />}
-            <Route
-              path="/sheet-test"
-              element={
-                <SheetMusic
-                  notes="C#5/q, B4, A4, G#4, G4/32, G4/16., G4/h."
-                  timeSig="4/4"
-                  musicKey="C major"
-                  border="1px solid red"
-                />
-              }
-            />
-            <Route element={<ProtectedRoute />}>
-              <Route path="/today" element={<Today />} />
-            </Route>
-            <Route element={<ProtectedRoute />}>
-              <Route path="/generate" element={<Generate />} />
-            </Route>
-            <Route element={<ProtectedRoute />}>
-              <Route path="/library" element={<Library />} />
-            </Route>
-            <Route element={<ProtectedRoute />}>
-              <Route path="/metronome" element={<Metronome />} />
-            </Route>
-            <Route element={<ProtectedRoute />}>
-              <Route path="/tuner" element={<Tuner />} />
-            </Route>
-            <Route element={<ProtectedRoute />}>
-              <Route path="/progress" element={<Progress />} />
-            </Route>
-            <Route element={<ProtectedRoute />}>
-              <Route path="/profile" element={<Profile />} />
-            </Route>
-          </Routes>
+          <EtudesProvider>
+            <Routes>
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/test" element={<PitchTest />} />
+              {import.meta.env.DEV && <Route path="/design" element={<DesignPreview />} />}
+              <Route
+                path="/sheet-test"
+                element={
+                  <SheetMusic
+                    notes="C#5/q, B4, A4, G#4, G4/32, G4/16., G4/h."
+                    timeSig="4/4"
+                    musicKey="C major"
+                    border="1px solid red"
+                  />
+                }
+              />
+              <Route element={<ProtectedRoute />}>
+                <Route path="/today" element={<Today />} />
+              </Route>
+              <Route element={<ProtectedRoute />}>
+                <Route path="/generate" element={<Generate />} />
+              </Route>
+              <Route element={<ProtectedRoute />}>
+                <Route path="/library" element={<Library />} />
+              </Route>
+              <Route element={<ProtectedRoute />}>
+                <Route path="/metronome" element={<Metronome />} />
+              </Route>
+              <Route element={<ProtectedRoute />}>
+                <Route path="/tuner" element={<Tuner />} />
+              </Route>
+              <Route element={<ProtectedRoute />}>
+                <Route path="/progress" element={<Progress />} />
+              </Route>
+              <Route element={<ProtectedRoute />}>
+                <Route path="/profile" element={<Profile />} />
+              </Route>
+            </Routes>
+            <Toaster />
+          </EtudesProvider>
         </ProfileProvider>
       </AuthUserProvider>
     </BrowserRouter>
