@@ -143,16 +143,19 @@ const HISTORY_STAGGER = 50;
 /** Entries past this many share its delay; they start below the fold anyway. */
 const HISTORY_STAGGER_CAP = 6;
 
-/** The entry grid: a number box in the margin, the exercise beside it. */
-const ENTRY_COLUMNS = "40px minmax(0, 1fr)";
+/**
+ * The entry grid: a number box in the margin, the exercise beside it. On phones the
+ * margin would squeeze the staff, so the number moves into the title row instead.
+ */
+const ENTRY_COLUMNS = { base: "minmax(0, 1fr)", sm: "40px minmax(0, 1fr)" };
 
 export function Generate() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [history, setHistory] = useState<Record<number, MusicInfo>>({});
   const [generated, setGenerated] = useState<MusicInfo | null>(null);
   const plateRef = useRef<HTMLDivElement>(null);
-  // Four bars to a line once the page is wide enough to give each bar room.
-  const perLine = useBreakpointValue({ base: 2, xl: 4 }, { ssr: false });
+  // As many bars to a line as the page gives room for: one on a phone, four once wide.
+  const perLine = useBreakpointValue({ base: 1, sm: 2, xl: 4 }, { ssr: false });
 
   const { user } = useContext(AuthUserContext);
   useEffect(() => getInitialHistory(user, setHistory), [user]);
@@ -453,14 +456,19 @@ function CurrentExercise({
   const fingerings = useFingeringLabels(exercise, showFingerings);
   return (
     <Grid ref={ref} templateColumns={ENTRY_COLUMNS} gap="md" scrollMarginTop="2xl">
-      <Box>
+      <Box hideBelow="sm">
         {exercise?.generationNum ? <NumberMark n={exercise.generationNum} current /> : null}
       </Box>
       <Flex direction="column" gap="md" minWidth={0}>
         <Flex justify="space-between" align="baseline" gap="md" wrap="wrap">
-          <Heading as="h2" textStyle="heading.md" m={0}>
-            {EXERCISE_TYPE_LABELS[writing ? "ETUDES" : (exercise?.exerciseType ?? pendingType)]}
-          </Heading>
+          <Flex align="center" gap="sm">
+            {exercise?.generationNum ? (
+              <NumberMark n={exercise.generationNum} current hideFrom="sm" />
+            ) : null}
+            <Heading as="h2" textStyle="heading.md" m={0}>
+              {EXERCISE_TYPE_LABELS[writing ? "ETUDES" : (exercise?.exerciseType ?? pendingType)]}
+            </Heading>
+          </Flex>
           {exercise && <ExerciseDetails exercise={exercise} long />}
         </Flex>
 
@@ -561,29 +569,32 @@ function EarlierExercise({
       gap="md"
       _motionSafe={{ animation: `rise-in ${ENTER_MS}ms ${ENTER_EASE} ${delay}ms backwards` }}
     >
-      <NumberMark n={exercise.generationNum} />
+      <NumberMark n={exercise.generationNum} hideBelow="sm" />
       <Flex direction="column" gap="xs" minWidth={0}>
         <Flex justify="space-between" align="baseline" gap="md" wrap="wrap">
-          <chakra.button
-            type="button"
-            onClick={onOpen}
-            aria-label={`Open ${title} No. ${exercise.generationNum}`}
-            textStyle="heading.sm"
-            textAlign="start"
-            cursor="pointer"
-            transitionProperty="color"
-            transitionDuration="fast"
-            _groupHover={{ color: "accent.fg" }}
-            // The button stretches over the whole entry so the staff is clickable too;
-            // the focus ring goes round the entry rather than the title.
-            _after={{ content: '""', position: "absolute", inset: "-6px", borderRadius: "md" }}
-            _focusVisible={{ outline: "none" }}
-            css={{
-              "&:focus-visible::after": { outline: "2px solid {colors.accent.solid}" },
-            }}
-          >
-            {title}
-          </chakra.button>
+          <Flex align="center" gap="sm">
+            <NumberMark n={exercise.generationNum} hideFrom="sm" />
+            <chakra.button
+              type="button"
+              onClick={onOpen}
+              aria-label={`Open ${title} No. ${exercise.generationNum}`}
+              textStyle="heading.sm"
+              textAlign="start"
+              cursor="pointer"
+              transitionProperty="color"
+              transitionDuration="fast"
+              _groupHover={{ color: "accent.fg" }}
+              // The button stretches over the whole entry so the staff is clickable too;
+              // the focus ring goes round the entry rather than the title.
+              _after={{ content: '""', position: "absolute", inset: "-6px", borderRadius: "md" }}
+              _focusVisible={{ outline: "none" }}
+              css={{
+                "&:focus-visible::after": { outline: "2px solid {colors.accent.solid}" },
+              }}
+            >
+              {title}
+            </chakra.button>
+          </Flex>
           <Flex align="baseline" gap="xs">
             {saved && (
               // Centred on the details line; the text alone sets the row's baseline.
@@ -627,7 +638,7 @@ function ExerciseDetails({ exercise, long }: { exercise: MusicInfo; long?: boole
 }
 
 /** An entry's number in a small box: accent for the exercise on the plate. */
-function NumberMark({ n, current }: { n: number; current?: boolean }) {
+function NumberMark({ n, current, ...rest }: FlexProps & { n: number; current?: boolean }) {
   return (
     <Flex
       align="center"
@@ -642,6 +653,7 @@ function NumberMark({ n, current }: { n: number; current?: boolean }) {
       transitionProperty="border-color, color"
       transitionDuration="fast"
       _groupHover={current ? undefined : { borderColor: "accent.solid", color: "accent.fg" }}
+      {...rest}
     >
       <VisuallyHidden>No. </VisuallyHidden>
       {n}
@@ -660,7 +672,8 @@ function Plate({ children }: { children: ReactNode }) {
       outlineStyle="solid"
       outlineColor="border"
       boxShadow="sm"
-      p="lg"
+      // A phone can't spare the full margin round the staff.
+      p={{ base: "sm", sm: "lg" }}
     >
       {children}
     </Box>
