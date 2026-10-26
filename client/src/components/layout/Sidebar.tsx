@@ -1,17 +1,26 @@
 import { Box, chakra, Flex, Grid, Text } from "@chakra-ui/react";
-import { useLayoutEffect, useRef } from "react";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { useId, useLayoutEffect, useRef } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { Rule, Stat } from "@/components/primitives";
+import { IconButton, Rule, Stat } from "@/components/primitives";
 import UserAvatar from "@/components/UserAvatar";
 import { useProfile } from "@/profile/useProfile";
 import { NAV_ITEMS, type NavItem } from "./navItems";
+import { SIDEBAR_SLIDE } from "./useSidebar";
 
 export type StreakDay = { label: string; state: "done" | "today" | "missed" };
 
 type SidebarProps = {
   items?: readonly NavItem[];
   streak?: { days: number; week: readonly StreakDay[] };
+  /** Full width, or folded down to a rail that holds only the toggle. */
+  expanded?: boolean;
+  /** Shows the collapse/expand button. */
+  onToggle?: () => void;
 };
+
+/** Open width: the design's on wide screens; on a phone, most of the screen. */
+const OPEN_WIDTH = { base: "min(320px, 100vw - 72px)", md: "sidebar" };
 
 const SidebarLink = chakra(NavLink, {
   base: {
@@ -54,91 +63,131 @@ let sidebarsOnScreen = 0;
 /** Where the last sidebar's active outline sat, from the top of its nav. */
 let lastOutlineTop: number | null = null;
 
-/** Left rail: brand, numbered nav, streak week and the profile link. */
-export function Sidebar({ items = NAV_ITEMS, streak }: SidebarProps) {
+/**
+ * Left rail: brand, numbered nav, streak week and the profile link. Collapsing it slides
+ * the edge in over its contents, which keep their width and fade out.
+ */
+export function Sidebar({ items = NAV_ITEMS, streak, expanded = true, onToggle }: SidebarProps) {
   const { asideRef, outlineRef } = useSidebarMotion();
+  const contentsId = useId();
   return (
-    <Flex
+    <Box
       as="aside"
       ref={asideRef}
-      direction="column"
-      gap="22px"
-      width="sidebar"
+      position="relative"
       flex="none"
+      width={expanded ? OPEN_WIDTH : "sidebarRail"}
       height="100%"
+      overflow="hidden"
+      bg="bg"
       borderRightWidth="1px"
       borderColor="border"
-      pt="34px"
-      px="20px"
-      pb="22px"
+      _motionSafe={{ transition: `width ${SIDEBAR_SLIDE}` }}
     >
-      <Flex direction="column" gap="6px" px="10px">
-        <Text
-          fontFamily="heading"
-          fontWeight={600}
-          fontSize="24px"
-          lineHeight={1.05}
-          letterSpacing="-0.01em"
+      <Flex
+        id={contentsId}
+        inert={!expanded}
+        direction="column"
+        gap="22px"
+        width={OPEN_WIDTH}
+        height="100%"
+        overflowY="auto"
+        pt="34px"
+        px="20px"
+        pb="22px"
+        opacity={expanded ? 1 : 0}
+        _motionSafe={{
+          // Out before the edge reaches the text; in once there's room for it.
+          transition: expanded ? "opacity 200ms ease-out 100ms" : "opacity 120ms ease-in",
+        }}
+      >
+        <Flex direction="column" gap="6px" px="10px">
+          <Text
+            fontFamily="heading"
+            fontWeight={600}
+            fontSize="24px"
+            lineHeight={1.05}
+            letterSpacing="-0.01em"
+          >
+            Trumpet Trainer
+          </Text>
+          <Text fontSize="10px" letterSpacing="0.14em" textTransform="uppercase" color="accent.fg">
+            Daily practice
+          </Text>
+        </Flex>
+        <Rule mx="10px" width="auto" />
+
+        <Flex as="nav" position="relative" direction="column" gap="3px">
+          {items.map((item, i) => (
+            <SidebarLink key={item.to} to={item.to}>
+              {({ isActive }) => (
+                <>
+                  {isActive && (
+                    <Box
+                      ref={outlineRef}
+                      position="absolute"
+                      inset={0}
+                      zIndex={1}
+                      borderRadius="inherit"
+                      boxShadow="inset 0 0 0 1px {colors.accent.solid}"
+                      pointerEvents="none"
+                    />
+                  )}
+                  <Text
+                    as="span"
+                    className="tt-nav-number"
+                    fontSize="11px"
+                    fontVariantNumeric="tabular-nums"
+                    width="16px"
+                  >
+                    {String(i + 1).padStart(2, "0")}
+                  </Text>
+                  <Text
+                    as="span"
+                    fontFamily="heading"
+                    fontWeight={600}
+                    fontSize="19px"
+                    lineHeight={1.2}
+                  >
+                    {item.label}
+                  </Text>
+                </>
+              )}
+            </SidebarLink>
+          ))}
+        </Flex>
+
+        <Flex direction="column" gap="14px" px="10px" mt="auto">
+          {streak && (
+            <>
+              <Stat layout="inline" size="lg" value={streak.days} label="day streak" />
+              <StreakWeek week={streak.week} />
+              <Rule />
+            </>
+          )}
+          <ProfileLink />
+        </Flex>
+      </Flex>
+
+      {onToggle && (
+        <IconButton
+          variant="ghost"
+          size="sm"
+          position="absolute"
+          // Level with "Daily practice": the title runs too close to the edge to share
+          // its line.
+          top="58px"
+          // Rides the edge, so it ends up centred in the rail (30px is its own width).
+          right="calc(({sizes.sidebarRail} - 30px) / 2)"
+          aria-label={expanded ? "Collapse sidebar" : "Expand sidebar"}
+          aria-expanded={expanded}
+          aria-controls={contentsId}
+          onClick={onToggle}
         >
-          Trumpet Trainer
-        </Text>
-        <Text fontSize="10px" letterSpacing="0.14em" textTransform="uppercase" color="accent.fg">
-          Daily practice
-        </Text>
-      </Flex>
-      <Rule mx="10px" width="auto" />
-
-      <Flex as="nav" position="relative" direction="column" gap="3px">
-        {items.map((item, i) => (
-          <SidebarLink key={item.to} to={item.to}>
-            {({ isActive }) => (
-              <>
-                {isActive && (
-                  <Box
-                    ref={outlineRef}
-                    position="absolute"
-                    inset={0}
-                    zIndex={1}
-                    borderRadius="inherit"
-                    boxShadow="inset 0 0 0 1px {colors.accent.solid}"
-                    pointerEvents="none"
-                  />
-                )}
-                <Text
-                  as="span"
-                  className="tt-nav-number"
-                  fontSize="11px"
-                  fontVariantNumeric="tabular-nums"
-                  width="16px"
-                >
-                  {String(i + 1).padStart(2, "0")}
-                </Text>
-                <Text
-                  as="span"
-                  fontFamily="heading"
-                  fontWeight={600}
-                  fontSize="19px"
-                  lineHeight={1.2}
-                >
-                  {item.label}
-                </Text>
-              </>
-            )}
-          </SidebarLink>
-        ))}
-      </Flex>
-
-      <Flex direction="column" gap="14px" px="10px" mt="auto">
-        {streak && (
-          <>
-            <Stat layout="inline" size="lg" value={streak.days} label="day streak" />
-            <StreakWeek week={streak.week} />
-            <Rule />
-          </>
-        )}
-        <ProfileLink />
-      </Flex>
-    </Flex>
+          {expanded ? <PanelLeftClose /> : <PanelLeftOpen />}
+        </IconButton>
+      )}
+    </Box>
   );
 }
 
