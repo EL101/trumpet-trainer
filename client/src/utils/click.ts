@@ -6,7 +6,13 @@ export function getCtx() {
   return audioCtx;
 }
 
-export function scheduleClick(when: number, accent = false, ctx: AudioContext) {
+/** A short click at `when`, higher on an accent, into `output` (the speakers by default). */
+export function scheduleClick(
+  when: number,
+  accent = false,
+  ctx: BaseAudioContext,
+  output: AudioNode = ctx.destination,
+) {
   const oscillator = ctx.createOscillator();
   const gainNode = ctx.createGain();
   oscillator.type = "triangle";
@@ -17,7 +23,7 @@ export function scheduleClick(when: number, accent = false, ctx: AudioContext) {
   gainNode.gain.setValueAtTime(0.001, when + 0.05);
 
   oscillator.connect(gainNode);
-  gainNode.connect(ctx.destination);
+  gainNode.connect(output);
 
   const oscillator2 = ctx.createOscillator();
   const gainNode2 = ctx.createGain();
@@ -29,7 +35,7 @@ export function scheduleClick(when: number, accent = false, ctx: AudioContext) {
   gainNode2.gain.setValueAtTime(0.0005, when + 0.05);
 
   oscillator2.connect(gainNode);
-  gainNode2.connect(ctx.destination);
+  gainNode2.connect(output);
 
   oscillator.start(when);
   oscillator.stop(when + 0.05);

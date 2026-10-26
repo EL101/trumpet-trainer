@@ -20,7 +20,7 @@ import { centsColor, formatCents } from "@/lib/intonation";
 import { roles } from "@/theme";
 import { getKeySig } from "@/utils/generateMusic";
 import type { Key } from "@/schema";
-import { parseMeasures, resolveMeasuresPerLine } from "./staffNotation";
+import { parseMeasures, resolveMeasuresPerLine } from "@/lib/notation";
 
 export type StaffProps = Omit<BoxProps, "children" | "width" | "color"> & {
   /** App note format, e.g. "G4/8, A4, B4/q, C5/h". */
@@ -38,6 +38,8 @@ export type StaffProps = Omit<BoxProps, "children" | "width" | "color"> & {
   cents?: readonly (number | null)[];
   /** Fractional note index for the playback cursor. */
   cursor?: number;
+  /** Makes the notes clickable: called with the index (rests counted) of the note clicked. */
+  onNoteClick?: (index: number) => void;
   /** Print each note's cents value beneath it. */
   annotate?: boolean;
   /** Custom text beneath each note (overrides `annotate`'s cents). */
@@ -64,6 +66,7 @@ export function Staff({
   measuresPerLine,
   cents,
   cursor,
+  onNoteClick,
   annotate,
   labels,
   noteColor,
@@ -106,6 +109,9 @@ export function Staff({
   // Notes far above or below the staff can reach past the lines' allotted height; the
   // drawing grows to fit them so they don't spill over neighbouring content.
   const [drawnHeight, setDrawnHeight] = useState(height);
+  // The notes as last drawn, for the cursor, which moves every frame during playback and
+  // so is drawn on its own rather than redrawing the staff.
+  const [drawing, setDrawing] = useState<{ svg: SVGSVGElement; placed: Placed[] } | null>(null);
 
   useEffect(() => {
     const host = ref.current;
@@ -140,7 +146,6 @@ export function Staff({
     if (!svg) return;
     svg.style.display = "block";
     svg.style.overflow = "visible";
-    if (cursor != null) drawCursor(svg, placed, cursor);
     if (showText) {
       const riseIn = !!shownLabels && !labelsDrawn.current && !prefersReducedMotion();
       drawLabels(
@@ -158,6 +163,7 @@ export function Staff({
     }
     labelsDrawn.current = !!shownLabels;
     setDrawnHeight(fitToContent(svg, W, height, scale));
+    setDrawing({ svg, placed });
     return () => {
       host.innerHTML = "";
     };
@@ -172,11 +178,16 @@ export function Staff({
     timeSig,
     barlines,
     cents,
-    cursor,
     shownLabels,
     noteColor,
     showText,
   ]);
+
+  useEffect(() => {
+    if (!drawing || cursor == null) return;
+    const marks = drawCursor(drawing.svg, drawing.placed, cursor);
+    return () => marks.forEach((mark) => mark.remove());
+  }, [drawing, cursor]);
 
   return (
     <Box
@@ -187,6 +198,14 @@ export function Staff({
       transitionDuration={`${LABEL_MS}ms`}
       transitionTimingFunction="ease-out"
       _motionReduce={{ transition: "none" }}
+      cursor={onNoteClick ? "pointer" : undefined}
+      onClick={
+        onNoteClick &&
+        ((e) => {
+          const index = drawing && noteAt(drawing.svg, drawing.placed, e.clientX, e.clientY);
+          if (index != null) onNoteClick(index);
+        })
+      }
       {...rest}
     />
   );
@@ -595,19 +614,30 @@ function noteCenterX(n: StaveNote) {
   return (n.getNoteHeadBeginX() + n.getNoteHeadEndX()) / 2;
 }
 
+const CURSOR_BAND = 28;
+
+/**
+ * Draws the cursor band and rule behind the notes; returns them for removal. Through a
+ * note the cursor glides towards the next one, or for a line's last note, towards the
+ * line's end.
+ */
 function drawCursor(svg: SVGSVGElement, placed: Placed[], cursor: number) {
-  if (!placed.length) return;
+  if (!placed.length) return [];
   const i0 = Math.max(0, Math.min(placed.length - 1, Math.floor(cursor)));
   const q0 = placed[i0];
   const q1 = placed[i0 + 1];
-  let x = noteCenterX(q0.note);
-  if (q1 && q1.stave.getY() === q0.stave.getY()) x += (noteCenterX(q1.note) - x) * (cursor - i0);
+  const from = noteCenterX(q0.note);
+  const to =
+    q1 && q1.stave.getY() === q0.stave.getY()
+      ? noteCenterX(q1.note)
+      : Math.max(from, q0.stave.getNoteEndX() - CURSOR_BAND / 2);
+  const x = from + (to - from) * Math.min(1, Math.max(0, cursor - i0));
   const top = q0.stave.getYForLine(0) - 20;
   const bottom = q0.stave.getYForLine(4) + 20;
 
   const band = svgEl(
     "rect",
-    { x: x - 14, y: top, width: 28, height: bottom - top, rx: 3 },
+    { x: x - CURSOR_BAND / 2, y: top, width: CURSOR_BAND, height: bottom - top, rx: 3 },
     { fill: roles.accent.cursor },
   );
   const rule = svgEl(
@@ -617,6 +647,23 @@ function drawCursor(svg: SVGSVGElement, placed: Placed[], cursor: number) {
   );
   svg.insertBefore(rule, svg.firstChild);
   svg.insertBefore(band, svg.firstChild);
+  return [band, rule];
+}
+
+/** The note nearest a click: on the nearest line, the one whose head is nearest across. */
+function noteAt(svg: SVGSVGElement, placed: Placed[], clientX: number, clientY: number) {
+  const toDrawing = svg.getScreenCTM()?.inverse();
+  if (!toDrawing || !placed.length) return null;
+  const { x, y } = new DOMPoint(clientX, clientY).matrixTransform(toDrawing);
+  const middle = (p: Placed) => (p.stave.getYForLine(0) + p.stave.getYForLine(4)) / 2;
+  const line = placed.reduce((a, b) => (Math.abs(middle(b) - y) < Math.abs(middle(a) - y) ? b : a));
+  let nearest: number | null = null;
+  placed.forEach((p, i) => {
+    if (p.stave.getY() !== line.stave.getY()) return;
+    const dx = Math.abs(noteCenterX(p.note) - x);
+    if (nearest === null || dx < Math.abs(noteCenterX(placed[nearest].note) - x)) nearest = i;
+  });
+  return nearest;
 }
 
 /**

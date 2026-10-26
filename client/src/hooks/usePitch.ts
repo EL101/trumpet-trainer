@@ -4,6 +4,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 export default function usePitch() {
   const [pitch, setPitch] = useState<number>(0);
   const [clarity, setClarity] = useState<number>(0);
+  /** Set when the microphone couldn't be opened (permission refused, none plugged in). */
+  const [error, setError] = useState<Error | null>(null);
 
   const cancelledRef = useRef(false);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -12,6 +14,7 @@ export default function usePitch() {
 
   const start = useCallback(async (): Promise<void> => {
     cancelledRef.current = false;
+    setError(null);
 
     try {
       streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -43,6 +46,7 @@ export default function usePitch() {
       update();
     } catch (err) {
       console.error("Mic error:", err);
+      setError(err instanceof Error ? err : new Error(String(err)));
     }
   }, []);
 
@@ -68,5 +72,5 @@ export default function usePitch() {
     };
   }, [start, stop]);
 
-  return { pitch, clarity, start, stop };
+  return { pitch, clarity, error, start, stop };
 }
