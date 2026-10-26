@@ -53,6 +53,8 @@ export const tokens = defineTokens({
   },
   sizes: {
     sidebar: { value: "224px" },
+    /** The collapsed sidebar: just room for its toggle. */
+    sidebarRail: { value: "52px" },
   },
 });
 

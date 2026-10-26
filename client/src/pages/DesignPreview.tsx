@@ -38,6 +38,7 @@ export default function DesignPreview() {
   const [time, setTime] = useState("4/4");
   const [bars, setBars] = useState(2);
   const [cursor, setCursor] = useState(3.4);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   return (
     <Box bg="bg" color="fg" minHeight="100vh" px="56px" py="52px">
@@ -408,6 +409,8 @@ export default function DesignPreview() {
       <Section title="Sidebar">
         <Box height="720px" borderWidth="1px" borderColor="border" width="max-content">
           <Sidebar
+            expanded={sidebarOpen}
+            onToggle={() => setSidebarOpen((open) => !open)}
             streak={{
               days: 12,
               week: [
