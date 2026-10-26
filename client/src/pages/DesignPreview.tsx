@@ -7,8 +7,10 @@ import {
   IntonationLegend,
   PitchReadout,
   PitchText,
+  PracticeButton,
   ScoreFigure,
   Staff,
+  TunerGauge,
 } from "@/components/music";
 import {
   Bookplate,
@@ -25,6 +27,7 @@ import {
   Rule,
   SectionHeading,
   SegmentedControl,
+  Slider,
   Stat,
   Stepper,
   Tag,
@@ -38,6 +41,7 @@ export default function DesignPreview() {
   const [time, setTime] = useState("4/4");
   const [bars, setBars] = useState(2);
   const [cursor, setCursor] = useState(3.4);
+  const [tempo, setTempo] = useState(96);
 
   return (
     <Box bg="bg" color="fg" minHeight="100vh" px="56px" py="52px">
@@ -231,6 +235,18 @@ export default function DesignPreview() {
             <Field label="Measures">
               <Stepper aria-label="Measures" value={bars} onChange={setBars} min={1} max={16} />
             </Field>
+            <Field label={`Slider (♩ = ${tempo})`}>
+              {(id) => (
+                <Slider
+                  id={id}
+                  aria-label="Tempo"
+                  value={tempo}
+                  onChange={setTempo}
+                  min={40}
+                  max={208}
+                />
+              )}
+            </Field>
           </Flex>
         </Grid>
       </Section>
@@ -246,6 +262,11 @@ export default function DesignPreview() {
           <ScoreFigure score={42} />
           <PitchReadout note="B4" cents={9} showListening />
           <PitchReadout note="F#5" cents={-22} size="sm" />
+        </Flex>
+        <Flex gap="2xl" mt="xl" wrap="wrap" align="flex-end">
+          <TunerGauge cents={9} width="220px" />
+          <TunerGauge cents={-31} width="220px" />
+          <TunerGauge cents={null} width="220px" />
         </Flex>
         <Flex gap="2xl" mt="xl" wrap="wrap">
           <SectionHeading number={1} title="Instrument" description="Transposition and tuning" />
@@ -351,6 +372,7 @@ export default function DesignPreview() {
               measuresPerLine={2}
               cents={[4, -3, 7, 12, -6, 18, 6, -2, 9, 30, -14]}
               cursor={cursor}
+              onNoteClick={setCursor}
             />
             <IntonationLegend mt="sm" />
           </Box>
@@ -400,6 +422,24 @@ export default function DesignPreview() {
               musicKey="C major"
               measuresPerLine={2}
               scale={0.8}
+            />
+          </Box>
+          <Box>
+            <Text fontSize="12px" color="fg.muted" mb="xs">
+              PracticeButton opens the player on an exercise; its back link returns here
+            </Text>
+            <PracticeButton
+              exercise={{
+                id: "design-preview",
+                exerciseId: "design-preview",
+                exerciseType: "RANDOM",
+                notes: "G4/8, A4, B4, C5, D5, C5, B4, A4, G4/q, D5, G4/h",
+                timeSig: "4/4",
+                musicKey: "G major",
+                noteRange: "MED",
+                difficulty: "LOW",
+                generationNum: 0,
+              }}
             />
           </Box>
         </Flex>

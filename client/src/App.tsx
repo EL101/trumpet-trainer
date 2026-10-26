@@ -16,6 +16,8 @@ import Metronome from "./pages/Metronome";
 import Tuner from "./pages/Tuner";
 import Progress from "./pages/Progress";
 import DesignPreview from "./pages/DesignPreview";
+import Practice from "./pages/Practice";
+import { PRACTICE_PATH } from "./lib/practice";
 
 function App() {
   return (
@@ -46,6 +48,9 @@ function App() {
               </Route>
               <Route element={<ProtectedRoute />}>
                 <Route path="/library" element={<Library />} />
+              </Route>
+              <Route element={<ProtectedRoute />}>
+                <Route path={PRACTICE_PATH} element={<Practice />} />
               </Route>
               <Route element={<ProtectedRoute />}>
                 <Route path="/metronome" element={<Metronome />} />

@@ -11,14 +11,14 @@ import {
   VisuallyHidden,
   type FlexProps,
 } from "@chakra-ui/react";
-import { Bookmark, BookmarkCheck, ChevronDown, ChevronUp, Eye, EyeOff, Play } from "lucide-react";
+import { Bookmark, BookmarkCheck, ChevronDown, ChevronUp, Eye, EyeOff } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
-import { Link as RouterLink } from "react-router-dom";
+import { Link as RouterLink, useLocation } from "react-router-dom";
 import { AuthUserContext } from "@/auth/AuthUserContext";
 import { useEtudes } from "@/etudes/useEtudes";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { AppShell, PageHeader } from "@/components/layout";
-import { ExerciseMeta, PitchText, Staff } from "@/components/music";
+import { ExerciseMeta, PitchText, PracticeButton, Staff } from "@/components/music";
 import {
   Button,
   ChoiceGrid,
@@ -34,6 +34,7 @@ import {
   difficultyFor,
   EXERCISE_TYPE_LABELS,
   isCommonKey,
+  KEYLESS,
   keyChoices,
   measureLimitsFor,
   measuresFor,
@@ -42,6 +43,7 @@ import {
   TYPE_DIFFICULTIES,
   type TimeSignature,
 } from "@/lib/generatorOptions";
+import { readPracticed } from "@/lib/practice";
 import {
   generateLongTones,
   generateMusic,
@@ -88,12 +90,6 @@ const GENERATORS: Partial<Record<ExerciseType, (settings: Settings) => string>> 
 
 /** Types whose length comes from the music itself, so the Measures setting is ignored. */
 const SETS_OWN_LENGTH: ReadonlySet<ExerciseType> = new Set(["SCALES"]);
-
-/**
- * Types written without a key, so the Key setting is ignored. Lip slurs follow each
- * valve combination's own notes. They're stored as C major, which has no signature.
- */
-const KEYLESS: ReadonlySet<ExerciseType> = new Set(["LIP_SLURS"]);
 
 /**
  * Types that can be picked: those made here, and etudes, which Claude writes on the
@@ -149,13 +145,21 @@ const ENTRY_COLUMNS = "40px minmax(0, 1fr)";
 export function Generate() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [history, setHistory] = useState<Record<number, MusicInfo>>({});
-  const [generated, setGenerated] = useState<MusicInfo | null>(null);
+  // Back from the player, the exercise just practised goes back on the plate.
+  const location = useLocation();
+  const [generated, setGenerated] = useState(() => readPracticed(location.state));
   const plateRef = useRef<HTMLDivElement>(null);
   // Four bars to a line once the page is wide enough to give each bar room.
   const perLine = useBreakpointValue({ base: 2, xl: 4 }, { ssr: false });
 
   const { user } = useContext(AuthUserContext);
   useEffect(() => getInitialHistory(user, setHistory), [user]);
+  // An exercise taken to the player before history numbered it was numbered while this
+  // page was away; take the number from history when it arrives.
+  if (generated && !generated.generationNum) {
+    const numbered = Object.values(history).find((e) => e.exerciseId === generated.exerciseId);
+    if (numbered) setGenerated(numbered);
+  }
   // Until the first generate, open or clear, entries that appear are the loaded
   // history, so they rise in one after another. After that they arrive alone.
   const [intro, setIntro] = useState(true);
@@ -511,11 +515,7 @@ function CurrentExercise({
         )}
 
         <Flex gap="sm" wrap="wrap">
-          {/* The practice view isn't built yet. */}
-          <Button variant="primary" disabled={!exercise}>
-            <Play />
-            Practice with feedback
-          </Button>
+          <PracticeButton exercise={exercise} />
           <SaveToLibraryButton exercise={exercise} saved={saved} onSaved={onSaved} />
           {exercise?.exerciseType === "LIP_SLURS" && (
             <Button variant="ghost" onClick={onToggleFingerings}>

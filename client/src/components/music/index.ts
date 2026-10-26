@@ -4,3 +4,6 @@ export { PitchReadout } from "./PitchReadout";
 export { ScoreFigure } from "./ScoreFigure";
 export { ExerciseMeta } from "./ExerciseMeta";
 export { PitchText } from "./PitchText";
+export { TunerGauge } from "./TunerGauge";
+export { PracticeButton } from "./PracticeButton";
+export { NoteValue, TempoMark } from "./TempoMark";
