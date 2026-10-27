@@ -1,5 +1,5 @@
 import { Box, chakra, Flex, Grid, Text } from "@chakra-ui/react";
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { ChevronsLeft, ChevronsRight } from "lucide-react";
 import { useId, useLayoutEffect, useRef } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { IconButton, Rule, Stat } from "@/components/primitives";
@@ -13,7 +13,7 @@ export type StreakDay = { label: string; state: "done" | "today" | "missed" };
 type SidebarProps = {
   items?: readonly NavItem[];
   streak?: { days: number; week: readonly StreakDay[] };
-  /** Full width, or folded down to a rail that holds only the toggle. */
+  /** Full width, or folded down to a spine that opens it again. */
   expanded?: boolean;
   /** Shows the collapse/expand button. */
   onToggle?: () => void;
@@ -45,6 +45,33 @@ const SidebarLink = chakra(NavLink, {
   },
 });
 
+/**
+ * The collapsed sidebar, drawn like a book's spine: the title runs up it between banded
+ * rules. The whole spine is the button that opens the sidebar.
+ */
+const Spine = chakra("button", {
+  base: {
+    position: "absolute",
+    insetBlock: 0,
+    insetInlineStart: 0,
+    width: "sidebarRail",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: "18px",
+    pt: "30px",
+    pb: "22px",
+    bg: "bg.panel",
+    color: "fg",
+    cursor: "pointer",
+    "& svg": { boxSize: "14px", color: "accent.solid" },
+    "& .tt-spine-title": { transitionProperty: "color", transitionDuration: "moderate" },
+    _hover: { "& .tt-spine-title": { color: "accent.fg" } },
+    // The sidebar clips its overflow, so keep the focus ring inside.
+    _focusVisible: { outlineOffset: "-3px" },
+  },
+});
+
 const EASE_OUT = "cubic-bezier(0.2, 0, 0, 1)";
 /** The sidebar sliding in from the left when the viewer arrives. */
 const ENTRANCE = { duration: 600, easing: EASE_OUT };
@@ -65,7 +92,7 @@ let lastOutlineTop: number | null = null;
 
 /**
  * Left rail: brand, numbered nav, streak week and the profile link. Collapsing it slides
- * the edge in over its contents, which keep their width and fade out.
+ * the edge in over its contents, which keep their width and fade out as a spine fades in.
  */
 export function Sidebar({ items = NAV_ITEMS, streak, expanded = true, onToggle }: SidebarProps) {
   const { asideRef, outlineRef } = useSidebarMotion();
@@ -111,9 +138,31 @@ export function Sidebar({ items = NAV_ITEMS, streak, expanded = true, onToggle }
           >
             Trumpet Trainer
           </Text>
-          <Text fontSize="10px" letterSpacing="0.14em" textTransform="uppercase" color="accent.fg">
-            Daily practice
-          </Text>
+          <Flex align="center" justify="space-between" gap="sm">
+            <Text
+              fontSize="10px"
+              letterSpacing="0.14em"
+              textTransform="uppercase"
+              color="accent.fg"
+            >
+              Daily practice
+            </Text>
+            {onToggle && (
+              <IconButton
+                variant="ghost"
+                size="sm"
+                // Hangs into the padding so the row keeps the kicker's height.
+                my="-8px"
+                me="-8px"
+                aria-label="Collapse sidebar"
+                aria-expanded
+                aria-controls={contentsId}
+                onClick={onToggle}
+              >
+                <ChevronsLeft />
+              </IconButton>
+            )}
+          </Flex>
         </Flex>
         <Rule mx="10px" width="auto" />
 
@@ -170,22 +219,47 @@ export function Sidebar({ items = NAV_ITEMS, streak, expanded = true, onToggle }
       </Flex>
 
       {onToggle && (
-        <IconButton
-          variant="ghost"
-          size="sm"
-          position="absolute"
-          // Level with "Daily practice": the title runs too close to the edge to share
-          // its line.
-          top="58px"
-          // Rides the edge, so it ends up centred in the rail (30px is its own width).
-          right="calc(({sizes.sidebarRail} - 30px) / 2)"
-          aria-label={expanded ? "Collapse sidebar" : "Expand sidebar"}
-          aria-expanded={expanded}
+        <Spine
+          type="button"
+          inert={expanded}
+          aria-label="Expand sidebar"
+          aria-expanded={false}
           aria-controls={contentsId}
           onClick={onToggle}
+          opacity={expanded ? 0 : 1}
+          _motionSafe={{
+            // The reverse of the contents: in once they've gone, out before they return.
+            transition: expanded ? "opacity 120ms ease-in" : "opacity 200ms ease-out 100ms",
+          }}
         >
-          {expanded ? <PanelLeftClose /> : <PanelLeftOpen />}
-        </IconButton>
+          <ChevronsRight />
+          <SpineBands />
+          <Text
+            as="span"
+            className="tt-spine-title"
+            fontFamily="heading"
+            fontWeight={600}
+            fontSize="18px"
+            letterSpacing="0.03em"
+            whiteSpace="nowrap"
+            css={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+          >
+            Trumpet Trainer
+          </Text>
+          <SpineBands />
+          <Text
+            as="span"
+            mt="auto"
+            fontSize="9px"
+            letterSpacing="0.18em"
+            textTransform="uppercase"
+            whiteSpace="nowrap"
+            color="accent.fg"
+            css={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+          >
+            Daily practice
+          </Text>
+        </Spine>
       )}
     </Box>
   );
@@ -234,6 +308,16 @@ function useSidebarMotion() {
   }, [pathname]);
 
   return { asideRef, outlineRef };
+}
+
+/** A pair of hairlines across the spine, like the raised bands on a bound book. */
+function SpineBands() {
+  return (
+    <Flex direction="column" gap="3px" aria-hidden>
+      <Box width="22px" height="1px" bg="border.emphasized" />
+      <Box width="22px" height="1px" bg="border.emphasized" />
+    </Flex>
+  );
 }
 
 function StreakWeek({ week }: { week: readonly StreakDay[] }) {
