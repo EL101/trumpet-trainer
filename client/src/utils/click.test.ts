@@ -51,6 +51,15 @@ describe("scheduleClick", () => {
     );
   });
 
+  it("gives each tone its own volume, the low one far under the high one", () => {
+    const { ctx, oscillators, gains } = fakeContext();
+    scheduleClick(0, false, ctx);
+    oscillators.forEach((o, i) => expect(o.connect).toHaveBeenCalledWith(gains[i]));
+    const peak = (g: (typeof gains)[number]) =>
+      Math.max(...g.gain.setValueAtTime.mock.calls.map(([value]) => value as number));
+    expect(peak(gains[1])).toBeLessThan(peak(gains[0]) / 10);
+  });
+
   it("plays into the speakers by default", () => {
     const { ctx, destination, gains } = fakeContext();
     scheduleClick(0, false, ctx);

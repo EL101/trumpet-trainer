@@ -34,7 +34,7 @@ export function scheduleClick(
   gainNode2.gain.setValueAtTime(0.005, when + 0.001);
   gainNode2.gain.setValueAtTime(0.0005, when + 0.05);
 
-  oscillator2.connect(gainNode);
+  oscillator2.connect(gainNode2);
   gainNode2.connect(output);
 
   oscillator.start(when);
