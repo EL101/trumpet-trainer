@@ -162,7 +162,32 @@ export function Generate() {
   // As many bars to a line as the page gives room for: one on a phone, four once wide.
   const perLine = useBreakpointValue({ base: 1, sm: 2, xl: 4 }, { ssr: false });
 
-  useEffect(() => getInitialHistory(user, setHistory), [user]);
+  // The exercise on the plate now, for queued work that runs after later renders.
+  const plateNow = useRef<MusicInfo | null>(null);
+  useEffect(() => {
+    plateNow.current = generated;
+  }, [generated]);
+
+  // The plate as storage gave it back, until the first history load has had a look at it.
+  const restored = useRef(generated);
+  useEffect(
+    () =>
+      getInitialHistory(user, setHistory, (entries) => {
+        const plate = restored.current;
+        restored.current = null;
+        // Still unnumbered and not in history: its save failed (or a reload cut it off)
+        // before the page was left. Say so again, unless a new exercise has replaced it.
+        if (
+          plate &&
+          !plate.generationNum &&
+          plateNow.current?.id === plate.id &&
+          !entries.some((e) => e.exerciseId === plate.exerciseId)
+        ) {
+          notifyUnsaved();
+        }
+      }),
+    [user],
+  );
   // An exercise that left the page (to the player, or in a reload) before history
   // numbered it was numbered while it was away; take the number from history.
   if (generated && !generated.generationNum) {
@@ -188,25 +213,12 @@ export function Generate() {
     historyQueue.current = historyQueue.current.then(task);
   };
 
-  // The exercise on the plate now, for queued work that runs after later renders.
-  const plateNow = useRef<MusicInfo | null>(null);
-  useEffect(() => {
-    plateNow.current = generated;
-  }, [generated]);
-
   /** Save the exercise, then number it on the plate once the server has. */
   const save = async (exercise: MusicInfo) => {
     const saved = await insertToHistory(exercise, user, setHistory);
     if (!saved) {
-      // Unnumbered, it can't be practised or saved to the library, so say why. An
-      // exercise already replaced on the plate isn't worth a notice.
-      if (plateNow.current?.id === exercise.id) {
-        notify({
-          tone: "error",
-          title: "Couldn't save this exercise to history",
-          description: "Practice and Save to library need it saved. Generate again to retry.",
-        });
-      }
+      // An exercise already replaced on the plate isn't worth a notice.
+      if (plateNow.current?.id === exercise.id) notifyUnsaved();
       return;
     }
     // Only if it's still on the plate: a newer exercise may have replaced it.
@@ -426,6 +438,15 @@ export function Generate() {
       />
     </AppShell>
   );
+}
+
+/** Unnumbered, the plate's exercise can't be practised or saved to the library: say why. */
+function notifyUnsaved() {
+  notify({
+    tone: "error",
+    title: "Couldn't save this exercise to history",
+    description: "Practice and Save to library need it saved. Generate again to retry.",
+  });
 }
 
 /**

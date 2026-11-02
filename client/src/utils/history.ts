@@ -3,9 +3,11 @@ import type { User } from "firebase/auth";
 import { toHistoryInput, type MusicInfo } from "@/schema";
 import { ApiError, authedFetch } from "./api";
 
+/** Loads the user's history into `setHistory`, then calls `onLoaded` with it. */
 export function getInitialHistory(
   user: User | undefined | null,
   setHistory: Dispatch<SetStateAction<Record<number, MusicInfo>>>,
+  onLoaded?: (entries: MusicInfo[]) => void,
 ) {
   const controller = new AbortController();
 
@@ -16,6 +18,7 @@ export function getInitialHistory(
 
       const data: MusicInfo[] = await res.json();
       setHistory(Object.fromEntries(data.map((item) => [item.generationNum, item])));
+      onLoaded?.(data);
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") return;
       console.error("fetch history error:", error);
