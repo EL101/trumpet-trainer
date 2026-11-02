@@ -73,7 +73,7 @@ src/
 │   │                      playback cursor and clickable notes), PitchReadout, TunerGauge,
 │   │                      ScoreFigure, IntonationLegend, ExerciseMeta, PitchText (key
 │   │                      and note names with ♭ and ♯), TempoMark and NoteValue
-│   │                      ("♩ = 96"; the half note, which fonts lack, is drawn),
+│   │                      ("♩ = 96"; drawn, as the fonts have no music characters),
 │   │                      PracticeButton (opens the player; see below)
 │   ├── layout/            Page frames. Import from "@/components/layout".
 │   │                      AppShell (sidebar + content), FocusShell (the player's frame:
@@ -89,7 +89,8 @@ src/
 │                          the generator's keys, time signatures and labels, notation (the
 │                          note parser Staff draws from), timeline (when each note sounds
 │                          and where the cursor is), meter (the beat each time signature
-│                          is counted in), tuning, and practice (the player's route state).
+│                          is counted in), noteValue (how NoteValue lays out ♩, ♪♪, ♬),
+│                          tuning, and practice (the player's route state).
 ├── utils/                 App logic: music generation (generateMusic, lipSlurs, built on
 │                          rhythm, melody and notate), etudes (written by Claude on the
 │                          server, fetched by etudes.ts), playback (the player's audio

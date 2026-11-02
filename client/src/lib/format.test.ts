@@ -21,9 +21,8 @@ describe("formatExerciseMeta", () => {
       "4/4",
       "8 bars",
     ]);
-    expect(formatExerciseMeta({ keyLabel: "G major", tempo: 96, bars: 1, minutes: 6 })).toEqual([
+    expect(formatExerciseMeta({ keyLabel: "G major", bars: 1, minutes: 6 })).toEqual([
       "G major",
-      "♩ = 96",
       "1 bar",
       "6 min",
     ]);

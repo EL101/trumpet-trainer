@@ -19,7 +19,7 @@ export type Pulse = {
   subdivisions: readonly Subdivision[];
 };
 
-/** The half note's character, which TempoMark draws because fonts rarely have it. */
+/** The half note's character. Fonts rarely have it; NoteValue draws it (and the rest). */
 export const HALF_NOTE = "\u{1D15E}";
 
 /** Tempo limits, in beats per minute, as on a mechanical metronome. */
