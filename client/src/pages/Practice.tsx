@@ -328,7 +328,8 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
             variant="primary"
             size="lg"
             minWidth="168px"
-            disabled={status !== "finished" && !running && sound === "loading"}
+            // Waits for the trumpet only if it's to be heard: the click needs no samples.
+            disabled={status !== "finished" && !running && notesOn && sound === "loading"}
             onClick={main.onClick}
           >
             {main.icon}
