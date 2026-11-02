@@ -5,25 +5,17 @@ import usePitch from "@/hooks/usePitch";
 import { Note } from "tonal";
 import { useState } from "react";
 import SegmentInput from "@/components/SegmentInput";
-
-const A4_MIDI = 69;
-
-function getNoteInfo(hz: number) {
-  const semitonesFromA4 = 12 * Math.log2(hz / 440);
-  const nearestSemitone = Math.round(semitonesFromA4);
-  const cents = Math.round((semitonesFromA4 - nearestSemitone) * 100);
-  const midiNumber = A4_MIDI + nearestSemitone;
-  return { midiNumber, cents };
-}
+import { CONCERT_OFFSET, nearestNote } from "@/lib/tuning";
 
 export default function Tuner() {
   const { pitch, start, stop } = usePitch();
   const [listening, setListening] = useState<boolean>(false);
   const [noteType, setNoteType] = useState<string>("concert");
-  const note =
-    noteType === "concert"
-      ? Note.fromMidi(getNoteInfo(pitch).midiNumber)
-      : Note.fromMidi(getNoteInfo(pitch).midiNumber + 2);
+  // Nothing heard yet (a pitch of 0) has no nearest note.
+  const heard = nearestNote(pitch);
+  const note = heard
+    ? Note.fromMidi(noteType === "concert" ? heard.midi : heard.midi - CONCERT_OFFSET)
+    : "";
   const noteOptions = [
     { value: "concert", label: "Concert" },
     { value: "b-flat", label: "B♭ Written" },
@@ -45,7 +37,7 @@ export default function Tuner() {
           <Circle bgColor="green.600" size="8px" animation="livePulse 2500ms ease-out infinite" />
           <Text>Listening for pitch</Text>
         </HStack>
-        <TunerPendulum cents={getNoteInfo(pitch).cents} />
+        <TunerPendulum cents={heard?.cents ?? 0} />
         <HStack alignItems="baseline-start">
           <Text fontSize="5xl" fontWeight={600}>
             {note ? note.slice(0, -1) : "-"}
