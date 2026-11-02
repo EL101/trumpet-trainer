@@ -1,15 +1,17 @@
 import { Box, Flex, Grid, Heading, Text } from "@chakra-ui/react";
 import { BookmarkPlus, Pause, Play, RotateCcw, SkipBack, SkipForward } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { PageHeader, Sidebar } from "@/components/layout";
+import { AppShell, FocusShell, PageHeader, Sidebar } from "@/components/layout";
 import {
   ExerciseMeta,
   IntonationLegend,
+  NoteValue,
   PitchReadout,
   PitchText,
   PracticeButton,
   ScoreFigure,
   Staff,
+  TempoMark,
   TunerGauge,
 } from "@/components/music";
 import {
@@ -31,7 +33,9 @@ import {
   Stat,
   Stepper,
   Tag,
+  Textarea,
 } from "@/components/primitives";
+import { MAX_TEMPO, MIN_TEMPO, pulseOf } from "@/lib/meter";
 
 /** Dev-only gallery of the design-system building blocks (route: /design). */
 export default function DesignPreview() {
@@ -157,7 +161,7 @@ export default function DesignPreview() {
               scale={0.5}
             />
             <Card.Meta>
-              Chromatic · ♩ = 80{" "}
+              Chromatic · <TempoMark pulse={pulseOf("4/4")} bpm={80} />{" "}
               <Box as="span" ml="auto">
                 Best 85
               </Box>
@@ -219,6 +223,9 @@ export default function DesignPreview() {
               )}
             </Field>
             <Field label="Name">{(id) => <Input id={id} placeholder="Generated #43" />}</Field>
+            <Field label="Notes">
+              {(id) => <Textarea id={id} rows={3} placeholder="Keep the air steady in bar 3" />}
+            </Field>
           </Flex>
           <Flex direction="column" gap="md">
             <Field label="Counts as in tune">
@@ -236,15 +243,21 @@ export default function DesignPreview() {
             <Field label="Measures">
               <Stepper aria-label="Measures" value={bars} onChange={setBars} min={1} max={16} />
             </Field>
-            <Field label={`Slider (♩ = ${tempo})`}>
+            <Field
+              label={
+                <>
+                  Slider (<TempoMark pulse={pulseOf("4/4")} bpm={tempo} />)
+                </>
+              }
+            >
               {(id) => (
                 <Slider
                   id={id}
                   aria-label="Tempo"
                   value={tempo}
                   onChange={setTempo}
-                  min={40}
-                  max={208}
+                  min={MIN_TEMPO}
+                  max={MAX_TEMPO}
                 />
               )}
             </Field>
@@ -268,6 +281,26 @@ export default function DesignPreview() {
           <TunerGauge cents={9} width="220px" />
           <TunerGauge cents={-31} width="220px" />
           <TunerGauge cents={null} width="220px" />
+        </Flex>
+        <Flex gap="2xl" mt="xl" wrap="wrap" align="flex-end">
+          {["4/4", "2/2", "6/8", "3/8"].map((t) => {
+            const pulse = pulseOf(t);
+            return (
+              <Flex key={t} direction="column" gap="xs">
+                <Text textStyle="heading.md">
+                  <TempoMark pulse={pulse} bpm={96} />
+                </Text>
+                <Flex gap="md" textStyle="heading.sm" color="fg.muted">
+                  {pulse.subdivisions.map((s) => (
+                    <NoteValue key={s.per} symbol={s.symbol} />
+                  ))}
+                </Flex>
+                <Text textStyle="caption" color="fg.muted">
+                  {t}: TempoMark, then each NoteValue on offer
+                </Text>
+              </Flex>
+            );
+          })}
         </Flex>
         <Flex gap="2xl" mt="xl" wrap="wrap">
           <SectionHeading number={1} title="Instrument" description="Transposition and tuning" />
@@ -466,6 +499,81 @@ export default function DesignPreview() {
           />
         </Box>
       </Section>
+
+      <Section title="Page shells">
+        <Flex direction="column" gap="xl">
+          <Box>
+            <Text textStyle="caption" color="fg.muted" mb="xs">
+              AppShell: the sidebar and a scrolling page (collapsing it here collapses it app-wide)
+            </Text>
+            <ShellFrame>
+              <AppShell>
+                <PageHeader kicker="Friday, 9 October" title="Today" subtitle="Three exercises" />
+              </AppShell>
+            </ShellFrame>
+          </Box>
+          <Box>
+            <Text textStyle="caption" color="fg.muted" mb="xs">
+              FocusShell: the player's frame, with a back link, title, actions and a drawer
+            </Text>
+            <ShellFrame>
+              <FocusShell
+                back={{ to: "/design", label: "Back to Design" }}
+                title={<Text textStyle="heading.md">Random</Text>}
+                actions={<Tag variant="neutral">3 of 6</Tag>}
+                aside={
+                  <Flex
+                    direction="column"
+                    gap="md"
+                    flex="none"
+                    width={{ lg: "300px" }}
+                    p="lg"
+                    bg="bg.subtle"
+                    borderColor="border"
+                    borderTopWidth={{ base: "1px", lg: 0 }}
+                    borderLeftWidth={{ lg: "1px" }}
+                  >
+                    <Kicker tone="muted">Tools</Kicker>
+                    <TunerGauge cents={4} alignSelf="center" width="220px" />
+                  </Flex>
+                }
+                display="flex"
+                flexDirection="column"
+                gap="lg"
+              >
+                <ExerciseMeta
+                  keyLabel="G major"
+                  extra={[<TempoMark key="tempo" pulse={pulseOf("4/4")} bpm={96} />, "Bar 1 of 2"]}
+                />
+                <Staff
+                  notes="G4/8, A4, B4, C5, D5, C5, B4, A4, G4/q, D5, G4/h"
+                  timeSig="4/4"
+                  musicKey="G major"
+                  cursor={0}
+                />
+              </FocusShell>
+            </ShellFrame>
+          </Box>
+        </Flex>
+      </Section>
+    </Box>
+  );
+}
+
+/**
+ * A window onto a page shell. The shells fill the viewport, so here they fill the frame
+ * instead (`& > div` outranks the shell's own height class).
+ */
+function ShellFrame({ children }: { children: ReactNode }) {
+  return (
+    <Box
+      height="480px"
+      overflow="hidden"
+      borderWidth="1px"
+      borderColor="border"
+      css={{ "& > div": { height: "100%" } }}
+    >
+      {children}
     </Box>
   );
 }
