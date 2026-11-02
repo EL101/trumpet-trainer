@@ -13,7 +13,7 @@ import {
 } from "@chakra-ui/react";
 import { Bookmark, BookmarkCheck, ChevronDown, ChevronUp, Eye, EyeOff } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
-import { Link as RouterLink, useLocation } from "react-router-dom";
+import { Link as RouterLink } from "react-router-dom";
 import { AuthUserContext } from "@/auth/AuthUserContext";
 import { useEtudes } from "@/etudes/useEtudes";
 import { usePersistedState } from "@/hooks/usePersistedState";
@@ -43,7 +43,6 @@ import {
   TYPE_DIFFICULTIES,
   type TimeSignature,
 } from "@/lib/generatorOptions";
-import { readPracticed } from "@/lib/practice";
 import {
   generateLongTones,
   generateMusic,
@@ -58,6 +57,7 @@ import { splitNotes } from "@/utils/splitNotes";
 import {
   EXERCISE_TYPES,
   HISTORY_LIMIT,
+  isMusicInfo,
   RANGES,
   type Difficulty,
   type ExerciseType,
@@ -148,17 +148,21 @@ const ENTRY_COLUMNS = { base: "minmax(0, 1fr)", sm: "40px minmax(0, 1fr)" };
 export function Generate() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [history, setHistory] = useState<Record<number, MusicInfo>>({});
-  // Back from the player, the exercise just practised goes back on the plate.
-  const location = useLocation();
-  const [generated, setGenerated] = useState(() => readPracticed(location.state));
+  const { user } = useContext(AuthUserContext);
+  // The exercise on the plate stays there through a reload, or a trip to the player and
+  // back. It's kept per tab, so two tabs keep their own, and per player.
+  const [generated, setGenerated] = usePersistedState<MusicInfo | null>(
+    `generatePlate:${user?.uid}`,
+    null,
+    { session: true, accept: (value) => value === null || isMusicInfo(value) },
+  );
   const plateRef = useRef<HTMLDivElement>(null);
   // As many bars to a line as the page gives room for: one on a phone, four once wide.
   const perLine = useBreakpointValue({ base: 1, sm: 2, xl: 4 }, { ssr: false });
 
-  const { user } = useContext(AuthUserContext);
   useEffect(() => getInitialHistory(user, setHistory), [user]);
-  // An exercise taken to the player before history numbered it was numbered while this
-  // page was away; take the number from history when it arrives.
+  // An exercise that left the page (to the player, or in a reload) before history
+  // numbered it was numbered while it was away; take the number from history.
   if (generated && !generated.generationNum) {
     const numbered = Object.values(history).find((e) => e.exerciseId === generated.exerciseId);
     if (numbered) setGenerated(numbered);
@@ -235,7 +239,7 @@ export function Generate() {
         setHistory((prev) => ({ ...prev, [exercise.generationNum]: exercise }));
         setGenerated((current) => current ?? exercise);
       }),
-    [onFinished],
+    [onFinished, setGenerated],
   );
 
   /** Take the exercise off the plate; it stays in the list below once it's numbered. */

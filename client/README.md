@@ -90,14 +90,15 @@ src/
 │                          note parser Staff draws from), timeline (when each note sounds
 │                          and where the cursor is), meter (the beat each time signature
 │                          is counted in), noteValue (how NoteValue lays out ♩, ♪♪, ♬),
-│                          tuning, and practice (the player's route state).
+│                          tuning, practice (the player's route state) and storage.
 ├── utils/                 App logic: music generation (generateMusic, lipSlurs, built on
 │                          rhythm, melody and notate), etudes (written by Claude on the
 │                          server, fetched by etudes.ts), playback (the player's audio
 │                          scheduler) and trumpet (its samples), API calls, history,
 │                          library, profile, image handling.
 ├── hooks/                 usePitch (microphone), useMetronome, usePlayback (the player's
-│                          transport), usePersistedState
+│                          transport), usePersistedState (localStorage, or per tab
+│                          with `session`)
 ├── auth/                  Firebase sign-in: useAuth() for state; auth.ts signs in, links
 │                          a guest to Google, and signs out
 ├── profile/               The signed-in user's profile: useProfile()
@@ -165,7 +166,9 @@ there. Open it with `<PracticeButton exercise={…} />` from any page. The
 exercise travels in the router state (so a refresh keeps it), and the player's back
 links return to the page that opened it, named as the nav names it. They hand the
 exercise back as `practiced` in the router state; read it with `readPracticed()` from
-`@/lib/practice` to put it back where it was, as Generate does with its plate.
+`@/lib/practice` to put it back where it was. Generate doesn't need to: it keeps the
+exercise on its plate in session storage (per tab and per player), so the plate is
+still there after the player, a refresh or the browser's Back button.
 
 The staff is written for B♭ trumpet, so the player sounds every note a whole tone
 lower (`CONCERT_OFFSET` in `lib/tuning.ts`). The trumpet samples are in

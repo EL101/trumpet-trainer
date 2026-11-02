@@ -25,6 +25,22 @@ export type MusicInfo = {
   generationNum: number;
 };
 
+/**
+ * Whether a value read back from outside the app's own state (router state, storage),
+ * possibly written by an older deploy, is a whole exercise.
+ */
+export function isMusicInfo(value: unknown): value is MusicInfo {
+  if (typeof value !== "object" || value === null) return false;
+  const e = value as Record<string, unknown>;
+  return (
+    ["id", "exerciseId", "notes", "timeSig", "musicKey", "noteRange", "difficulty"].every(
+      (field) => typeof e[field] === "string",
+    ) &&
+    (EXERCISE_TYPES as readonly unknown[]).includes(e.exerciseType) &&
+    typeof e.generationNum === "number"
+  );
+}
+
 /** A library row - a saved MusicInfo, with the time it was saved. */
 export type LibraryEntry = MusicInfo & {
   createdAt: string;

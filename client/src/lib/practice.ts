@@ -1,4 +1,4 @@
-import type { MusicInfo } from "@/schema";
+import { isMusicInfo, type MusicInfo } from "@/schema";
 
 /** The player's route. */
 export const PRACTICE_PATH = "/practice";
@@ -31,7 +31,7 @@ export function backTo(origin: PracticeOrigin) {
 
 /** The player's state from `location.state`, or null without one (the URL typed in). */
 export function readPracticeState(state: unknown): PracticeState | null {
-  if (!isRecord(state) || !isExercise(state.exercise) || !isRecord(state.from)) return null;
+  if (!isRecord(state) || !isMusicInfo(state.exercise) || !isRecord(state.from)) return null;
   const { to, label } = state.from;
   if (typeof to !== "string" || typeof label !== "string") return null;
   return { exercise: state.exercise, from: { to, label } };
@@ -39,21 +39,9 @@ export function readPracticeState(state: unknown): PracticeState | null {
 
 /** The exercise the player handed back, from `location.state`, if it did. */
 export function readPracticed(state: unknown): MusicInfo | null {
-  return isRecord(state) && isExercise(state.practiced) ? state.practiced : null;
+  return isRecord(state) && isMusicInfo(state.practiced) ? state.practiced : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
-}
-
-/** Enough of an exercise to draw and play. Router state outlives a deploy, so check. */
-function isExercise(value: unknown): value is MusicInfo {
-  return (
-    isRecord(value) &&
-    typeof value.id === "string" &&
-    typeof value.exerciseType === "string" &&
-    typeof value.notes === "string" &&
-    typeof value.timeSig === "string" &&
-    typeof value.musicKey === "string"
-  );
 }
