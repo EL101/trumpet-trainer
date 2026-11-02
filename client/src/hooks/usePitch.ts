@@ -15,6 +15,9 @@ export default function usePitch() {
   const start = useCallback(async (): Promise<void> => {
     cancelledRef.current = false;
     setError(null);
+    // Forget what the last listen heard, so nothing shows until something new is.
+    setPitch(0);
+    setClarity(0);
 
     try {
       streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
