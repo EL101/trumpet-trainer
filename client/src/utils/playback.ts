@@ -99,7 +99,9 @@ export class Playback {
     notes.connect(this.ctx.destination);
     const clicks = this.ctx.createGain();
     clicks.connect(this.ctx.destination);
-    const nextNote = this.sounding.findIndex((n) => n.start >= from - EPSILON);
+    // The first note still sounding at `from`: a note tied over a bar line is picked up
+    // partway through, rather than skipped.
+    const nextNote = this.sounding.findIndex((n) => n.start + n.length > from + EPSILON);
     const start = countIn ? from - this.bar : from;
     this.run = {
       start,
@@ -169,14 +171,18 @@ export class Playback {
       run.nextClick = nextOnGrid(at, step);
     }
 
-    while (run.nextNote < this.sounding.length && this.sounding[run.nextNote].start < horizon) {
+    const entry = (note: SoundingNote) => Math.max(note.start, run.from);
+    while (run.nextNote < this.sounding.length && entry(this.sounding[run.nextNote]) < horizon) {
       const note = this.sounding[run.nextNote++];
       if (!this.trumpet) continue;
-      const seconds = note.length * (note.legato ? 1 : GATE) * this.secondsPerQuarter();
+      // A note picked up partway through still stops where it would have.
+      const begins = entry(note);
+      const ends = note.start + note.length * (note.legato ? 1 : GATE);
+      if (ends <= begins + EPSILON) continue;
       this.trumpet.play(
         note.midi + CONCERT_OFFSET,
-        this.timeAt(run, note.start),
-        seconds,
+        this.timeAt(run, begins),
+        (ends - begins) * this.secondsPerQuarter(),
         run.notes,
       );
     }

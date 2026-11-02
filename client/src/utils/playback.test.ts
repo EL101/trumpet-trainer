@@ -165,6 +165,24 @@ describe("Playback", () => {
     expect(notes()).toEqual([[60, 0.05, 3.6]]);
   });
 
+  it("picks up a note tied over the bar line it starts at, for the rest of its length", () => {
+    playback("C4/h, D4/h~, D4/h, E4/h").start(4, { countIn: false });
+    run(5);
+    expect(notes()).toEqual([
+      // The tied D's last two beats, tongued off where it would have been.
+      [60, 0.05, 1.6],
+      [62, 2.05, 1.8],
+    ]);
+  });
+
+  it("holds a note tied over the bar line back until its count-in is over", () => {
+    playback("C4/h, D4/h~, D4/h, E4/h").start(4);
+    run(1);
+    expect(notes()).toEqual([]);
+    run(4);
+    expect(notes()[0]).toEqual([60, 4.05, 1.6]);
+  });
+
   it("counts in on the beat when it picks up off the beat", () => {
     playback("C4/q, D4/q, E4/8, F4/8, G4/q").start(2.5);
     run(5);
