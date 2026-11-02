@@ -68,6 +68,7 @@ import { barAt, buildTimeline, cursorAt } from "@/lib/timeline";
 import { barNow } from "@/lib/transport";
 import { CONCERT_OFFSET, nearestNote } from "@/lib/tuning";
 import { getHistoryEntry } from "@/utils/history";
+import { getLibraryEntry } from "@/utils/library";
 import { lipSlurFingerings } from "@/utils/lipSlurs";
 import type { MusicInfo } from "@/schema";
 
@@ -99,7 +100,7 @@ const COUNT_IN_OPTIONS: ChoiceOption<"off" | "bar">[] = [
 /**
  * The player (mockup 1e), at `/practice/<exerciseId>`. PracticeButton hands it the
  * exercise in its router state; without that (a new tab, a reload, a bookmark) it
- * loads the exercise from history.
+ * loads the exercise from history, or from the library once history has let it go.
  */
 export default function Practice() {
   const { exerciseId = "" } = useParams();
@@ -110,7 +111,7 @@ export default function Practice() {
   const handed = state?.exercise.exerciseId === exerciseId ? state.exercise : null;
   const from = state?.from ?? originFor(returnPath(params.get("from")), NAV_ITEMS);
 
-  // What history gave for this id: an exercise, or null when it has none.
+  // What history or the library gave for this id: an exercise, or null when neither has it.
   const [loaded, setLoaded] = useState<{ id: string; exercise: MusicInfo | null } | null>(null);
   const exercise = handed ?? (loaded?.id === exerciseId ? loaded.exercise : undefined);
   const missing = exercise === null;
@@ -118,15 +119,27 @@ export default function Practice() {
   useEffect(() => {
     if (handed) return;
     const controller = new AbortController();
+    // History keeps only the newest exercises, and a clear empties it; the library
+    // keeps a saved one for good.
     getHistoryEntry(exerciseId, user, controller.signal)
+      .then((entry) => entry ?? getLibraryEntry(exerciseId, user, controller.signal))
       .then((entry) => {
         if (controller.signal.aborted) return;
-        if (!entry) notify({ tone: "error", title: "Invalid exercise id" });
+        // Deleted rows leave nothing behind, so a cleared exercise and a wrong link
+        // look the same here: say it could be either.
+        if (!entry) {
+          notify({
+            tone: "error",
+            title: "Exercise not found",
+            description:
+              "It isn't in your recent history or your library. It may have been cleared, or the link is wrong.",
+          });
+        }
         setLoaded({ id: exerciseId, exercise: entry });
       })
       .catch((error) => {
         if (controller.signal.aborted) return;
-        console.error("load history entry error:", error);
+        console.error("load exercise error:", error);
         notify({ tone: "error", title: "Couldn't load the exercise" });
         setLoaded({ id: exerciseId, exercise: null });
       });

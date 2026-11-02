@@ -171,8 +171,11 @@ has numbered the exercise, because the player loads exercises from history:
 - **Opened from the button,** the exercise travels in the router state too, so the
   player shows it without a request.
 - **In a new tab, after a reload or from a bookmark,** it loads the exercise with
-  `GET /api/history/:exerciseId`. An id history doesn't have goes to Generate with an
-  "Invalid exercise id" notice.
+  `GET /api/history/:exerciseId`, then `GET /api/library/:exerciseId` if history has
+  let it go (pruned past the newest 100, or cleared). An id neither has goes to
+  Generate with an "Exercise not found" notice. Deleted history leaves no trace, so
+  the notice can't tell a cleared exercise from a wrong link, and says it could be
+  either.
 - **The back links** are plain links to the page that opened the player. The address
   names that page (`?from=/generate`), so they work in a new tab too. They hand the
   exercise back as `practiced` in the router state; read it with `readPracticed()` from

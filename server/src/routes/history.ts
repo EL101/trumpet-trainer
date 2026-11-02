@@ -4,7 +4,7 @@ import { requireAuth } from "../middleware/requireAuth.js";
 import { HistoryInputSchema } from "../schema/index.js";
 import {
   deleteExercises,
-  findHistoryEntry,
+  findExercise,
   insertHistory,
   listExercises,
 } from "../queries/exercises.js";
@@ -29,7 +29,7 @@ router.get("/:exerciseId", requireAuth, async (req: Request, res: Response) => {
   }
 
   try {
-    const row = await findHistoryEntry(req.user!.uid, exerciseId.data);
+    const row = await findExercise("history", req.user!.uid, exerciseId.data);
     if (!row) return res.status(404).json({ error: "History entry not found" });
     res.json(row);
   } catch (err) {

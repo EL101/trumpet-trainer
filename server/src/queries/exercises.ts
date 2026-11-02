@@ -18,15 +18,17 @@ export function listExercises(table: ExerciseTable, userId: string) {
 }
 
 /**
- * One of the user's history rows, by the exercise's id. A clear and a save of the
- * same exercise (the plate kept through a clear) can leave it under two numbers;
- * the newest wins.
+ * One of the user's rows, by the exercise's id. In `history` a clear and a save of
+ * the same exercise (the plate kept through a clear) can leave it under two numbers;
+ * the newest wins. `library` holds each exercise once.
  */
-export function findHistoryEntry(userId: string, exerciseId: string) {
-  return prisma.history.findFirst({
-    where: { userId, exerciseId },
-    orderBy: { generationNum: "desc" },
-  });
+export function findExercise(table: ExerciseTable, userId: string, exerciseId: string) {
+  return table === "history"
+    ? prisma.history.findFirst({
+        where: { userId, exerciseId },
+        orderBy: { generationNum: "desc" },
+      })
+    : prisma.library.findUnique({ where: { userId_exerciseId: { userId, exerciseId } } });
 }
 
 /**
