@@ -176,7 +176,8 @@ has numbered the exercise, because the player loads exercises from history:
   let it go (pruned past the newest 100, or cleared). An id neither has goes to
   Generate with an "Exercise not found" notice. Deleted history leaves no trace, so
   the notice can't tell a cleared exercise from a wrong link, and says it could be
-  either.
+  either. A load that fails (offline, a server error) stays on the player with a Try
+  again button.
 - **The back links** are plain links to the page that opened the player. The address
   names that page (`?from=/generate`), so they work in a new tab too. They hand the
   exercise back as `practiced` in the router state; read it with `readPracticed()` from

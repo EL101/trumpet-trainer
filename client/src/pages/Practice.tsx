@@ -116,6 +116,13 @@ export default function Practice() {
   const [loaded, setLoaded] = useState<{ id: string; exercise: MusicInfo | null } | null>(null);
   const exercise = handed ?? (loaded?.id === exerciseId ? loaded.exercise : undefined);
   const missing = exercise === null;
+  // The id whose load failed (offline, or the server erred), and a count of retries.
+  const [failed, setFailed] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const retry = () => {
+    setFailed(null);
+    setAttempt((n) => n + 1);
+  };
 
   useEffect(() => {
     if (handed) return;
@@ -141,20 +148,32 @@ export default function Practice() {
       .catch((error) => {
         if (controller.signal.aborted) return;
         console.error("load exercise error:", error);
-        notify({ tone: "error", title: "Couldn't load the exercise" });
-        setLoaded({ id: exerciseId, exercise: null });
+        // Stay put: the exercise may well be there once the connection is back.
+        setFailed(exerciseId);
       });
     return () => controller.abort();
-  }, [handed, exerciseId, user]);
+  }, [handed, exerciseId, user, attempt]);
 
   if (missing) return <Navigate to="/generate" replace />;
-  // Loading: the frame, so the back link is already there.
+  // Loading, or a load that failed: the frame, so the back link is already there.
   if (!exercise) {
     return (
       <FocusShell back={from}>
-        <Text role="status" textStyle="meta" color="fg.muted">
-          Loading the exercise…
-        </Text>
+        {failed === exerciseId ? (
+          <Flex direction="column" align="flex-start" gap="md">
+            <Text role="alert" textStyle="meta" color="fg.error">
+              Couldn't load the exercise. Check your connection and try again.
+            </Text>
+            <Button size="sm" onClick={retry}>
+              <RotateCcw />
+              Try again
+            </Button>
+          </Flex>
+        ) : (
+          <Text role="status" textStyle="meta" color="fg.muted">
+            Loading the exercise…
+          </Text>
+        )}
       </FocusShell>
     );
   }
