@@ -24,6 +24,7 @@ import {
   ChoiceGrid,
   Field,
   Kicker,
+  notify,
   RadioGroup,
   SegmentedControl,
   Stepper,
@@ -195,7 +196,18 @@ export function Generate() {
   /** Save the exercise, then number it on the plate once the server has. */
   const save = async (exercise: MusicInfo) => {
     const saved = await insertToHistory(exercise, user, setHistory);
-    if (!saved) return;
+    if (!saved) {
+      // Unnumbered, it can't be practised or saved to the library, so say why. An
+      // exercise already replaced on the plate isn't worth a notice.
+      if (plateNow.current?.id === exercise.id) {
+        notify({
+          tone: "error",
+          title: "Couldn't save this exercise to history",
+          description: "Practice and Save to library need it saved. Generate again to retry.",
+        });
+      }
+      return;
+    }
     // Only if it's still on the plate: a newer exercise may have replaced it.
     setGenerated((current) => (current?.id === exercise.id ? saved : current));
   };
