@@ -1,9 +1,7 @@
 import { Note } from "tonal";
+import { DURATION_TO_BEATS } from "@/utils/splitNotes";
 import { barQuarters, pulseOf } from "./meter";
 import { parseMeasures, type ParsedNote } from "./notation";
-
-/** Note lengths in quarter notes, by VexFlow duration. */
-const QUARTERS: Record<string, number> = { w: 4, h: 2, q: 1, "8": 0.5, "16": 0.25, "32": 0.125 };
 
 /** One note or rest of an exercise, placed in time. Positions and lengths are in quarter notes. */
 export type TimedNote = {
@@ -45,7 +43,8 @@ export function buildTimeline(notes: string, timeSig: string): Timeline {
   let start = 0;
   let inSlur = false;
   for (const note of measures.flat()) {
-    const length = QUARTERS[note.duration] * (note.dotted ? 1.5 : 1);
+    const beats = DURATION_TO_BEATS[note.duration as keyof typeof DURATION_TO_BEATS];
+    const length = beats * (note.dotted ? 1.5 : 1);
     if (note.slurStart) inSlur = true;
     timed.push({
       start,
