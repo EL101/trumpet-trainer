@@ -56,6 +56,7 @@ import { usePlayback } from "@/hooks/usePlayback";
 import { formatPitch } from "@/lib/format";
 import { EXERCISE_TYPE_LABELS, KEYLESS } from "@/lib/generatorOptions";
 import { beatAt, MAX_TEMPO, MIN_TEMPO, pulseOf, type Pulse } from "@/lib/meter";
+import { prefersReducedMotion } from "@/lib/motion";
 import {
   backTo,
   originFor,
@@ -498,10 +499,6 @@ function ToolsDrawer({
       )}
     </Flex>
   );
-}
-
-function prefersReducedMotion() {
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
 /** The tuner. It only listens once asked to, and stops when the drawer closes. */

@@ -44,6 +44,7 @@ import {
   TYPE_DIFFICULTIES,
   type TimeSignature,
 } from "@/lib/generatorOptions";
+import { prefersReducedMotion } from "@/lib/motion";
 import {
   generateLongTones,
   generateMusic,
@@ -425,10 +426,6 @@ export function Generate() {
       />
     </AppShell>
   );
-}
-
-function prefersReducedMotion() {
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
 /**

@@ -91,7 +91,8 @@ src/
 │                          and where the cursor is), meter (the beat each time signature
 │                          is counted in), noteValue (how NoteValue lays out ♩, ♪♪, ♬),
 │                          transport (the player's play/pause/seek states), tuning,
-│                          practice (the player's address and route state) and storage.
+│                          practice (the player's address and route state), storage and
+│                          motion (prefersReducedMotion, for animation outside CSS).
 ├── utils/                 App logic: music generation (generateMusic, lipSlurs, built on
 │                          rhythm, melody and notate), etudes (written by Claude on the
 │                          server, fetched by etudes.ts), playback (the player's audio
@@ -206,8 +207,9 @@ lower (`CONCERT_OFFSET` in `lib/tuning.ts`). The trumpet samples are in
   exit, `sink-out`, takes `forwards` so the element stays hidden until it's removed), and
   put the animation under `_motionSafe` so it's skipped for viewers who prefer reduced
   motion: `_motionSafe={{ animation: "appear 400ms ease-out 200ms backwards" }}`. Code
-  that draws its own SVG can't use `_motionSafe`; check `prefers-reduced-motion` itself,
-  as `Staff` does for its labels.
+  that animates outside CSS (its own SVG, `scrollIntoView`, `element.animate()`, a
+  timer) can't use `_motionSafe`; check `prefersReducedMotion()` from `@/lib/motion`
+  instead, as `Staff` does for its labels.
 
 ## Old vs new
 

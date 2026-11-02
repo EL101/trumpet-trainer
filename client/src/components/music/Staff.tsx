@@ -17,6 +17,7 @@ import {
   type RenderContext,
 } from "vexflow";
 import { centsColor, formatCents } from "@/lib/intonation";
+import { prefersReducedMotion } from "@/lib/motion";
 import { roles } from "@/theme";
 import { getKeySig } from "@/utils/generateMusic";
 import type { Key } from "@/schema";
@@ -227,10 +228,6 @@ function fitToContent(svg: SVGSVGElement, width: number, height: number, scale: 
   svg.setAttribute("height", String(fitted));
   svg.style.height = `${fitted}px`;
   return fitted;
-}
-
-function prefersReducedMotion() {
-  return !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 }
 
 /** Tracks an element's content width (only when `enabled`). */
