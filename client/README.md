@@ -90,7 +90,8 @@ src/
 │                          note parser Staff draws from), timeline (when each note sounds
 │                          and where the cursor is), meter (the beat each time signature
 │                          is counted in), noteValue (how NoteValue lays out ♩, ♪♪, ♬),
-│                          tuning, practice (the player's route state) and storage.
+│                          transport (the player's play/pause/seek states), tuning,
+│                          practice (the player's route state) and storage.
 ├── utils/                 App logic: music generation (generateMusic, lipSlurs, built on
 │                          rhythm, melody and notate), etudes (written by Claude on the
 │                          server, fetched by etudes.ts), playback (the player's audio

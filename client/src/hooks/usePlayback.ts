@@ -1,11 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Pulse } from "@/lib/meter";
-import { barAt, type Timeline } from "@/lib/timeline";
+import type { Timeline } from "@/lib/timeline";
+import {
+  AT_TOP,
+  followMusic,
+  pauseAt,
+  seekTo,
+  startPlaying,
+  type Transport,
+} from "@/lib/transport";
 import { getCtx } from "@/utils/click";
 import { Playback, type PlaybackSettings } from "@/utils/playback";
 import { loadTrumpet } from "@/utils/trumpet";
-
-export type PlaybackStatus = "ready" | "countIn" | "playing" | "paused" | "finished";
 
 /**
  * Plays an exercise along with its staff. `play` counts in a bar (unless `countIn` is
@@ -32,9 +38,9 @@ export function usePlayback(
   },
 ) {
   const playback = useMemo(() => new Playback(getCtx(), timeline, pulse), [timeline, pulse]);
-  const [status, setStatus] = useState<PlaybackStatus>("ready");
-  const [position, setPosition] = useState(0);
-  const [from, setFrom] = useState(0);
+  // The moves between states are in lib/transport; this hook makes the sound follow them.
+  const [transport, setTransport] = useState<Transport>(AT_TOP);
+  const { status, position, from } = transport;
   const [sound, setSound] = useState<"loading" | "ready" | "failed">("loading");
 
   useEffect(() => {
@@ -68,58 +74,34 @@ export function usePlayback(
     let frame = requestAnimationFrame(function follow() {
       const now = playback.position();
       if (now === null) return;
-      if (now >= timeline.end) {
-        playback.stop();
-        setPosition(timeline.end);
-        setStatus("finished");
-        return;
-      }
-      setPosition(now);
-      setStatus(now < from ? "countIn" : "playing");
-      frame = requestAnimationFrame(follow);
+      setTransport((t) => followMusic(t, timeline, now));
+      if (now >= timeline.end) playback.stop();
+      else frame = requestAnimationFrame(follow);
     });
     return () => cancelAnimationFrame(frame);
-  }, [running, playback, timeline, from]);
+  }, [running, playback, timeline]);
 
   const play = () => {
     playback.start(from, { countIn });
-    setPosition(countIn ? from - timeline.bar : from);
-    setStatus(countIn ? "countIn" : "playing");
+    setTransport((t) => startPlaying(t, timeline, countIn));
   };
 
   const pause = () => {
     const now = playback.position() ?? position;
     playback.stop();
-    setStatus("paused");
-    if (now >= from) {
-      setPosition(now);
-      setFrom(barAt(timeline, now) * timeline.bar);
-    } else {
-      // Paused during the count-in: nothing has played, so stay where it would have started.
-      setPosition(from);
-    }
+    setTransport((t) => pauseAt(t, timeline, now));
   };
 
   const seek = (to: number) => {
-    if (status === "playing") {
-      playback.start(to, { countIn: false });
-      setPosition(to);
-    } else if (status === "countIn") {
-      // Count in again, for the new place.
-      playback.start(to);
-      setPosition(to - timeline.bar);
-    } else {
-      setStatus("ready");
-      setPosition(to);
-    }
-    setFrom(to);
+    if (status === "playing") playback.start(to, { countIn: false });
+    // Count in again, for the new place.
+    else if (status === "countIn") playback.start(to);
+    setTransport((t) => seekTo(t, timeline, to));
   };
 
   const restart = () => {
     playback.stop();
-    setStatus("ready");
-    setPosition(0);
-    setFrom(0);
+    setTransport(AT_TOP);
   };
 
   return { status, position, from, sound, play, pause, seek, restart };
