@@ -162,8 +162,8 @@ shell: it has no sidebar and nothing to go back to.
 
 `pages/Practice.tsx` (route `/practice/<exerciseId>`, mockup 1e) plays one exercise: a
 bar of count-in (which can be turned off), then the notes on a trumpet with a moving
-cursor, a metronome and a tuner in a collapsible drawer. Clicking a note moves the
-cursor there. Open it with
+cursor, a metronome and a tuner in a collapsible drawer. Clicking a note, or the
+previous and next bar buttons beside Play, moves the cursor. Open it with
 `<PracticeButton exercise={…} originLabel="Generate" />` from any page; the label is
 what the player's back links call that page. The button stays disabled until history
 has numbered the exercise, because the player loads exercises from history:

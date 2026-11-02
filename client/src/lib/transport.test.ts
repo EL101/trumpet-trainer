@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { buildTimeline } from "./timeline";
-import { AT_TOP, followMusic, pauseAt, seekTo, startPlaying, type Transport } from "./transport";
+import {
+  AT_TOP,
+  barNow,
+  followMusic,
+  pauseAt,
+  seekTo,
+  startPlaying,
+  type Transport,
+} from "./transport";
 
 // Two bars of 4/4: bar 0 runs 0–4, bar 1 runs 4–8.
 const timeline = buildTimeline("C4/q, D4, E4, F4, G4, A4, B4, C5", "4/4");
@@ -86,5 +94,21 @@ describe("seekTo", () => {
         from: 2,
       });
     }
+  });
+});
+
+describe("barNow", () => {
+  it("is the bar being heard while the music plays", () => {
+    expect(barNow({ status: "playing", position: 5.5, from: 0 }, timeline)).toBe(1);
+  });
+
+  it("is the bar Play starts in otherwise, even mid count-in", () => {
+    expect(barNow(AT_TOP, timeline)).toBe(0);
+    expect(barNow({ status: "paused", position: 5.5, from: 4 }, timeline)).toBe(1);
+    expect(barNow({ status: "countIn", position: 1, from: 4 }, timeline)).toBe(1);
+  });
+
+  it("is the last bar once it's finished", () => {
+    expect(barNow({ status: "finished", position: 8, from: 0 }, timeline)).toBe(1);
   });
 });

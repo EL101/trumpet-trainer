@@ -45,3 +45,11 @@ export function seekTo(t: Transport, timeline: Timeline, to: number): Transport 
   if (t.status === "countIn") return { ...t, position: to - timeline.bar, from: to };
   return { status: "ready", position: to, from: to };
 }
+
+/**
+ * The bar the previous and next bar buttons step from: the one heard while the music
+ * plays (or the last, once it's finished), otherwise the one Play would start in.
+ */
+export function barNow({ status, position, from }: Transport, timeline: Timeline) {
+  return barAt(timeline, status === "playing" || status === "finished" ? position : from);
+}
