@@ -1,7 +1,13 @@
 import { Router, Request, Response } from "express";
+import { z } from "zod";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { HistoryInputSchema } from "../schema/index.js";
-import { deleteExercises, insertHistory, listExercises } from "../queries/exercises.js";
+import {
+  deleteExercises,
+  findHistoryEntry,
+  insertHistory,
+  listExercises,
+} from "../queries/exercises.js";
 
 const router = Router();
 
@@ -11,6 +17,24 @@ router.get("/", requireAuth, async (req: Request, res: Response) => {
   } catch (err) {
     console.error("Failed to load history:", err);
     res.status(500).json({ error: "Failed to load history" });
+  }
+});
+
+router.get("/:exerciseId", requireAuth, async (req: Request, res: Response) => {
+  // Exercise ids are uuids. Anything else can't be one of the user's, and would make
+  // Postgres reject the query, so it's not found rather than an error.
+  const exerciseId = z.uuid().safeParse(req.params.exerciseId);
+  if (!exerciseId.success) {
+    return res.status(404).json({ error: "History entry not found" });
+  }
+
+  try {
+    const row = await findHistoryEntry(req.user!.uid, exerciseId.data);
+    if (!row) return res.status(404).json({ error: "History entry not found" });
+    res.json(row);
+  } catch (err) {
+    console.error("Failed to load history entry:", err);
+    res.status(500).json({ error: "Failed to load history entry" });
   }
 });
 

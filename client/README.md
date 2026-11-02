@@ -91,7 +91,7 @@ src/
 │                          and where the cursor is), meter (the beat each time signature
 │                          is counted in), noteValue (how NoteValue lays out ♩, ♪♪, ♬),
 │                          transport (the player's play/pause/seek states), tuning,
-│                          practice (the player's route state) and storage.
+│                          practice (the player's address and route state) and storage.
 ├── utils/                 App logic: music generation (generateMusic, lipSlurs, built on
 │                          rhythm, melody and notate), etudes (written by Claude on the
 │                          server, fetched by etudes.ts), playback (the player's audio
@@ -160,16 +160,25 @@ shell: it has no sidebar and nothing to go back to.
 
 ## The practice player
 
-`pages/Practice.tsx` (route `/practice`, mockup 1e) plays one exercise: a bar of
-count-in (which can be turned off), then the notes on a trumpet with a moving cursor,
-a metronome and a tuner in a collapsible drawer. Clicking a note moves the cursor
-there. Open it with `<PracticeButton exercise={…} />` from any page. The
-exercise travels in the router state (so a refresh keeps it), and the player's back
-links return to the page that opened it, named as the nav names it. They hand the
-exercise back as `practiced` in the router state; read it with `readPracticed()` from
-`@/lib/practice` to put it back where it was. Generate doesn't need to: it keeps the
-exercise on its plate in session storage (per tab and per player), so the plate is
-still there after the player, a refresh or the browser's Back button.
+`pages/Practice.tsx` (route `/practice/<exerciseId>`, mockup 1e) plays one exercise: a
+bar of count-in (which can be turned off), then the notes on a trumpet with a moving
+cursor, a metronome and a tuner in a collapsible drawer. Clicking a note moves the
+cursor there. Open it with
+`<PracticeButton exercise={…} originLabel="Generate" />` from any page; the label is
+what the player's back links call that page. The button stays disabled until history
+has numbered the exercise, because the player loads exercises from history:
+
+- **Opened from the button,** the exercise travels in the router state too, so the
+  player shows it without a request.
+- **In a new tab, after a reload or from a bookmark,** it loads the exercise with
+  `GET /api/history/:exerciseId`. An id history doesn't have goes to Generate with an
+  "Invalid exercise id" notice.
+- **The back links** are plain links to the page that opened the player. The address
+  names that page (`?from=/generate`), so they work in a new tab too. They hand the
+  exercise back as `practiced` in the router state; read it with `readPracticed()` from
+  `@/lib/practice` to put it back where it was. Generate doesn't need to: it keeps the
+  exercise on its plate in session storage (per tab and per player), so the plate is
+  still there after the player, a refresh or the browser's Back button.
 
 The staff is written for B♭ trumpet, so the player sounds every note a whole tone
 lower (`CONCERT_OFFSET` in `lib/tuning.ts`). The trumpet samples are in

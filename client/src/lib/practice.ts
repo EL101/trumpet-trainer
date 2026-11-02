@@ -1,7 +1,27 @@
 import { isMusicInfo, type MusicInfo } from "@/schema";
 
-/** The player's route. */
+/** The player's route. The exercise's id follows it: `/practice/<exerciseId>`. */
 export const PRACTICE_PATH = "/practice";
+
+/** The page the player goes back to when nothing says where it was opened from. */
+export const DEFAULT_ORIGIN = "/generate";
+
+/**
+ * The player's address for an exercise. It names the page it was opened from too, so
+ * a player opened in a new tab (no router state) still knows where to go back to.
+ */
+export function practicePath(exerciseId: string, from: string) {
+  const query = new URLSearchParams({ from });
+  return `${PRACTICE_PATH}/${encodeURIComponent(exerciseId)}?${query}`;
+}
+
+/**
+ * The page to go back to, from a player address's `from`, if it names a page of this
+ * app. Anything else (missing, another site, `//host`) goes back to DEFAULT_ORIGIN.
+ */
+export function returnPath(from: string | null) {
+  return from && /^\/(?![/\\])/.test(from) ? from : DEFAULT_ORIGIN;
+}
 
 /** The page the player was opened from: where its back links go, and what they call it. */
 export type PracticeOrigin = { to: string; label: string };
@@ -29,7 +49,7 @@ export function backTo(origin: PracticeOrigin) {
   return origin.label === FALLBACK_LABEL ? FALLBACK_LABEL : `Back to ${origin.label}`;
 }
 
-/** The player's state from `location.state`, or null without one (the URL typed in). */
+/** The player's state from `location.state`, or null without one (a new tab, or typed in). */
 export function readPracticeState(state: unknown): PracticeState | null {
   if (!isRecord(state) || !isMusicInfo(state.exercise) || !isRecord(state.from)) return null;
   const { to, label } = state.from;

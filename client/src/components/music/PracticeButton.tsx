@@ -1,21 +1,26 @@
 import { Play } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { NAV_ITEMS } from "@/components/layout";
 import { Button, type ButtonProps } from "@/components/primitives";
-import { originFor, PRACTICE_PATH, type PracticeState } from "@/lib/practice";
+import { practicePath, type PracticeState } from "@/lib/practice";
 import type { MusicInfo } from "@/schema";
 
 type PracticeButtonProps = Omit<ButtonProps, "asChild" | "children"> & {
-  /** The exercise to practise; the button is disabled without one. */
+  /**
+   * The exercise to practise. The button is disabled without one, and until history
+   * has numbered it: the player loads exercises from history by id.
+   */
   exercise: MusicInfo | null;
+  /** What the player's back links call this page ("Back to Generate"). */
+  originLabel: string;
 };
 
 /**
- * "Practice with feedback": opens the player on `exercise`. The player's back links
- * return to this page, named as the nav names it, and hand the exercise back as
- * `practiced` in the router state (read it with `readPracticed`).
+ * "Practice with feedback": opens the player on `exercise`, at an address that names
+ * it, so it opens in a new tab too. The player's back links return to this page and
+ * hand the exercise back as `practiced` in the router state (read it with
+ * `readPracticed`).
  */
-export function PracticeButton({ exercise, ...rest }: PracticeButtonProps) {
+export function PracticeButton({ exercise, originLabel, ...rest }: PracticeButtonProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const label = (
@@ -25,7 +30,7 @@ export function PracticeButton({ exercise, ...rest }: PracticeButtonProps) {
     </>
   );
 
-  if (!exercise) {
+  if (!exercise?.generationNum) {
     return (
       <Button variant="primary" disabled {...rest}>
         {label}
@@ -33,7 +38,7 @@ export function PracticeButton({ exercise, ...rest }: PracticeButtonProps) {
     );
   }
 
-  const state: PracticeState = { exercise, from: originFor(location.pathname, NAV_ITEMS) };
+  const state: PracticeState = { exercise, from: { to: location.pathname, label: originLabel } };
   // The browser's Back button skips the player's back link, so mark this page's own
   // history entry too: coming back either way finds the exercise in `practiced`.
   const markHere = () => {
@@ -43,7 +48,11 @@ export function PracticeButton({ exercise, ...rest }: PracticeButtonProps) {
 
   return (
     <Button asChild variant="primary" {...rest}>
-      <Link to={PRACTICE_PATH} state={state} onClick={markHere}>
+      <Link
+        to={practicePath(exercise.exerciseId, location.pathname)}
+        state={state}
+        onClick={markHere}
+      >
         {label}
       </Link>
     </Button>

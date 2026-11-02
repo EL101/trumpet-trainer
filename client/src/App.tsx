@@ -5,7 +5,7 @@ import EtudesProvider from "./etudes/EtudesProvider";
 import { Toaster } from "@/components/primitives";
 import LandingPage from "./pages/LandingPage";
 import PitchTest from "./pages/PitchTest";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
 import { ProtectedRoute } from "./ProtectedRoute";
 import Profile from "./pages/Profile";
 import Today from "./pages/Today";
@@ -50,7 +50,9 @@ function App() {
                 <Route path="/library" element={<Library />} />
               </Route>
               <Route element={<ProtectedRoute />}>
-                <Route path={PRACTICE_PATH} element={<Practice />} />
+                <Route path={`${PRACTICE_PATH}/:exerciseId`} element={<Practice />} />
+                {/* No exercise named: go and make one. */}
+                <Route path={PRACTICE_PATH} element={<Navigate to="/generate" replace />} />
               </Route>
               <Route element={<ProtectedRoute />}>
                 <Route path="/metronome" element={<Metronome />} />

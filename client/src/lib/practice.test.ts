@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { MusicInfo } from "@/schema";
-import { backTo, originFor, readPracticed, readPracticeState } from "./practice";
+import {
+  backTo,
+  originFor,
+  practicePath,
+  readPracticed,
+  readPracticeState,
+  returnPath,
+} from "./practice";
 
 const exercise: MusicInfo = {
   id: "a",
@@ -18,6 +25,28 @@ const NAV = [
   { to: "/today", label: "Today" },
   { to: "/generate", label: "Generate" },
 ];
+
+describe("practicePath", () => {
+  it("puts the exercise in the path and the page it came from in the query", () => {
+    expect(practicePath("b", "/generate")).toBe("/practice/b?from=%2Fgenerate");
+  });
+
+  it("escapes an id that isn't safe in a path", () => {
+    expect(practicePath("a/b", "/today")).toBe("/practice/a%2Fb?from=%2Ftoday");
+  });
+});
+
+describe("returnPath", () => {
+  it("keeps a page of this app", () => {
+    expect(returnPath("/library")).toBe("/library");
+  });
+
+  it("goes back to Generate when it's missing or names somewhere else", () => {
+    for (const from of [null, "", "library", "https://example.com", "//example.com", "/\\x"]) {
+      expect(returnPath(from)).toBe("/generate");
+    }
+  });
+});
 
 describe("originFor", () => {
   it("names the page as the nav does", () => {

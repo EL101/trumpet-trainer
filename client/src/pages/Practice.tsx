@@ -24,10 +24,11 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { Link, Navigate, useLocation } from "react-router-dom";
+import { useContext, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Link, Navigate, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { Note } from "tonal";
-import { FocusShell } from "@/components/layout";
+import { AuthUserContext } from "@/auth/AuthUserContext";
+import { FocusShell, NAV_ITEMS } from "@/components/layout";
 import {
   ExerciseMeta,
   NoteValue,
@@ -40,6 +41,7 @@ import {
   Button,
   IconButton,
   Kicker,
+  notify,
   Rule,
   SegmentedControl,
   Slider,
@@ -54,12 +56,15 @@ import { EXERCISE_TYPE_LABELS, KEYLESS } from "@/lib/generatorOptions";
 import { beatAt, MAX_TEMPO, MIN_TEMPO, pulseOf, type Pulse } from "@/lib/meter";
 import {
   backTo,
+  originFor,
   readPracticeState,
+  returnPath,
   type PracticedState,
   type PracticeOrigin,
 } from "@/lib/practice";
 import { barAt, buildTimeline, cursorAt } from "@/lib/timeline";
 import { CONCERT_OFFSET, nearestNote } from "@/lib/tuning";
+import { getHistoryEntry } from "@/utils/history";
 import { lipSlurFingerings } from "@/utils/lipSlurs";
 import type { MusicInfo } from "@/schema";
 
@@ -88,13 +93,55 @@ const COUNT_IN_OPTIONS: ChoiceOption<"off" | "bar">[] = [
   { value: "bar", label: "One bar" },
 ];
 
-/** The player (mockup 1e), opened by PracticeButton with the exercise in its router state. */
+/**
+ * The player (mockup 1e), at `/practice/<exerciseId>`. PracticeButton hands it the
+ * exercise in its router state; without that (a new tab, a reload, a bookmark) it
+ * loads the exercise from history.
+ */
 export default function Practice() {
+  const { exerciseId = "" } = useParams();
   const location = useLocation();
+  const [params] = useSearchParams();
+  const { user } = useContext(AuthUserContext);
   const state = readPracticeState(location.state);
-  // Typed in or bookmarked: there's no exercise to play, so go and make one.
-  if (!state) return <Navigate to="/generate" replace />;
-  return <Player key={state.exercise.id} exercise={state.exercise} from={state.from} />;
+  const handed = state?.exercise.exerciseId === exerciseId ? state.exercise : null;
+  const from = state?.from ?? originFor(returnPath(params.get("from")), NAV_ITEMS);
+
+  // What history gave for this id: an exercise, or null when it has none.
+  const [loaded, setLoaded] = useState<{ id: string; exercise: MusicInfo | null } | null>(null);
+  const exercise = handed ?? (loaded?.id === exerciseId ? loaded.exercise : undefined);
+  const missing = exercise === null;
+
+  useEffect(() => {
+    if (handed) return;
+    const controller = new AbortController();
+    getHistoryEntry(exerciseId, user, controller.signal)
+      .then((entry) => {
+        if (controller.signal.aborted) return;
+        if (!entry) notify({ tone: "error", title: "Invalid exercise id" });
+        setLoaded({ id: exerciseId, exercise: entry });
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        console.error("load history entry error:", error);
+        notify({ tone: "error", title: "Couldn't load the exercise" });
+        setLoaded({ id: exerciseId, exercise: null });
+      });
+    return () => controller.abort();
+  }, [handed, exerciseId, user]);
+
+  if (missing) return <Navigate to="/generate" replace />;
+  // Loading: the frame, so the back link is already there.
+  if (!exercise) {
+    return (
+      <FocusShell back={from}>
+        <Text role="status" textStyle="meta" color="fg.muted">
+          Loading the exercise…
+        </Text>
+      </FocusShell>
+    );
+  }
+  return <Player key={exercise.exerciseId} exercise={exercise} from={from} />;
 }
 
 function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin }) {

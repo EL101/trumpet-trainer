@@ -1,7 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { User } from "firebase/auth";
 import { toHistoryInput, type MusicInfo } from "@/schema";
-import { authedFetch } from "./api";
+import { ApiError, authedFetch } from "./api";
 
 export function getInitialHistory(
   user: User | undefined | null,
@@ -23,6 +23,26 @@ export function getInitialHistory(
   })();
 
   return () => controller.abort();
+}
+
+/**
+ * One exercise from the user's history, by its exercise id. Resolves to null if
+ * history has no such exercise; throws if it couldn't be asked.
+ */
+export async function getHistoryEntry(
+  exerciseId: string,
+  user: User | undefined | null,
+  signal?: AbortSignal,
+): Promise<MusicInfo | null> {
+  try {
+    const res = await authedFetch(`/api/history/${encodeURIComponent(exerciseId)}`, user, {
+      signal,
+    });
+    return res ? await res.json() : null;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null;
+    throw error;
+  }
 }
 
 /**

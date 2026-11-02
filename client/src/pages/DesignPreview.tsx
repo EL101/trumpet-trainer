@@ -36,8 +36,22 @@ import {
   Textarea,
 } from "@/components/primitives";
 import { MAX_TEMPO, MIN_TEMPO, pulseOf } from "@/lib/meter";
+import type { MusicInfo } from "@/schema";
 
 /** Dev-only gallery of the design-system building blocks (route: /design). */
+/** An exercise for PracticeButton to open. It rides in the router state, so it needn't be in history. */
+const PREVIEW_EXERCISE: MusicInfo = {
+  id: "design-preview",
+  exerciseId: "design-preview",
+  exerciseType: "RANDOM",
+  notes: "G4/8, A4, B4, C5, D5, C5, B4, A4, G4/q, D5, G4/h",
+  timeSig: "4/4",
+  musicKey: "G major",
+  noteRange: "MED",
+  difficulty: "LOW",
+  generationNum: 1,
+};
+
 export default function DesignPreview() {
   const [zone, setZone] = useState<"5" | "10" | "15">("5");
   const [type, setType] = useState<"long" | "scales" | "slurs" | "random">("random");
@@ -460,21 +474,16 @@ export default function DesignPreview() {
           </Box>
           <Box>
             <Text fontSize="12px" color="fg.muted" mb="xs">
-              PracticeButton opens the player on an exercise; its back link returns here
+              PracticeButton opens the player on an exercise; its back link returns here. It waits
+              for history to number a new exercise.
             </Text>
-            <PracticeButton
-              exercise={{
-                id: "design-preview",
-                exerciseId: "design-preview",
-                exerciseType: "RANDOM",
-                notes: "G4/8, A4, B4, C5, D5, C5, B4, A4, G4/q, D5, G4/h",
-                timeSig: "4/4",
-                musicKey: "G major",
-                noteRange: "MED",
-                difficulty: "LOW",
-                generationNum: 0,
-              }}
-            />
+            <Flex gap="sm" wrap="wrap">
+              <PracticeButton exercise={PREVIEW_EXERCISE} originLabel="Design" />
+              <PracticeButton
+                exercise={{ ...PREVIEW_EXERCISE, generationNum: 0 }}
+                originLabel="Design"
+              />
+            </Flex>
           </Box>
         </Flex>
       </Section>
