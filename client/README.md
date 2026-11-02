@@ -78,7 +78,9 @@ src/
 │   ├── layout/            Page frames. Import from "@/components/layout".
 │   │                      AppShell (sidebar + content), FocusShell (the player's frame:
 │   │                      a top bar with a back link, and a drawer beside the music),
-│   │                      Sidebar, PageHeader
+│   │                      Sidebar, PageHeader. The sidebar collapses to a book spine;
+│   │                      useSidebar.ts holds its state (remembered on desktop,
+│   │                      collapsed by default on phones, where opening it dims the page)
 │   ├── ui/                Chakra's generated setup (provider, tooltip). Rarely touched.
 │   └── *.tsx              OLD components. See "Old vs new" below.
 │

@@ -1,17 +1,26 @@
 import { Box, chakra, Flex, Grid, Text } from "@chakra-ui/react";
-import { useLayoutEffect, useRef } from "react";
+import { ChevronsLeft, ChevronsRight } from "lucide-react";
+import { useId, useLayoutEffect, useRef } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { Rule, Stat } from "@/components/primitives";
+import { IconButton, Rule, Stat } from "@/components/primitives";
 import UserAvatar from "@/components/UserAvatar";
 import { useProfile } from "@/profile/useProfile";
 import { NAV_ITEMS, type NavItem } from "./navItems";
+import { SIDEBAR_SLIDE } from "./useSidebar";
 
 export type StreakDay = { label: string; state: "done" | "today" | "missed" };
 
 type SidebarProps = {
   items?: readonly NavItem[];
   streak?: { days: number; week: readonly StreakDay[] };
+  /** Full width, or folded down to a spine that opens it again. */
+  expanded?: boolean;
+  /** Shows the collapse/expand button. */
+  onToggle?: () => void;
 };
+
+/** Open width: the design's on wide screens; on a phone, most of the screen. */
+const OPEN_WIDTH = { base: "min(320px, 100vw - 72px)", md: "sidebar" };
 
 const SidebarLink = chakra(NavLink, {
   base: {
@@ -36,6 +45,33 @@ const SidebarLink = chakra(NavLink, {
   },
 });
 
+/**
+ * The collapsed sidebar, drawn like a book's spine: the title runs up it between banded
+ * rules. The whole spine is the button that opens the sidebar.
+ */
+const Spine = chakra("button", {
+  base: {
+    position: "absolute",
+    insetBlock: 0,
+    insetInlineStart: 0,
+    width: "sidebarRail",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: "18px",
+    pt: "30px",
+    pb: "22px",
+    bg: "bg.panel",
+    color: "fg",
+    cursor: "pointer",
+    "& svg": { boxSize: "14px", color: "accent.solid" },
+    "& .tt-spine-title": { transitionProperty: "color", transitionDuration: "moderate" },
+    _hover: { "& .tt-spine-title": { color: "accent.fg" } },
+    // The sidebar clips its overflow, so keep the focus ring inside.
+    _focusVisible: { outlineOffset: "-3px" },
+  },
+});
+
 const EASE_OUT = "cubic-bezier(0.2, 0, 0, 1)";
 /** The sidebar sliding in from the left when the viewer arrives. */
 const ENTRANCE = { duration: 600, easing: EASE_OUT };
@@ -54,91 +90,178 @@ let sidebarsOnScreen = 0;
 /** Where the last sidebar's active outline sat, from the top of its nav. */
 let lastOutlineTop: number | null = null;
 
-/** Left rail: brand, numbered nav, streak week and the profile link. */
-export function Sidebar({ items = NAV_ITEMS, streak }: SidebarProps) {
+/**
+ * Left rail: brand, numbered nav, streak week and the profile link. Collapsing it slides
+ * the edge in over its contents, which keep their width and fade out as a spine fades in.
+ */
+export function Sidebar({ items = NAV_ITEMS, streak, expanded = true, onToggle }: SidebarProps) {
   const { asideRef, outlineRef } = useSidebarMotion();
+  const contentsId = useId();
   return (
-    <Flex
+    <Box
       as="aside"
       ref={asideRef}
-      direction="column"
-      gap="22px"
-      width="sidebar"
+      position="relative"
       flex="none"
+      width={expanded ? OPEN_WIDTH : "sidebarRail"}
       height="100%"
+      overflow="hidden"
+      bg="bg"
       borderRightWidth="1px"
       borderColor="border"
-      pt="34px"
-      px="20px"
-      pb="22px"
+      _motionSafe={{ transition: `width ${SIDEBAR_SLIDE}` }}
     >
-      <Flex direction="column" gap="6px" px="10px">
-        <Text
-          fontFamily="heading"
-          fontWeight={600}
-          fontSize="24px"
-          lineHeight={1.05}
-          letterSpacing="-0.01em"
-        >
-          Trumpet Trainer
-        </Text>
-        <Text fontSize="10px" letterSpacing="0.14em" textTransform="uppercase" color="accent.fg">
-          Daily practice
-        </Text>
-      </Flex>
-      <Rule mx="10px" width="auto" />
-
-      <Flex as="nav" position="relative" direction="column" gap="3px">
-        {items.map((item, i) => (
-          <SidebarLink key={item.to} to={item.to}>
-            {({ isActive }) => (
-              <>
-                {isActive && (
-                  <Box
-                    ref={outlineRef}
-                    position="absolute"
-                    inset={0}
-                    zIndex={1}
-                    borderRadius="inherit"
-                    boxShadow="inset 0 0 0 1px {colors.accent.solid}"
-                    pointerEvents="none"
-                  />
-                )}
-                <Text
-                  as="span"
-                  className="tt-nav-number"
-                  fontSize="11px"
-                  fontVariantNumeric="tabular-nums"
-                  width="16px"
-                >
-                  {String(i + 1).padStart(2, "0")}
-                </Text>
-                <Text
-                  as="span"
-                  fontFamily="heading"
-                  fontWeight={600}
-                  fontSize="19px"
-                  lineHeight={1.2}
-                >
-                  {item.label}
-                </Text>
-              </>
+      <Flex
+        id={contentsId}
+        inert={!expanded}
+        direction="column"
+        gap="22px"
+        width={OPEN_WIDTH}
+        height="100%"
+        overflowY="auto"
+        pt="34px"
+        px="20px"
+        pb="22px"
+        opacity={expanded ? 1 : 0}
+        _motionSafe={{
+          // Out before the edge reaches the text; in once there's room for it.
+          transition: expanded ? "opacity 200ms ease-out 100ms" : "opacity 120ms ease-in",
+        }}
+      >
+        <Flex direction="column" gap="6px" px="10px">
+          <Text
+            fontFamily="heading"
+            fontWeight={600}
+            fontSize="24px"
+            lineHeight={1.05}
+            letterSpacing="-0.01em"
+          >
+            Trumpet Trainer
+          </Text>
+          <Flex align="center" justify="space-between" gap="sm">
+            <Text
+              fontSize="10px"
+              letterSpacing="0.14em"
+              textTransform="uppercase"
+              color="accent.fg"
+            >
+              Daily practice
+            </Text>
+            {onToggle && (
+              <IconButton
+                variant="ghost"
+                size="sm"
+                // Hangs into the padding so the row keeps the kicker's height.
+                my="-8px"
+                me="-8px"
+                aria-label="Collapse sidebar"
+                aria-expanded
+                aria-controls={contentsId}
+                onClick={onToggle}
+              >
+                <ChevronsLeft />
+              </IconButton>
             )}
-          </SidebarLink>
-        ))}
+          </Flex>
+        </Flex>
+        <Rule mx="10px" width="auto" />
+
+        <Flex as="nav" position="relative" direction="column" gap="3px">
+          {items.map((item, i) => (
+            <SidebarLink key={item.to} to={item.to}>
+              {({ isActive }) => (
+                <>
+                  {isActive && (
+                    <Box
+                      ref={outlineRef}
+                      position="absolute"
+                      inset={0}
+                      zIndex={1}
+                      borderRadius="inherit"
+                      boxShadow="inset 0 0 0 1px {colors.accent.solid}"
+                      pointerEvents="none"
+                    />
+                  )}
+                  <Text
+                    as="span"
+                    className="tt-nav-number"
+                    fontSize="11px"
+                    fontVariantNumeric="tabular-nums"
+                    width="16px"
+                  >
+                    {String(i + 1).padStart(2, "0")}
+                  </Text>
+                  <Text
+                    as="span"
+                    fontFamily="heading"
+                    fontWeight={600}
+                    fontSize="19px"
+                    lineHeight={1.2}
+                  >
+                    {item.label}
+                  </Text>
+                </>
+              )}
+            </SidebarLink>
+          ))}
+        </Flex>
+
+        <Flex direction="column" gap="14px" px="10px" mt="auto">
+          {streak && (
+            <>
+              <Stat layout="inline" size="lg" value={streak.days} label="day streak" />
+              <StreakWeek week={streak.week} />
+              <Rule />
+            </>
+          )}
+          <ProfileLink />
+        </Flex>
       </Flex>
 
-      <Flex direction="column" gap="14px" px="10px" mt="auto">
-        {streak && (
-          <>
-            <Stat layout="inline" size="lg" value={streak.days} label="day streak" />
-            <StreakWeek week={streak.week} />
-            <Rule />
-          </>
-        )}
-        <ProfileLink />
-      </Flex>
-    </Flex>
+      {onToggle && (
+        <Spine
+          type="button"
+          inert={expanded}
+          aria-label="Expand sidebar"
+          aria-expanded={false}
+          aria-controls={contentsId}
+          onClick={onToggle}
+          opacity={expanded ? 0 : 1}
+          _motionSafe={{
+            // The reverse of the contents: in once they've gone, out before they return.
+            transition: expanded ? "opacity 120ms ease-in" : "opacity 200ms ease-out 100ms",
+          }}
+        >
+          <ChevronsRight />
+          <SpineBands />
+          <Text
+            as="span"
+            className="tt-spine-title"
+            fontFamily="heading"
+            fontWeight={600}
+            fontSize="18px"
+            letterSpacing="0.03em"
+            whiteSpace="nowrap"
+            css={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+          >
+            Trumpet Trainer
+          </Text>
+          <SpineBands />
+          <Text
+            as="span"
+            mt="auto"
+            fontSize="9px"
+            letterSpacing="0.18em"
+            textTransform="uppercase"
+            whiteSpace="nowrap"
+            color="accent.fg"
+            css={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+          >
+            Daily practice
+          </Text>
+        </Spine>
+      )}
+    </Box>
   );
 }
 
@@ -185,6 +308,16 @@ function useSidebarMotion() {
   }, [pathname]);
 
   return { asideRef, outlineRef };
+}
+
+/** A pair of hairlines across the spine, like the raised bands on a bound book. */
+function SpineBands() {
+  return (
+    <Flex direction="column" gap="3px" aria-hidden>
+      <Box width="22px" height="1px" bg="border.emphasized" />
+      <Box width="22px" height="1px" bg="border.emphasized" />
+    </Flex>
+  );
 }
 
 function StreakWeek({ week }: { week: readonly StreakDay[] }) {
