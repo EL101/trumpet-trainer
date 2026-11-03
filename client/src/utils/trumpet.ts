@@ -35,7 +35,16 @@ type Sample = { midi: number; buffer: AudioBuffer; loopStart: number; loopEnd: n
 
 export type Trumpet = {
   /** Plays concert-pitch `midi` at `when`, for `duration` seconds, into `output`. */
-  play(midi: number, when: number, duration: number, output: AudioNode): void;
+  play(midi: number, when: number, duration: number, output: AudioNode): PlayingNote;
+};
+
+/** A note handed to the audio clock. */
+export type PlayingNote = {
+  /**
+   * Moves the note's end to `time` (when its release begins), as after a tempo change.
+   * A note already releasing is left to finish, since cutting its fade short would click.
+   */
+  endAt(time: number): void;
 };
 
 const loaded = new WeakMap<BaseAudioContext, Promise<Trumpet>>();
@@ -90,17 +99,32 @@ function makeTrumpet(ctx: BaseAudioContext, samples: Sample[]): Trumpet {
       source.loopEnd = sample.loopEnd;
       source.playbackRate.value = 2 ** ((midi - sample.midi) / 12);
 
-      const held = Math.max(duration, ATTACK);
       const envelope = ctx.createGain();
+      source.connect(envelope).connect(output);
+      // Started before its stop time is first set: a source can't be stopped before that.
+      source.start(when);
+      source.onended = () => envelope.disconnect();
       envelope.gain.setValueAtTime(0, when);
       envelope.gain.linearRampToValueAtTime(LEVEL, when + ATTACK);
-      envelope.gain.setValueAtTime(LEVEL, when + held);
-      envelope.gain.linearRampToValueAtTime(0, when + held + RELEASE);
+      // Holds, then releases from `end`; never before the attack is done.
+      const release = (end: number) => {
+        end = Math.max(end, when + ATTACK);
+        envelope.gain.setValueAtTime(LEVEL, end);
+        envelope.gain.linearRampToValueAtTime(0, end + RELEASE);
+        source.stop(end + RELEASE);
+        return end;
+      };
+      let ends = release(when + duration);
 
-      source.connect(envelope).connect(output);
-      source.start(when);
-      source.stop(when + held + RELEASE);
-      source.onended = () => envelope.disconnect();
+      return {
+        endAt(time) {
+          const now = ctx.currentTime;
+          if (now >= ends) return;
+          // Drop the old hold and release (both after the attack), then set the new ones.
+          envelope.gain.cancelScheduledValues(Math.max(now, when + ATTACK + 1e-4));
+          ends = release(Math.max(time, now));
+        },
+      };
     },
   };
 }

@@ -6,7 +6,12 @@ const RATE = 1000;
 const EDGES = { start: 520, end: 2611 };
 
 function param() {
-  return { value: 1, setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn() };
+  return {
+    value: 1,
+    setValueAtTime: vi.fn(),
+    linearRampToValueAtTime: vi.fn(),
+    cancelScheduledValues: vi.fn(),
+  };
 }
 
 /** An audio context that "decodes" a fetched URL into a buffer that remembers it. */
@@ -19,6 +24,7 @@ function fakeContext({ edges = true } = {}) {
   const sources: ReturnType<typeof source>[] = [];
   const gains: ReturnType<typeof gain>[] = [];
   function source() {
+    let started = false;
     return {
       buffer: null as unknown,
       loop: false,
@@ -27,14 +33,20 @@ function fakeContext({ edges = true } = {}) {
       playbackRate: param(),
       onended: null as null | (() => void),
       connect: vi.fn(<T>(node: T) => node),
-      start: vi.fn(),
-      stop: vi.fn(),
+      start: vi.fn<(when: number) => void>(() => {
+        started = true;
+      }),
+      // As browsers do, refuses a stop time before the source has a start time.
+      stop: vi.fn<(when: number) => void>(() => {
+        if (!started) throw new Error("InvalidStateError: stop before start");
+      }),
     };
   }
   function gain() {
     return { gain: param(), connect: vi.fn(<T>(node: T) => node), disconnect: vi.fn() };
   }
   const ctx = {
+    currentTime: 0,
     decodeAudioData: vi.fn(async (url: string) => ({
       url,
       sampleRate: RATE,
@@ -52,7 +64,10 @@ function fakeContext({ edges = true } = {}) {
       return g;
     },
   };
-  return { ctx: ctx as unknown as BaseAudioContext, sources, gains };
+  const clock = (time: number) => {
+    ctx.currentTime = time;
+  };
+  return { ctx: ctx as unknown as BaseAudioContext, sources, gains, clock };
 }
 
 /** Answers each sample's fetch with its own URL, which the fake context decodes; `failing` 404s. */
@@ -160,6 +175,44 @@ describe("Trumpet.play", () => {
     const { trumpet: t, sources } = await trumpet();
     t.play(67, 2, 0, output);
     expect(sources[0].stop.mock.calls[0][0]).toBeCloseTo(2.14);
+  });
+
+  it("moves a note's end, as after a tempo change", async () => {
+    const { trumpet: t, sources, gains, clock } = await trumpet();
+    const note = t.play(67, 2, 1.5, output);
+    clock(2.5);
+    note.endAt(4);
+    const [envelope] = gains;
+    expect(envelope.gain.cancelScheduledValues).toHaveBeenCalledWith(2.5);
+    expect(envelope.gain.setValueAtTime).toHaveBeenLastCalledWith(3, 4);
+    expect(envelope.gain.linearRampToValueAtTime).toHaveBeenLastCalledWith(0, 4.12);
+    expect(sources[0].stop).toHaveBeenLastCalledWith(4.12);
+  });
+
+  it("keeps the attack of a note that hasn't finished fading in", async () => {
+    const { trumpet: t, gains, clock } = await trumpet();
+    const note = t.play(67, 2, 1.5, output);
+    clock(1);
+    note.endAt(2.01);
+    expect(gains[0].gain.cancelScheduledValues.mock.calls[0][0]).toBeCloseTo(2.0201);
+    expect(gains[0].gain.setValueAtTime.mock.lastCall?.[1]).toBeCloseTo(2.02);
+  });
+
+  it("ends a note no earlier than now", async () => {
+    const { trumpet: t, sources, clock } = await trumpet();
+    const note = t.play(67, 2, 1.5, output);
+    clock(2.5);
+    note.endAt(2.2);
+    expect(sources[0].stop.mock.lastCall?.[0]).toBeCloseTo(2.62);
+  });
+
+  it("lets a note that's already releasing finish", async () => {
+    const { trumpet: t, sources, gains, clock } = await trumpet();
+    const note = t.play(67, 2, 1.5, output);
+    clock(3.55);
+    note.endAt(5);
+    expect(gains[0].gain.cancelScheduledValues).not.toHaveBeenCalled();
+    expect(sources[0].stop).toHaveBeenCalledTimes(1);
   });
 
   it("lets go of the note's envelope once it has played", async () => {

@@ -2,7 +2,7 @@ import { barQuarters, type Pulse } from "@/lib/meter";
 import { soundingNotes, type SoundingNote, type Timeline } from "@/lib/timeline";
 import { CONCERT_OFFSET } from "@/lib/tuning";
 import { scheduleClick } from "./click";
-import type { Trumpet } from "./trumpet";
+import type { PlayingNote, Trumpet } from "./trumpet";
 
 /** How far ahead notes and clicks are handed to the audio clock, in seconds. */
 const LOOKAHEAD = 0.1;
@@ -39,6 +39,8 @@ type Run = {
   /** The next sounding note to schedule, and where the next click falls. */
   nextNote: number;
   nextClick: number;
+  /** Notes handed to the audio clock that haven't ended yet, and where each ends. */
+  playing: { note: PlayingNote; ends: number }[];
   /** Everything the run plays goes through these, so stopping silences it all at once. */
   notes: GainNode;
   clicks: GainNode;
@@ -76,8 +78,9 @@ export class Playback {
   update(settings: PlaybackSettings) {
     const run = this.run;
     const now = this.ctx.currentTime;
+    const retimed = run && settings.tempo !== this.settings.tempo;
     if (run) {
-      if (settings.tempo !== this.settings.tempo) {
+      if (retimed) {
         // Carry on from where the music is now, at the new speed.
         run.anchorPosition = this.positionAt(run, now);
         run.anchorTime = now;
@@ -85,6 +88,11 @@ export class Playback {
       run.notes.gain.setTargetAtTime(settings.notes ? 1 : 0, now, 0.01);
     }
     this.settings = settings;
+    if (run && retimed) {
+      // Notes already handed over were timed at the old speed: end them where the new
+      // one says, so a held note doesn't ring into the next one, or stop short of it.
+      for (const { note, ends } of run.playing) note.endAt(this.timeAt(run, ends));
+    }
   }
 
   /**
@@ -110,6 +118,7 @@ export class Playback {
       anchorPosition: start,
       nextNote: nextNote === -1 ? this.sounding.length : nextNote,
       nextClick: start,
+      playing: [],
       notes,
       clicks,
       timer: window.setInterval(() => this.schedule(), TICK_MS),
@@ -171,6 +180,8 @@ export class Playback {
       run.nextClick = nextOnGrid(at, step);
     }
 
+    const now = this.positionAt(run, this.ctx.currentTime);
+    run.playing = run.playing.filter(({ ends }) => ends > now);
     const entry = (note: SoundingNote) => Math.max(note.start, run.from);
     while (run.nextNote < this.sounding.length && entry(this.sounding[run.nextNote]) < horizon) {
       const note = this.sounding[run.nextNote++];
@@ -179,12 +190,13 @@ export class Playback {
       const begins = entry(note);
       const ends = note.start + note.length * (note.legato ? 1 : GATE);
       if (ends <= begins + EPSILON) continue;
-      this.trumpet.play(
+      const playing = this.trumpet.play(
         note.midi + CONCERT_OFFSET,
         this.timeAt(run, begins),
         (ends - begins) * this.secondsPerQuarter(),
         run.notes,
       );
+      run.playing.push({ note: playing, ends });
     }
   }
 }

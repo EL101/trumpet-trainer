@@ -71,7 +71,7 @@ beforeEach(() => {
   vi.stubGlobal("window", globalThis);
   vi.stubGlobal("document", { hidden: false });
   ({ ctx, gains } = fakeContext());
-  trumpet = { play: vi.fn<Trumpet["play"]>() };
+  trumpet = { play: vi.fn<Trumpet["play"]>(() => ({ endAt: vi.fn() })) };
   vi.mocked(scheduleClick).mockClear();
 });
 
@@ -206,6 +206,29 @@ describe("Playback", () => {
     // Beats 0–2 were already handed over at 60; from 2s in, beats come every half second.
     expect(times.slice(0, 3)).toEqual([0.05, 1.05, 2.05]);
     expect(times.slice(3, 6)).toEqual([2.525, 3.025, 3.525]);
+  });
+
+  it("moves the end of a note already handed over when the tempo changes", () => {
+    const p = playback("C4/w, D4/w");
+    p.start(0, { countIn: false });
+    run(1);
+    const [held] = trumpet.play.mock.results.map((r) => r.value);
+    // At 60 the whole note was to end 3.6 beats in, at 3.65s. At 1s it's 0.95 beats in,
+    // and the 2.65 beats left take half a second each at 120.
+    p.update({ ...SETTINGS, tempo: 120 });
+    expect(held.endAt).toHaveBeenCalledTimes(1);
+    expect(round(held.endAt.mock.calls[0][0])).toBe(2.325);
+  });
+
+  it("leaves notes that have ended alone when the tempo changes", () => {
+    const p = playback("C4/q, D4/q, E4/h");
+    p.start(0, { countIn: false });
+    run(2.1);
+    const [first, second, third] = trumpet.play.mock.results.map((r) => r.value);
+    p.update({ ...SETTINGS, tempo: 120 });
+    expect(first.endAt).not.toHaveBeenCalled();
+    expect(second.endAt).not.toHaveBeenCalled();
+    expect(third.endAt).toHaveBeenCalled();
   });
 
   it("reports where the music is as it's heard", () => {
