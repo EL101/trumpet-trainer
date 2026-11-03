@@ -12,20 +12,28 @@ type PersistOptions<T> = {
 /**
  * State kept in localStorage under `key`, so it survives reloads. Where storage is
  * blocked or full (some private windows, disabled site data), it starts from
- * `defaultValue` and simply isn't kept.
+ * `defaultValue` and simply isn't kept. A new `key` (another user's, say) starts over
+ * from what's stored under it.
  */
 export function usePersistedState<T>(
   key: string,
   defaultValue: T,
   { session = false, accept }: PersistOptions<T> = {},
 ) {
-  const [value, setValue] = useState<T>(() => {
+  const read = () => {
     try {
       return readStored(session ? sessionStorage : localStorage, key, defaultValue, accept);
     } catch {
       return defaultValue;
     }
-  });
+  };
+  const [value, setValue] = useState<T>(read);
+  // Read again when the key changes, before the old key's value can be saved under it.
+  const [readKey, setReadKey] = useState(key);
+  if (readKey !== key) {
+    setReadKey(key);
+    setValue(read());
+  }
 
   useEffect(() => {
     try {
