@@ -15,12 +15,21 @@ export function practicePath(exerciseId: string, from: string) {
   return `${PRACTICE_PATH}/${encodeURIComponent(exerciseId)}?${query}`;
 }
 
+/** Stands in for this app's origin while a `from` is read, so the check stays pure. */
+const OWN_ORIGIN = "https://app.invalid";
+
 /**
  * The page to go back to, from a player address's `from`, if it names a page of this
  * app. Anything else (missing, another site, `//host`) goes back to DEFAULT_ORIGIN.
+ *
+ * It's read the way a browser reads a link, which drops tabs and newlines and takes `\`
+ * for `/`, so `/\n/host` (read as `//host`) is turned down too. What comes back is the
+ * path as read, so the link can't be read any other way.
  */
 export function returnPath(from: string | null) {
-  return from && /^\/(?![/\\])/.test(from) ? from : DEFAULT_ORIGIN;
+  if (!from?.startsWith("/")) return DEFAULT_ORIGIN;
+  const url = new URL(from, OWN_ORIGIN);
+  return url.origin === OWN_ORIGIN ? url.pathname + url.search + url.hash : DEFAULT_ORIGIN;
 }
 
 /** The page the player was opened from: where its back links go, and what they call it. */

@@ -39,12 +39,23 @@ describe("practicePath", () => {
 describe("returnPath", () => {
   it("keeps a page of this app", () => {
     expect(returnPath("/library")).toBe("/library");
+    expect(returnPath("/library?tab=saved#top")).toBe("/library?tab=saved#top");
   });
 
   it("goes back to Generate when it's missing or names somewhere else", () => {
     for (const from of [null, "", "library", "https://example.com", "//example.com", "/\\x"]) {
       expect(returnPath(from)).toBe("/generate");
     }
+  });
+
+  it("turns down another site hidden by a tab or newline, which browsers drop", () => {
+    for (const from of ["/\n/example.com", "/\t/example.com", "/\r\\example.com", "/\n\n//x"]) {
+      expect(returnPath(from)).toBe("/generate");
+    }
+  });
+
+  it("gives back the path as a browser reads it", () => {
+    expect(returnPath("/lib\nrary")).toBe("/library");
   });
 });
 
