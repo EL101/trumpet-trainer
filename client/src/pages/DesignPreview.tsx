@@ -1,14 +1,18 @@
 import { Box, Flex, Grid, Heading, Text } from "@chakra-ui/react";
 import { BookmarkPlus, Pause, Play, RotateCcw, SkipBack, SkipForward } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { PageHeader, Sidebar } from "@/components/layout";
+import { AppShell, FocusShell, PageHeader, Sidebar } from "@/components/layout";
 import {
   ExerciseMeta,
   IntonationLegend,
+  NoteValue,
   PitchReadout,
   PitchText,
+  PracticeButton,
   ScoreFigure,
   Staff,
+  TempoMark,
+  TunerGauge,
 } from "@/components/music";
 import {
   Bookplate,
@@ -25,12 +29,29 @@ import {
   Rule,
   SectionHeading,
   SegmentedControl,
+  Slider,
   Stat,
   Stepper,
   Tag,
+  Textarea,
 } from "@/components/primitives";
+import { MAX_TEMPO, MIN_TEMPO, pulseOf } from "@/lib/meter";
+import type { MusicInfo } from "@/schema";
 
 /** Dev-only gallery of the design-system building blocks (route: /design). */
+/** An exercise for PracticeButton to open. It rides in the router state, so it needn't be in history. */
+const PREVIEW_EXERCISE: MusicInfo = {
+  id: "design-preview",
+  exerciseId: "design-preview",
+  exerciseType: "RANDOM",
+  notes: "G4/8, A4, B4, C5, D5, C5, B4, A4, G4/q, D5, G4/h",
+  timeSig: "4/4",
+  musicKey: "G major",
+  noteRange: "MED",
+  difficulty: "LOW",
+  generationNum: 1,
+};
+
 export default function DesignPreview() {
   const [zone, setZone] = useState<"5" | "10" | "15">("5");
   const [type, setType] = useState<"long" | "scales" | "slurs" | "random">("random");
@@ -38,6 +59,7 @@ export default function DesignPreview() {
   const [time, setTime] = useState("4/4");
   const [bars, setBars] = useState(2);
   const [cursor, setCursor] = useState(3.4);
+  const [tempo, setTempo] = useState(96);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   return (
@@ -153,7 +175,7 @@ export default function DesignPreview() {
               scale={0.5}
             />
             <Card.Meta>
-              Chromatic · ♩ = 80{" "}
+              Chromatic · <TempoMark pulse={pulseOf("4/4")} bpm={80} />{" "}
               <Box as="span" ml="auto">
                 Best 85
               </Box>
@@ -215,6 +237,9 @@ export default function DesignPreview() {
               )}
             </Field>
             <Field label="Name">{(id) => <Input id={id} placeholder="Generated #43" />}</Field>
+            <Field label="Notes">
+              {(id) => <Textarea id={id} rows={3} placeholder="Keep the air steady in bar 3" />}
+            </Field>
           </Flex>
           <Flex direction="column" gap="md">
             <Field label="Counts as in tune">
@@ -232,6 +257,24 @@ export default function DesignPreview() {
             <Field label="Measures">
               <Stepper aria-label="Measures" value={bars} onChange={setBars} min={1} max={16} />
             </Field>
+            <Field
+              label={
+                <>
+                  Slider (<TempoMark pulse={pulseOf("4/4")} bpm={tempo} />)
+                </>
+              }
+            >
+              {(id) => (
+                <Slider
+                  id={id}
+                  aria-label="Tempo"
+                  value={tempo}
+                  onChange={setTempo}
+                  min={MIN_TEMPO}
+                  max={MAX_TEMPO}
+                />
+              )}
+            </Field>
           </Flex>
         </Grid>
       </Section>
@@ -247,6 +290,31 @@ export default function DesignPreview() {
           <ScoreFigure score={42} />
           <PitchReadout note="B4" cents={9} showListening />
           <PitchReadout note="F#5" cents={-22} size="sm" />
+        </Flex>
+        <Flex gap="2xl" mt="xl" wrap="wrap" align="flex-end">
+          <TunerGauge cents={9} width="220px" />
+          <TunerGauge cents={-31} width="220px" />
+          <TunerGauge cents={null} width="220px" />
+        </Flex>
+        <Flex gap="2xl" mt="xl" wrap="wrap" align="flex-end">
+          {["4/4", "2/2", "6/8", "3/8"].map((t) => {
+            const pulse = pulseOf(t);
+            return (
+              <Flex key={t} direction="column" gap="xs">
+                <Text textStyle="heading.md">
+                  <TempoMark pulse={pulse} bpm={96} />
+                </Text>
+                <Flex gap="md" textStyle="heading.sm" color="fg.muted">
+                  {pulse.subdivisions.map((s) => (
+                    <NoteValue key={s.per} symbol={s.symbol} />
+                  ))}
+                </Flex>
+                <Text textStyle="caption" color="fg.muted">
+                  {t}: TempoMark, then each NoteValue on offer
+                </Text>
+              </Flex>
+            );
+          })}
         </Flex>
         <Flex gap="2xl" mt="xl" wrap="wrap">
           <SectionHeading number={1} title="Instrument" description="Transposition and tuning" />
@@ -352,6 +420,7 @@ export default function DesignPreview() {
               measuresPerLine={2}
               cents={[4, -3, 7, 12, -6, 18, 6, -2, 9, 30, -14]}
               cursor={cursor}
+              onNoteClick={setCursor}
             />
             <IntonationLegend mt="sm" />
           </Box>
@@ -403,6 +472,19 @@ export default function DesignPreview() {
               scale={0.8}
             />
           </Box>
+          <Box>
+            <Text fontSize="12px" color="fg.muted" mb="xs">
+              PracticeButton opens the player on an exercise; its back link returns here. It waits
+              for history to number a new exercise.
+            </Text>
+            <Flex gap="sm" wrap="wrap">
+              <PracticeButton exercise={PREVIEW_EXERCISE} originLabel="Design" />
+              <PracticeButton
+                exercise={{ ...PREVIEW_EXERCISE, generationNum: 0 }}
+                originLabel="Design"
+              />
+            </Flex>
+          </Box>
         </Flex>
       </Section>
 
@@ -426,6 +508,81 @@ export default function DesignPreview() {
           />
         </Box>
       </Section>
+
+      <Section title="Page shells">
+        <Flex direction="column" gap="xl">
+          <Box>
+            <Text textStyle="caption" color="fg.muted" mb="xs">
+              AppShell: the sidebar and a scrolling page (collapsing it here collapses it app-wide)
+            </Text>
+            <ShellFrame>
+              <AppShell>
+                <PageHeader kicker="Friday, 9 October" title="Today" subtitle="Three exercises" />
+              </AppShell>
+            </ShellFrame>
+          </Box>
+          <Box>
+            <Text textStyle="caption" color="fg.muted" mb="xs">
+              FocusShell: the player's frame, with a back link, title, actions and a drawer
+            </Text>
+            <ShellFrame>
+              <FocusShell
+                back={{ to: "/design", label: "Back to Design" }}
+                title={<Text textStyle="heading.md">Random</Text>}
+                actions={<Tag variant="neutral">3 of 6</Tag>}
+                aside={
+                  <Flex
+                    direction="column"
+                    gap="md"
+                    flex="none"
+                    width={{ lg: "300px" }}
+                    p="lg"
+                    bg="bg.subtle"
+                    borderColor="border"
+                    borderTopWidth={{ base: "1px", lg: 0 }}
+                    borderLeftWidth={{ lg: "1px" }}
+                  >
+                    <Kicker tone="muted">Tools</Kicker>
+                    <TunerGauge cents={4} alignSelf="center" width="220px" />
+                  </Flex>
+                }
+                display="flex"
+                flexDirection="column"
+                gap="lg"
+              >
+                <ExerciseMeta
+                  keyLabel="G major"
+                  extra={[<TempoMark key="tempo" pulse={pulseOf("4/4")} bpm={96} />, "Bar 1 of 2"]}
+                />
+                <Staff
+                  notes="G4/8, A4, B4, C5, D5, C5, B4, A4, G4/q, D5, G4/h"
+                  timeSig="4/4"
+                  musicKey="G major"
+                  cursor={0}
+                />
+              </FocusShell>
+            </ShellFrame>
+          </Box>
+        </Flex>
+      </Section>
+    </Box>
+  );
+}
+
+/**
+ * A window onto a page shell. The shells fill the viewport, so here they fill the frame
+ * instead (`& > div` outranks the shell's own height class).
+ */
+function ShellFrame({ children }: { children: ReactNode }) {
+  return (
+    <Box
+      height="480px"
+      overflow="hidden"
+      borderWidth="1px"
+      borderColor="border"
+      css={{ "& > div": { height: "100%" } }}
+    >
+      {children}
     </Box>
   );
 }

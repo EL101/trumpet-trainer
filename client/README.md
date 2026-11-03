@@ -6,8 +6,8 @@ brass accent, hairline borders, and outlined buttons (never filled).
 
 > The frontend is mid-rehaul. The new design system, shared components and app shell
 > (sidebar) are in place; page content is being rebuilt on top of them one screen at a
-> time (done so far: the landing page and Generate). See [Old vs new](#old-vs-new) for
-> what to use and what to avoid.
+> time (done so far: the landing page, Generate and the practice player). See
+> [Old vs new](#old-vs-new) for what to use and what to avoid.
 
 ## Running it
 
@@ -65,31 +65,42 @@ src/
 ├── components/
 │   ├── primitives/        Generic building blocks. Import from "@/components/primitives".
 │   │                      Button, IconButton, Card, Tag, Input, NativeSelect, Field,
-│   │                      SegmentedControl, RadioGroup, ChoiceGrid, Stepper, Rule,
-│   │                      Kicker, Stat, SectionHeading, Bookplate, Toaster (mounted once
-│   │                      in App.tsx; show a corner notice with notify())
+│   │                      SegmentedControl, RadioGroup, ChoiceGrid, Stepper, Slider,
+│   │                      Rule, Kicker, Stat, SectionHeading, Bookplate, Toaster (mounted
+│   │                      once in App.tsx; show a corner notice with notify())
 │   ├── music/             Trumpet-specific UI. Import from "@/components/music".
-│   │                      Staff (VexFlow notation with per-note intonation colour and a
-│   │                      playback cursor), PitchReadout, ScoreFigure,
-│   │                      IntonationLegend, ExerciseMeta, PitchText (key and note
-│   │                      names with ♭ and ♯)
+│   │                      Staff (VexFlow notation with per-note intonation colour, a
+│   │                      playback cursor and clickable notes), PitchReadout, TunerGauge,
+│   │                      ScoreFigure, IntonationLegend, ExerciseMeta, PitchText (key
+│   │                      and note names with ♭ and ♯), TempoMark and NoteValue
+│   │                      ("♩ = 96"; drawn, as the fonts have no music characters),
+│   │                      PracticeButton (opens the player; see below)
 │   ├── layout/            Page frames. Import from "@/components/layout".
-│   │                      AppShell (sidebar + content), FocusShell (no sidebar, for the
-│   │                      player), Sidebar, PageHeader. The sidebar collapses to a
-│   │                      book spine; useSidebar.ts holds its state (remembered on
-│   │                      desktop, collapsed by default on phones, where opening it
-│   │                      dims the page)
+│   │                      AppShell (sidebar + content), FocusShell (the player's frame:
+│   │                      a top bar with a back link, and a drawer beside the music),
+│   │                      Sidebar, PageHeader. The sidebar collapses to a book spine;
+│   │                      useSidebar.ts holds its state (remembered on desktop,
+│   │                      collapsed by default on phones, where opening it dims the page)
 │   ├── ui/                Chakra's generated setup (provider, tooltip). Rarely touched.
 │   └── *.tsx              OLD components. See "Old vs new" below.
 │
 ├── pages/                 One file per route; routes are declared in App.tsx.
-├── lib/                   Pure helpers for the new UI (intonation colours, formatting,
-│                          the generator's keys, time signatures and labels).
+├── lib/                   Pure helpers for the new UI: intonation colours, formatting,
+│                          the generator's keys, time signatures and labels, notation (the
+│                          note parser Staff draws from), timeline (when each note sounds
+│                          and where the cursor is), meter (the beat each time signature
+│                          is counted in), noteValue (how NoteValue lays out ♩, ♪♪, ♬),
+│                          transport (the player's play/pause/seek states), tuning,
+│                          practice (the player's address and route state), storage and
+│                          motion (prefersReducedMotion, for animation outside CSS).
 ├── utils/                 App logic: music generation (generateMusic, lipSlurs, built on
 │                          rhythm, melody and notate), etudes (written by Claude on the
-│                          server, fetched by etudes.ts), API calls, history, library,
-│                          profile, image handling.
-├── hooks/                 usePitch (microphone), useMetronome, usePersistedState
+│                          server, fetched by etudes.ts), playback (the player's audio
+│                          scheduler) and trumpet (its samples), API calls, history,
+│                          library, profile, image handling.
+├── hooks/                 usePitch (microphone), useMetronome, usePlayback (the player's
+│                          transport), usePersistedState (localStorage, or per tab
+│                          with `session`)
 ├── auth/                  Firebase sign-in: useAuth() for state; auth.ts signs in, links
 │                          a guest to Google, and signs out
 ├── profile/               The signed-in user's profile: useProfile()
@@ -148,6 +159,36 @@ A component built for a single page can live inside that page file. Move it into
 The signed-out landing page (`pages/LandingPage.tsx`) is the one screen without a
 shell: it has no sidebar and nothing to go back to.
 
+## The practice player
+
+`pages/Practice.tsx` (route `/practice/<exerciseId>`, mockup 1e) plays one exercise: a
+bar of count-in (which can be turned off), then the notes on a trumpet with a moving
+cursor, a metronome and a tuner in a collapsible drawer. Clicking a note, or the
+previous and next bar buttons beside Play, moves the cursor. Open it with
+`<PracticeButton exercise={…} originLabel="Generate" />` from any page; the label is
+what the player's back links call that page. The button stays disabled until history
+has numbered the exercise, because the player loads exercises from history:
+
+- **Opened from the button,** the exercise travels in the router state too, so the
+  player shows it without a request.
+- **In a new tab, after a reload or from a bookmark,** it loads the exercise with
+  `GET /api/history/:exerciseId`, then `GET /api/library/:exerciseId` if history has
+  let it go (pruned past the newest 100, or cleared). An id neither has goes to
+  Generate with an "Exercise not found" notice. Deleted history leaves no trace, so
+  the notice can't tell a cleared exercise from a wrong link, and says it could be
+  either. A load that fails (offline, a server error) stays on the player with a Try
+  again button.
+- **The back links** are plain links to the page that opened the player. The address
+  names that page (`?from=/generate`), so they work in a new tab too. They hand the
+  exercise back as `practiced` in the router state; read it with `readPracticed()` from
+  `@/lib/practice` to put it back where it was. Generate doesn't need to: it keeps the
+  exercise on its plate in session storage (per tab and per player), so the plate is
+  still there after the player, a refresh or the browser's Back button.
+
+The staff is written for B♭ trumpet, so the player sounds every note a whole tone
+lower (`CONCERT_OFFSET` in `lib/tuning.ts`). The trumpet samples are in
+`public/samples/trumpet/` (FluidR3 GM, MIT; the notice is in that folder).
+
 ## Writing styles
 
 - **Use text styles, not ad-hoc font sizes:**
@@ -167,8 +208,9 @@ shell: it has no sidebar and nothing to go back to.
   exit, `sink-out`, takes `forwards` so the element stays hidden until it's removed), and
   put the animation under `_motionSafe` so it's skipped for viewers who prefer reduced
   motion: `_motionSafe={{ animation: "appear 400ms ease-out 200ms backwards" }}`. Code
-  that draws its own SVG can't use `_motionSafe`; check `prefers-reduced-motion` itself,
-  as `Staff` does for its labels.
+  that animates outside CSS (its own SVG, `scrollIntoView`, `element.animate()`, a
+  timer) can't use `_motionSafe`; check `prefersReducedMotion()` from `@/lib/motion`
+  instead, as `Staff` does for its labels.
 
 ## Old vs new
 
@@ -180,6 +222,7 @@ using the old ones, and both kinds live side by side.
 | `SheetMusic`                                 | `music/Staff`                 |
 | `SegmentInput`                               | `primitives/SegmentedControl` |
 | `StepperInput`                               | `primitives/Stepper`          |
+| `TunerPendulum`                              | `music/TunerGauge`            |
 | Chakra `Button` / `Card` with stock variants | `primitives/Button` / `Card`  |
 
 Once a page no longer uses an old component and nothing else imports it, delete it.

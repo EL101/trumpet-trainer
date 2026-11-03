@@ -11,19 +11,20 @@ import {
   VisuallyHidden,
   type FlexProps,
 } from "@chakra-ui/react";
-import { Bookmark, BookmarkCheck, ChevronDown, ChevronUp, Eye, EyeOff, Play } from "lucide-react";
+import { Bookmark, BookmarkCheck, ChevronDown, ChevronUp, Eye, EyeOff } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import { AuthUserContext } from "@/auth/AuthUserContext";
 import { useEtudes } from "@/etudes/useEtudes";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { AppShell, PageHeader } from "@/components/layout";
-import { ExerciseMeta, PitchText, Staff } from "@/components/music";
+import { ExerciseMeta, PitchText, PracticeButton, Staff } from "@/components/music";
 import {
   Button,
   ChoiceGrid,
   Field,
   Kicker,
+  notify,
   RadioGroup,
   SegmentedControl,
   Stepper,
@@ -34,6 +35,7 @@ import {
   difficultyFor,
   EXERCISE_TYPE_LABELS,
   isCommonKey,
+  KEYLESS,
   keyChoices,
   measureLimitsFor,
   measuresFor,
@@ -42,6 +44,7 @@ import {
   TYPE_DIFFICULTIES,
   type TimeSignature,
 } from "@/lib/generatorOptions";
+import { prefersReducedMotion } from "@/lib/motion";
 import {
   generateLongTones,
   generateMusic,
@@ -56,6 +59,7 @@ import { splitNotes } from "@/utils/splitNotes";
 import {
   EXERCISE_TYPES,
   HISTORY_LIMIT,
+  isMusicInfo,
   RANGES,
   type Difficulty,
   type ExerciseType,
@@ -88,12 +92,6 @@ const GENERATORS: Partial<Record<ExerciseType, (settings: Settings) => string>> 
 
 /** Types whose length comes from the music itself, so the Measures setting is ignored. */
 const SETS_OWN_LENGTH: ReadonlySet<ExerciseType> = new Set(["SCALES"]);
-
-/**
- * Types written without a key, so the Key setting is ignored. Lip slurs follow each
- * valve combination's own notes. They're stored as C major, which has no signature.
- */
-const KEYLESS: ReadonlySet<ExerciseType> = new Set(["LIP_SLURS"]);
 
 /**
  * Types that can be picked: those made here, and etudes, which Claude writes on the
@@ -152,13 +150,50 @@ const ENTRY_COLUMNS = { base: "minmax(0, 1fr)", sm: "40px minmax(0, 1fr)" };
 export function Generate() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [history, setHistory] = useState<Record<number, MusicInfo>>({});
-  const [generated, setGenerated] = useState<MusicInfo | null>(null);
+  const { user } = useContext(AuthUserContext);
+  // The exercise on the plate stays there through a reload, or a trip to the player and
+  // back. It's kept per tab, so two tabs keep their own, and per player.
+  const [generated, setGenerated] = usePersistedState<MusicInfo | null>(
+    `generatePlate:${user?.uid}`,
+    null,
+    { session: true, accept: (value) => value === null || isMusicInfo(value) },
+  );
   const plateRef = useRef<HTMLDivElement>(null);
   // As many bars to a line as the page gives room for: one on a phone, four once wide.
   const perLine = useBreakpointValue({ base: 1, sm: 2, xl: 4 }, { ssr: false });
 
-  const { user } = useContext(AuthUserContext);
-  useEffect(() => getInitialHistory(user, setHistory), [user]);
+  // The exercise on the plate now, for queued work that runs after later renders.
+  const plateNow = useRef<MusicInfo | null>(null);
+  useEffect(() => {
+    plateNow.current = generated;
+  }, [generated]);
+
+  // The plate as storage gave it back, until the first history load has had a look at it.
+  const restored = useRef(generated);
+  useEffect(
+    () =>
+      getInitialHistory(user, setHistory, (entries) => {
+        const plate = restored.current;
+        restored.current = null;
+        // Still unnumbered and not in history: its save failed (or a reload cut it off)
+        // before the page was left. Say so again, unless a new exercise has replaced it.
+        if (
+          plate &&
+          !plate.generationNum &&
+          plateNow.current?.id === plate.id &&
+          !entries.some((e) => e.exerciseId === plate.exerciseId)
+        ) {
+          notifyUnsaved();
+        }
+      }),
+    [user],
+  );
+  // An exercise that left the page (to the player, or in a reload) before history
+  // numbered it was numbered while it was away; take the number from history.
+  if (generated && !generated.generationNum) {
+    const numbered = Object.values(history).find((e) => e.exerciseId === generated.exerciseId);
+    if (numbered) setGenerated(numbered);
+  }
   // Until the first generate, open or clear, entries that appear are the loaded
   // history, so they rise in one after another. After that they arrive alone.
   const [intro, setIntro] = useState(true);
@@ -178,16 +213,14 @@ export function Generate() {
     historyQueue.current = historyQueue.current.then(task);
   };
 
-  // The exercise on the plate now, for queued work that runs after later renders.
-  const plateNow = useRef<MusicInfo | null>(null);
-  useEffect(() => {
-    plateNow.current = generated;
-  }, [generated]);
-
   /** Save the exercise, then number it on the plate once the server has. */
   const save = async (exercise: MusicInfo) => {
     const saved = await insertToHistory(exercise, user, setHistory);
-    if (!saved) return;
+    if (!saved) {
+      // An exercise already replaced on the plate isn't worth a notice.
+      if (plateNow.current?.id === exercise.id) notifyUnsaved();
+      return;
+    }
     // Only if it's still on the plate: a newer exercise may have replaced it.
     setGenerated((current) => (current?.id === exercise.id ? saved : current));
   };
@@ -231,7 +264,7 @@ export function Generate() {
         setHistory((prev) => ({ ...prev, [exercise.generationNum]: exercise }));
         setGenerated((current) => current ?? exercise);
       }),
-    [onFinished],
+    [onFinished, setGenerated],
   );
 
   /** Take the exercise off the plate; it stays in the list below once it's numbered. */
@@ -407,8 +440,13 @@ export function Generate() {
   );
 }
 
-function prefersReducedMotion() {
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+/** Unnumbered, the plate's exercise can't be practised or saved to the library: say why. */
+function notifyUnsaved() {
+  notify({
+    tone: "error",
+    title: "Couldn't save this exercise to history",
+    description: "Practice and Save to library need it saved. Generate again to retry.",
+  });
 }
 
 /**
@@ -519,11 +557,7 @@ function CurrentExercise({
         )}
 
         <Flex gap="sm" wrap="wrap">
-          {/* The practice view isn't built yet. */}
-          <Button variant="primary" disabled={!exercise}>
-            <Play />
-            Practice with feedback
-          </Button>
+          <PracticeButton exercise={exercise} originLabel="Generate" />
           <SaveToLibraryButton exercise={exercise} saved={saved} onSaved={onSaved} />
           {exercise?.exerciseType === "LIP_SLURS" && (
             <Button variant="ghost" onClick={onToggleFingerings}>

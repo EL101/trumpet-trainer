@@ -76,6 +76,55 @@ describe("GET /api/history", () => {
   });
 });
 
+describe.each(["history", "library"] as const)("GET /api/%s/:exerciseId", (table) => {
+  const get = (uid: string, exerciseId: string) =>
+    request(app).get(`/api/${table}/${exerciseId}`).set(bearer(uid));
+  const save = (uid: string, body: object) =>
+    request(app).post(`/api/${table}`).set(bearer(uid)).send(body);
+
+  it("returns the caller's entry for that exercise", async () => {
+    const uid = newUid();
+    const exerciseId = randomUUID();
+    const saved = await save(uid, { ...exerciseBody(), exerciseId });
+
+    const res = await get(uid, exerciseId);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(saved.body);
+  });
+
+  it("is not found for an unknown id, another user's entry, or an id that isn't a UUID", async () => {
+    const owner = newUid();
+    const exerciseId = randomUUID();
+    await save(owner, { ...exerciseBody(), exerciseId });
+
+    expect((await get(newUid(), exerciseId)).status).toBe(404);
+    expect((await get(owner, randomUUID())).status).toBe(404);
+    expect((await get(owner, "not-a-uuid")).status).toBe(404);
+  });
+
+  it("needs a signed-in user", async () => {
+    expect((await request(app).get(`/api/${table}/${randomUUID()}`)).status).toBe(401);
+  });
+});
+
+describe("GET /api/history/:exerciseId", () => {
+  it("returns the newest when the exercise was saved again after a clear", async () => {
+    const uid = newUid();
+    const exerciseId = randomUUID();
+    await createUser(uid);
+    await prisma.history.createMany({
+      data: [1, 2].map((generationNum) => ({
+        userId: uid,
+        exerciseId,
+        ...exerciseBody(generationNum),
+      })),
+    });
+
+    const res = await request(app).get(`/api/history/${exerciseId}`).set(bearer(uid));
+    expect(res.body.generationNum).toBe(2);
+  });
+});
+
 describe("POST /api/history numbering", () => {
   // What current clients send: everything but the number.
   const unnumbered = (notes = "C4/w") => {

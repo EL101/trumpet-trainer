@@ -4,6 +4,7 @@ import { useId, useLayoutEffect, useRef } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { IconButton, Rule, Stat } from "@/components/primitives";
 import UserAvatar from "@/components/UserAvatar";
+import { prefersReducedMotion } from "@/lib/motion";
 import { useProfile } from "@/profile/useProfile";
 import { NAV_ITEMS, type NavItem } from "./navItems";
 import { SIDEBAR_SLIDE } from "./useSidebar";
@@ -287,7 +288,7 @@ function useSidebarMotion() {
     const to = outline?.parentElement?.offsetTop ?? null;
     lastOutlineTop = to;
 
-    if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (!prefersReducedMotion()) {
       if (arriving) {
         asideRef.current?.animate(
           [{ transform: "translateX(-100%)" }, { transform: "none" }],

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseMeasures, parseNote, resolveMeasuresPerLine } from "./staffNotation";
+import { parseMeasures, parseNote, resolveMeasuresPerLine } from "./notation";
 
 describe("parseNote", () => {
   it("parses pitch, duration, dots and rests", () => {

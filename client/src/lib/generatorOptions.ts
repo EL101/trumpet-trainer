@@ -51,6 +51,12 @@ export function measuresFor(type: ExerciseType, measures: number): number {
   return Math.min(max, Math.max(min, measures));
 }
 
+/**
+ * Types written without a key, so the Key setting is ignored. Lip slurs follow each
+ * valve combination's own notes. They're stored as C major, which has no signature.
+ */
+export const KEYLESS: ReadonlySet<ExerciseType> = new Set(["LIP_SLURS"]);
+
 export const EXERCISE_TYPE_LABELS: Record<ExerciseType, string> = {
   LONG_TONES: "Long tones",
   SCALES: "Scales",

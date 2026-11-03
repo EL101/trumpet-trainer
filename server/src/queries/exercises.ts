@@ -18,6 +18,20 @@ export function listExercises(table: ExerciseTable, userId: string) {
 }
 
 /**
+ * One of the user's rows, by the exercise's id. In `history` a clear and a save of
+ * the same exercise (the plate kept through a clear) can leave it under two numbers;
+ * the newest wins. `library` holds each exercise once.
+ */
+export function findExercise(table: ExerciseTable, userId: string, exerciseId: string) {
+  return table === "history"
+    ? prisma.history.findFirst({
+        where: { userId, exerciseId },
+        orderBy: { generationNum: "desc" },
+      })
+    : prisma.library.findUnique({ where: { userId_exerciseId: { userId, exerciseId } } });
+}
+
+/**
  * Save a history row, numbered by the server: one past the user's highest
  * generation, so the first save after a clear is No. 1. Two saves that pick the
  * same number collide on the unique index, and the loser picks again.

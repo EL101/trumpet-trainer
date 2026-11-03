@@ -28,23 +28,23 @@ export type ExerciseMetaParts = {
   keyLabel?: string;
   /** "4/4". */
   timeSig?: string;
-  tempo?: number;
   bars?: number;
   minutes?: number;
 };
 
-/** Exercise details as the mockups write them: ["G major", "♩ = 96", "8 bars", "6 min"]. */
+/**
+ * Exercise details as the mockups write them: ["G major", "4/4", "8 bars", "6 min"]. The
+ * tempo ("♩ = 96") is drawn, so ExerciseMeta puts it in after the time signature.
+ */
 export function formatExerciseMeta({
   keyLabel,
   timeSig,
-  tempo,
   bars,
   minutes,
 }: ExerciseMetaParts): string[] {
   return [
     keyLabel,
     timeSig,
-    tempo != null ? `♩ = ${tempo}` : undefined,
     bars != null ? `${bars} ${bars === 1 ? "bar" : "bars"}` : undefined,
     minutes != null ? `${minutes} min` : undefined,
   ].filter((s): s is string => !!s);
