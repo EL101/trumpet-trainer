@@ -29,7 +29,7 @@ export function TunerGauge({ cents, inTune = 5, ...rest }: TunerGaugeProps) {
       maxWidth="100%"
       display="block"
       role="img"
-      aria-label={describe(cents)}
+      aria-label={describe(cents, inTune)}
       {...rest}
     >
       <path
@@ -103,8 +103,10 @@ function tick(cents: number, length: number) {
   return { x1: inner.x, y1: inner.y, x2: outer.x, y2: outer.y };
 }
 
-function describe(cents: number | null) {
+/** What the dial shows, for screen readers: "in tune" wherever the needle is in the green. */
+function describe(cents: number | null, inTune: number) {
   if (cents == null) return "Tuner: nothing heard";
   if (cents === 0) return "Tuner: in tune";
-  return `Tuner: ${Math.abs(cents)} cents ${cents > 0 ? "sharp" : "flat"}`;
+  const off = `${Math.abs(cents)} cents ${cents > 0 ? "sharp" : "flat"}`;
+  return Math.abs(cents) <= inTune ? `Tuner: in tune, ${off}` : `Tuner: ${off}`;
 }
