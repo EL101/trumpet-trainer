@@ -1,4 +1,5 @@
 import { Play } from "lucide-react";
+import type { ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button, type ButtonProps } from "@/components/primitives";
 import { practicePath, type PracticeState } from "@/lib/practice";
@@ -12,6 +13,8 @@ type PracticeButtonProps = Omit<ButtonProps, "asChild" | "children"> & {
   exercise: MusicInfo | null;
   /** What the player's back links call this page ("Back to Generate"). */
   originLabel: string;
+  /** The button's text, after its Play icon. */
+  label?: ReactNode;
 };
 
 /**
@@ -20,13 +23,18 @@ type PracticeButtonProps = Omit<ButtonProps, "asChild" | "children"> & {
  * hand the exercise back as `practiced` in the router state (read it with
  * `readPracticed`).
  */
-export function PracticeButton({ exercise, originLabel, ...rest }: PracticeButtonProps) {
+export function PracticeButton({
+  exercise,
+  originLabel,
+  label: text = "Practice with feedback",
+  ...rest
+}: PracticeButtonProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const label = (
     <>
       <Play />
-      Practice with feedback
+      {text}
     </>
   );
 

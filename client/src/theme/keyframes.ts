@@ -20,6 +20,14 @@ export const keyframes = defineKeyframes({
   "pop-in": { from: { opacity: 0, transform: "scale(0.85)", visibility: "hidden" } },
   /** Slide in along x from `--slide-from` (e.g. `-450px`). */
   "slide-in": { from: { transform: "translateX(var(--slide-from))" } },
+  /**
+   * Open downwards from nothing, pushing what's below it down. Put it on a grid wrapping
+   * one child that has `minHeight: 0` and `overflow: hidden`. Its margins open from
+   * nothing too, so space it from its neighbours with margins: a gap would appear at once.
+   */
+  unfold: { from: { gridTemplateRows: "0fr", marginBlock: 0, opacity: 0 } },
+  /** Close upwards to nothing: `unfold` in reverse. Run with fill-mode `forwards`. */
+  fold: { to: { gridTemplateRows: "0fr", marginBlock: 0, opacity: 0 } },
   /** Draw a stroke from its start. Give the path `pathLength={1}` and `strokeDasharray: 1`. */
   "draw-on": { from: { strokeDashoffset: 1 } },
   /** Reveal left to right, leaving room above and below for content that overflows. */

@@ -2,7 +2,12 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { ExerciseInputSchema } from "../schema/index.js";
-import { findExercise, insertLibrary, listExercises } from "../queries/exercises.js";
+import {
+  deleteLibraryEntry,
+  findExercise,
+  insertLibrary,
+  listExercises,
+} from "../queries/exercises.js";
 
 const router = Router();
 
@@ -46,6 +51,23 @@ router.post("/", requireAuth, async (req: Request, res: Response) => {
   } catch (err) {
     console.error("Failed to insert library row:", err);
     res.status(500).json({ error: "Failed to save library entry" });
+  }
+});
+
+router.delete("/:exerciseId", requireAuth, async (req: Request, res: Response) => {
+  // As for GET: an id that isn't a uuid can't be one of the user's.
+  const exerciseId = z.uuid().safeParse(req.params.exerciseId);
+  if (!exerciseId.success) {
+    return res.status(404).json({ error: "Library entry not found" });
+  }
+
+  try {
+    const deleted = await deleteLibraryEntry(req.user!.uid, exerciseId.data);
+    if (!deleted) return res.status(404).json({ error: "Library entry not found" });
+    res.status(204).end();
+  } catch (err) {
+    console.error("Failed to delete library entry:", err);
+    res.status(500).json({ error: "Failed to delete library entry" });
   }
 });
 

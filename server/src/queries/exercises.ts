@@ -88,6 +88,15 @@ export async function insertLibrary(userId: string, input: ExerciseInput) {
   return { row: existing, created: false };
 }
 
+/**
+ * Remove one exercise from the user's library. Its history row, if history still has
+ * it, stays. Returns whether there was one to remove.
+ */
+export async function deleteLibraryEntry(userId: string, exerciseId: string) {
+  const { count } = await prisma.library.deleteMany({ where: { userId, exerciseId } });
+  return count > 0;
+}
+
 export async function deleteExercises(table: ExerciseTable, userId: string) {
   const { count } =
     table === "history"
