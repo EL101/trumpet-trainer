@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/requireAuth.js";
+import { ExerciseType } from "../generated/prisma/enums.js";
 import { ExerciseInputSchema } from "../schema/index.js";
 import {
   deleteLibraryEntry,
@@ -8,6 +9,7 @@ import {
   insertLibrary,
   listExercises,
 } from "../queries/exercises.js";
+import { listLibraryPage } from "../queries/library.js";
 
 const router = Router();
 
@@ -16,6 +18,34 @@ router.get("/", requireAuth, async (req: Request, res: Response) => {
     res.json(await listExercises("library", req.user!.uid));
   } catch (err) {
     console.error("Failed to load library:", err);
+    res.status(500).json({ error: "Failed to load library" });
+  }
+});
+
+/** GET /api/library/page: which entries to send. */
+const PageQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(24),
+  after: z.uuid().optional(),
+  type: z.enum(ExerciseType).optional(),
+  q: z.string().max(200).default(""),
+});
+
+// The library a page at a time, filtered by type and searched, for browsing it. GET /
+// still sends every entry, for callers that need them all at once.
+router.get("/page", requireAuth, async (req: Request, res: Response) => {
+  const parsed = PageQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error });
+  }
+
+  const { limit, after, type, q } = parsed.data;
+  try {
+    const page = await listLibraryPage(req.user!.uid, { limit, after, type, query: q });
+    // The entry to follow on from has gone, so the caller has to say where it is now.
+    if (!page) return res.status(404).json({ error: "Library entry not found" });
+    res.json(page);
+  } catch (err) {
+    console.error("Failed to load library page:", err);
     res.status(500).json({ error: "Failed to load library" });
   }
 });

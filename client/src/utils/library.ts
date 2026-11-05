@@ -1,6 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { User } from "firebase/auth";
-import { toExerciseInput, type LibraryEntry, type MusicInfo } from "@/schema";
+import { toExerciseInput, type ExerciseType, type LibraryEntry, type MusicInfo } from "@/schema";
 import { ApiError, authedFetch } from "./api";
 
 /**
@@ -13,6 +13,37 @@ export async function listLibrary(
 ): Promise<LibraryEntry[]> {
   const res = await authedFetch("/api/library", user, { signal });
   return res ? await res.json() : [];
+}
+
+/** One page of the library, and how many entries match in all. */
+export type LibraryPage = { entries: LibraryEntry[]; total: number; hasMore: boolean };
+
+/**
+ * A page of the user's library, newest saved first: entries of `type` (every type if
+ * absent) matching every word of `query`, following on from the entry `after`. Resolves
+ * to null if `after` is no longer in the library; throws if it couldn't be asked.
+ */
+export async function listLibraryPage(
+  user: User | undefined | null,
+  {
+    type,
+    query,
+    after,
+    limit,
+  }: { type?: ExerciseType; query?: string; after?: string; limit: number },
+  signal?: AbortSignal,
+): Promise<LibraryPage | null> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (type) params.set("type", type);
+  if (query) params.set("q", query);
+  if (after) params.set("after", after);
+  try {
+    const res = await authedFetch(`/api/library/page?${params}`, user, { signal });
+    return res ? await res.json() : { entries: [], total: 0, hasMore: false };
+  } catch (error) {
+    if (after && error instanceof ApiError && error.status === 404) return null;
+    throw error;
+  }
 }
 
 /** Loads the library into `setSaved`, logging a failure. Returns a cleanup that cancels it. */

@@ -58,8 +58,8 @@ src/
 │   ├── textStyles.ts      Type scale: display.*, heading.*, kicker, meta, figure.*
 │   ├── globalCss.ts       Page background, heading font, focus ring, text selection.
 │   ├── keyframes.ts       Entrance animations (rise-in, pop-in, wipe-in, draw-on, …), their
-│   │                      exits (sink-out; fold, which closes what unfold opened) and one
-│   │                      loop for waiting (write-note).
+│   │                      exits (sink-out; fold, which closes what unfold opened) and
+│   │                      loops for waiting (write-note; pulse, for placeholders).
 │   ├── recipes/           Variant definitions per component (button primary/secondary/…)
 │   └── index.ts           Builds the Chakra `system` and re-exports everything.
 │
@@ -93,7 +93,7 @@ src/
 │                          is counted in), noteValue (how NoteValue lays out ♩, ♪♪, ♬),
 │                          transport (the player's play/pause/seek states), tuning,
 │                          practice (the player's address and route state), library (the
-│                          library's filter and search, and where a card's panel goes),
+│                          library's filter, its chunks, and where a card's panel goes),
 │                          storage and motion (prefersReducedMotion, for animation
 │                          outside CSS).
 ├── utils/                 App logic: music generation (generateMusic, lipSlurs, built on
@@ -176,11 +176,11 @@ has numbered the exercise, because the player loads exercises from history:
   player shows it without a request.
 - **In a new tab, after a reload or from a bookmark,** it loads the exercise with
   `GET /api/history/:exerciseId`, then `GET /api/library/:exerciseId` if history has
-  let it go (pruned past the newest 100, or cleared). An id neither has goes to
-  Generate with an "Exercise not found" notice. Deleted history leaves no trace, so
-  the notice can't tell a cleared exercise from a wrong link, and says it could be
-  either. A load that fails (offline, a server error) stays on the player with a Try
-  again button.
+  let it go (pruned past the newest 100, or cleared). An id neither has goes back to
+  the page that opened the player (Generate if the address doesn't name one) with an
+  "Exercise not found" notice. Deleted history leaves no trace, so the notice can't
+  tell a cleared exercise from a wrong link, and says it could be either. A load that
+  fails (offline, a server error) stays on the player with a Try again button.
 - **The back links** are plain links to the page that opened the player. The address
   names that page (`?from=/generate`), so they work in a new tab too. They hand the
   exercise back as `practiced` in the router state; read it with `readPracticed()` from
@@ -194,16 +194,27 @@ panel says just "Practice").
 ## The library
 
 `pages/Library.tsx` (route `/library`, mockups 1i and 6a) shows every saved exercise as
-a card with its opening bar, filtered by type and searchable. Clicking a card unfolds a
+a card with its opening bar, filtered by type and searchable. It loads
+`LIBRARY_PAGE_SIZE` (24) at a time from `GET /api/library/page`, which does the
+filtering and search on the server, so a big library neither downloads nor draws every
+score at once. Placeholder cards stand where the next chunk goes, and it loads as they
+come within half a screen of view; its cards then come in one after another. Pages
+follow on from the last entry loaded rather than an offset, so removing cards doesn't
+make the next chunk skip any. (`GET /api/library` still sends the whole library, for
+Generate's saved marks.) Clicking a card unfolds a
 panel across the grid under that card's row, with the whole exercise, its details and
 Practice. The grid is `auto-fill`, so the page reads the number of columns back from the
 browser to know where a row ends (`rowEnd()` in `lib/library.ts`). Its rows are spaced
 with margins rather than a row gap, so the gap under a panel opens with it. The player's
 back links (and the browser's Back button) return with the practised exercise's panel
-open again. The filter and search are kept per tab. Exercises get into the library
+open again, loading chunks until it's among them. The filter and search are kept per tab. Exercises get into the library
 from Generate's "Save to library". The panel's "Remove from library" asks first, and
-looks the exercise up in history to say whether it can be saved again from Generate or
-is gone for good.
+looks for the exercise in the history Generate lists (`listHistory()`, its newest 100)
+to say whether it can be saved again from there. Anywhere else, including a row past
+the newest 100 that the hourly prune hasn't deleted yet, or a lookup that failed, it
+says it **can't** be. Choosing a card moves focus to its panel's heading, and each card's
+`aria-label` (`cardLabel()`) gives its key, length and date, so two cards with the same
+number can be told apart.
 
 The staff is written for B♭ trumpet, so the player sounds every note a whole tone
 lower (`CONCERT_OFFSET` in `lib/tuning.ts`). The trumpet samples are in

@@ -1,39 +1,16 @@
 import { describe, expect, it } from "vitest";
-import type { MusicInfo } from "@/schema";
+import type { LibraryEntry } from "@/schema";
 import {
+  appendUnique,
+  cardLabel,
+  chunkDelay,
   countLabel,
-  filterLibrary,
   formatSavedDate,
   incipit,
   isLibraryFilter,
+  placeholderCount,
   rowEnd,
 } from "./library";
-
-function exercise(overrides: Partial<MusicInfo>): MusicInfo {
-  return {
-    id: "a",
-    exerciseId: "a",
-    exerciseType: "SCALES",
-    notes: "C4/q, D4, E4, F4",
-    timeSig: "4/4",
-    musicKey: "C major",
-    noteRange: "MED",
-    difficulty: "LOW",
-    generationNum: 1,
-    ...overrides,
-  };
-}
-
-const bbMinorScale = exercise({ id: "1", musicKey: "Bb minor", generationNum: 42 });
-const gLongTones = exercise({
-  id: "2",
-  exerciseType: "LONG_TONES",
-  musicKey: "G major",
-  timeSig: "3/4",
-  generationNum: 7,
-});
-const lipSlurs = exercise({ id: "3", exerciseType: "LIP_SLURS", generationNum: 12 });
-const all = [bbMinorScale, gLongTones, lipSlurs];
 
 describe("isLibraryFilter", () => {
   it("accepts All and every exercise type", () => {
@@ -46,35 +23,41 @@ describe("isLibraryFilter", () => {
   });
 });
 
-describe("filterLibrary", () => {
-  it("keeps everything for All with no search", () => {
-    expect(filterLibrary(all, "ALL", "")).toEqual(all);
-    expect(filterLibrary(all, "ALL", "   ")).toEqual(all);
+describe("appendUnique", () => {
+  const a = { exerciseId: "a" };
+  const b = { exerciseId: "b" };
+  const c = { exerciseId: "c" };
+
+  it("adds the next chunk after what's there", () => {
+    expect(appendUnique([a], [b, c])).toEqual([a, b, c]);
   });
 
-  it("keeps only the chosen type", () => {
-    expect(filterLibrary(all, "LONG_TONES", "")).toEqual([gLongTones]);
-    expect(filterLibrary(all, "ETUDES", "")).toEqual([]);
+  it("leaves out entries already there", () => {
+    expect(appendUnique([a, b], [b, c])).toEqual([a, b, c]);
+  });
+});
+
+describe("placeholderCount", () => {
+  it("holds the rest of the library, up to a page", () => {
+    expect(placeholderCount(24, 30)).toBe(6);
+    expect(placeholderCount(24, 300)).toBe(24);
   });
 
-  it("finds a key written with ASCII or music accidentals, in any word order", () => {
-    expect(filterLibrary(all, "ALL", "bb minor")).toEqual([bbMinorScale]);
-    expect(filterLibrary(all, "ALL", "minor B♭")).toEqual([bbMinorScale]);
+  it("keeps one when the total is out of date", () => {
+    expect(placeholderCount(24, 24)).toBe(1);
+    expect(placeholderCount(24, 20)).toBe(1);
+  });
+});
+
+describe("chunkDelay", () => {
+  it("staggers a chunk from its first card", () => {
+    expect(chunkDelay(24, 24)).toBe(0);
+    expect(chunkDelay(26, 24)).toBe(60);
   });
 
-  it("finds an exercise by its type, number or time signature", () => {
-    expect(filterLibrary(all, "ALL", "long")).toEqual([gLongTones]);
-    expect(filterLibrary(all, "ALL", "no. 42")).toEqual([bbMinorScale]);
-    expect(filterLibrary(all, "ALL", "3/4")).toEqual([gLongTones]);
-  });
-
-  it("doesn't find lip slurs by the C major they're stored in", () => {
-    expect(filterLibrary(all, "ALL", "c major")).toEqual([]);
-  });
-
-  it("needs every word to match, within the chosen type", () => {
-    expect(filterLibrary(all, "ALL", "scales g")).toEqual([]);
-    expect(filterLibrary(all, "SCALES", "long")).toEqual([]);
+  it("doesn't hold back cards already there, or grow past a dozen", () => {
+    expect(chunkDelay(3, 24)).toBe(0);
+    expect(chunkDelay(47, 24)).toBe(360);
   });
 });
 
@@ -128,5 +111,31 @@ describe("formatSavedDate", () => {
 
   it("gives nothing for a date it can't read", () => {
     expect(formatSavedDate("not a date", now)).toBe("");
+  });
+});
+
+describe("cardLabel", () => {
+  const now = new Date("2026-11-03T12:00:00Z");
+  const entry: LibraryEntry = {
+    id: "a",
+    exerciseId: "a",
+    exerciseType: "SCALES",
+    notes: "C4/q, D4, E4, F4, G4/w",
+    timeSig: "4/4",
+    musicKey: "Bb minor",
+    noteRange: "MED",
+    difficulty: "LOW",
+    generationNum: 42,
+    createdAt: "2026-11-03T12:00:00Z",
+  };
+
+  it("gives the card's number, key, time, length and date", () => {
+    expect(cardLabel(entry, now)).toBe("Scales No. 42, B♭ minor, 4/4, 2 bars, saved 3 Nov");
+  });
+
+  it("leaves out the key of a lip slur, and a date it can't read", () => {
+    expect(
+      cardLabel({ ...entry, exerciseType: "LIP_SLURS", notes: "C4/w", createdAt: "?" }, now),
+    ).toBe("Lip slurs No. 42, 4/4, 1 bar");
   });
 });

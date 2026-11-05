@@ -1,7 +1,7 @@
 import { defineKeyframes } from "@chakra-ui/react";
 
 /**
- * Entrance animations, one exit, and one loop for waiting. Most entrances have only a
+ * Entrance animations, exits, and loops for waiting. Most entrances have only a
  * `from` frame, so they animate to however the element already looks. Run them with
  * fill-mode `backwards` (hidden during the delay, back to normal styles afterwards) and
  * gate them behind `_motionSafe`.
@@ -35,6 +35,8 @@ export const keyframes = defineKeyframes({
     from: { clipPath: "inset(-50% 100% -50% 0)" },
     to: { clipPath: "inset(-50% 0 -50% 0)" },
   },
+  /** Waiting: dim and brighten, for placeholders standing in for content. Loop it. */
+  pulse: { "50%": { opacity: 0.45 } },
   /**
    * Waiting: a note is written in, held, then fades for the next round. Loop it
    * (`infinite`), staggering each note's delay so they appear one after another.
