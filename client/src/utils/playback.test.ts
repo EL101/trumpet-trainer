@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { pulseOf } from "@/lib/meter";
-import { buildTimeline } from "@/lib/timeline";
+import { buildTimeline, endlessTimeline } from "@/lib/timeline";
 import { scheduleClick } from "./click";
 import { Playback, type PlaybackSettings } from "./playback";
 import type { Trumpet } from "./trumpet";
@@ -108,6 +108,22 @@ describe("Playback", () => {
     expect(notes()).toEqual([
       [58, 4.05, 3.6],
       [60, 8.05, 3.6],
+    ]);
+  });
+
+  it("clicks on with no end for an endless timeline, as the metronome plays it", () => {
+    const p = new Playback(ctx as unknown as AudioContext, endlessTimeline("3/4"), pulseOf("3/4"));
+    p.update({ ...SETTINGS, notes: false, tempo: 120 });
+    p.start(0, { countIn: false });
+    run(60);
+    // Two beats a second for a minute (and the next, inside the lookahead), every bar's
+    // downbeat accented.
+    expect(clicks()).toHaveLength(121);
+    expect(clicks().slice(-4)).toEqual([
+      [58.55, true],
+      [59.05, false],
+      [59.55, false],
+      [60.05, true],
     ]);
   });
 

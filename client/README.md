@@ -6,8 +6,8 @@ brass accent, hairline borders, and outlined buttons (never filled).
 
 > The frontend is mid-rehaul. The new design system, shared components and app shell
 > (sidebar) are in place; page content is being rebuilt on top of them one screen at a
-> time (done so far: the landing page, Generate, the practice player, the library and the
-> Tuner). See [Old vs new](#old-vs-new) for what to use and what to avoid.
+> time (done so far: the landing page, Generate, the practice player, the library and
+> Tools). See [Old vs new](#old-vs-new) for what to use and what to avoid.
 >
 > Today and Progress aren't built yet, so they're commented out of the sidebar and
 > `App.tsx`, and their routes go to Generate, which is also where signing in lands.
@@ -75,11 +75,14 @@ src/
 │   ├── music/             Trumpet-specific UI. Import from "@/components/music".
 │   │                      Staff (VexFlow notation with per-note intonation colour, a
 │   │                      playback cursor and clickable notes), PitchReadout, TunerGauge,
-│   │                      Tuner (the working tuner: gauge, readout and microphone, used
-│   │                      by the player's drawer and the Tuner page), ScoreFigure, IntonationLegend, ExerciseMeta, PitchText (key
+│   │                      Tuner (the working tuner: gauge, readout and microphone),
+│   │                      ScoreFigure, IntonationLegend, ExerciseMeta, PitchText (key
 │   │                      and note names with ♭ and ♯), TempoMark and NoteValue
 │   │                      ("♩ = 96"; drawn, as the fonts have no music characters),
-│   │                      PracticeButton (opens the player; see below)
+│   │                      the metronome's parts (BeatDots, SubdivisionControl,
+│   │                      TempoControl), PracticeButton (opens the player; see below).
+│   │                      The player's drawer and the Tools page share the tuner and
+│   │                      these parts.
 │   ├── layout/            Page frames. Import from "@/components/layout".
 │   │                      AppShell (sidebar + content), FocusShell (the player's frame:
 │   │                      a top bar with a back link, and a drawer beside the music),
@@ -93,7 +96,7 @@ src/
 ├── lib/                   Pure helpers for the new UI: intonation colours, formatting,
 │                          the generator's keys, time signatures and labels, notation (the
 │                          note parser Staff draws from), timeline (when each note sounds
-│                          and where the cursor is), meter (the beat each time signature
+│                          and where the cursor is; endlessTimeline is the metronome's), meter (the beat each time signature
 │                          is counted in), noteValue (how NoteValue lays out ♩, ♪♪, ♬),
 │                          transport (the player's play/pause/seek states), tuning,
 │                          practice (the player's address and route state), library (the
@@ -106,6 +109,7 @@ src/
 │                          scheduler) and trumpet (its samples), API calls, history,
 │                          library, profile, image handling.
 ├── hooks/                 usePitch (microphone), usePlayback (the player's transport),
+│                          useMetronome (the metronome on its own, for Tools),
 │                          usePersistedState (localStorage, or per tab with `session`)
 ├── auth/                  Firebase sign-in: useAuth() for state; auth.ts signs in, links
 │                          a guest to Google, and signs out

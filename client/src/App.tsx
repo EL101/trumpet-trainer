@@ -13,7 +13,7 @@ import Profile from "./pages/Profile";
 import { SheetMusic } from "./components/SheetMusic";
 import { Generate } from "./pages/Generate";
 import { Library } from "./pages/Library";
-import Tuner from "./pages/Tuner";
+import Tools from "./pages/Tools";
 // import Progress from "./pages/Progress";
 import DesignPreview from "./pages/DesignPreview";
 import Practice from "./pages/Practice";
@@ -56,8 +56,11 @@ function App() {
                 <Route path={PRACTICE_PATH} element={<Navigate to="/generate" replace />} />
               </Route>
               <Route element={<ProtectedRoute />}>
-                <Route path="/tuner" element={<Tuner />} />
+                <Route path="/tools" element={<Tools />} />
               </Route>
+              {/* The tuner and metronome had pages of their own before Tools. */}
+              <Route path="/tuner" element={<Navigate to="/tools" replace />} />
+              <Route path="/metronome" element={<Navigate to="/tools" replace />} />
               {/* <Route element={<ProtectedRoute />}>
                 <Route path="/progress" element={<Progress />} />
               </Route> */}

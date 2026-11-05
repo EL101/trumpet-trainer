@@ -7,7 +7,6 @@ import {
   Portal,
   Text,
   useBreakpointValue,
-  VisuallyHidden,
 } from "@chakra-ui/react";
 import {
   ArrowLeft,
@@ -28,7 +27,15 @@ import { useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { AuthUserContext } from "@/auth/AuthUserContext";
 import { FocusShell, NAV_ITEMS } from "@/components/layout";
-import { ExerciseMeta, NoteValue, Staff, TempoMark, Tuner } from "@/components/music";
+import {
+  BeatDots,
+  ExerciseMeta,
+  Staff,
+  SubdivisionControl,
+  TempoControl,
+  TempoMark,
+  Tuner,
+} from "@/components/music";
 import {
   Button,
   IconButton,
@@ -36,8 +43,6 @@ import {
   notify,
   Rule,
   SegmentedControl,
-  Slider,
-  Stepper,
   type ChoiceOption,
 } from "@/components/primitives";
 import { usePersistedState } from "@/hooks/usePersistedState";
@@ -349,44 +354,6 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
   );
 }
 
-/** The tempo as a stepper for fine steps and a slider for big ones. */
-function TempoControl({
-  pulse,
-  tempo,
-  onChange,
-}: {
-  pulse: Pulse;
-  tempo: number;
-  onChange: (tempo: number) => void;
-}) {
-  return (
-    // One group for screen readers, so the two controls are "fine" and "slider" within it.
-    // A floated legend lays out like any other flex item.
-    <Flex as="fieldset" justify="center" align="center" gap="md" wrap="wrap" minWidth={0}>
-      <Text as="legend" float="left" p={0} textStyle="meta" color="fg.muted">
-        Tempo
-      </Text>
-      <Stepper
-        value={tempo}
-        onChange={onChange}
-        min={MIN_TEMPO}
-        max={MAX_TEMPO}
-        format={(v) => <TempoMark pulse={pulse} bpm={v} />}
-        aria-label="Tempo, fine"
-      />
-      <Slider
-        value={tempo}
-        onChange={onChange}
-        min={MIN_TEMPO}
-        max={MAX_TEMPO}
-        width="160px"
-        aria-label="Tempo, slider"
-        aria-valuetext={`${tempo} beats per minute`}
-      />
-    </Flex>
-  );
-}
-
 /**
  * The right-hand drawer of tools, collapsible to a rail. It slides open and shut; on
  * narrow screens, where it sits below the music, it folds up instead.
@@ -526,18 +493,6 @@ function MetronomeTool({
   countIn,
   onCountInChange,
 }: MetronomeToolProps) {
-  const options = pulse.subdivisions.map((s) => ({
-    value: String(s.per),
-    label: (
-      <>
-        <span aria-hidden>
-          <NoteValue symbol={s.symbol} />
-        </span>
-        <VisuallyHidden>{s.label}</VisuallyHidden>
-      </>
-    ),
-  }));
-
   return (
     <Flex direction="column" gap="md">
       <Flex justify="space-between" align="center">
@@ -555,24 +510,8 @@ function MetronomeTool({
         </IconButton>
       </Flex>
       <Flex justify="space-between" align="center" gap="sm" wrap="wrap">
-        <Flex gap="sm" aria-hidden>
-          {Array.from({ length: pulse.beats }, (_, i) => (
-            <Box
-              key={i}
-              boxSize="20px"
-              borderRadius="full"
-              borderWidth={i === beat ? "1.5px" : "1px"}
-              borderColor={i === beat ? "accent.solid" : i === 0 ? "border.strong" : "border"}
-              bg={i === beat ? "accent.subtle" : undefined}
-            />
-          ))}
-        </Flex>
-        <SegmentedControl
-          options={options}
-          value={String(subdivision)}
-          onChange={(v) => onSubdivisionChange(Number(v))}
-          aria-label="Clicks per beat"
-        />
+        <BeatDots pulse={pulse} beat={beat} />
+        <SubdivisionControl pulse={pulse} value={subdivision} onChange={onSubdivisionChange} />
       </Flex>
       <Flex justify="space-between" align="center" gap="sm" wrap="wrap">
         <Text as="span" textStyle="meta" color="fg.muted">

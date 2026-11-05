@@ -1,6 +1,6 @@
 import { Flex, Heading, Text, type FlexProps } from "@chakra-ui/react";
 import { Mic, MicOff } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { Note } from "tonal";
 import { Button, SegmentedControl, type ChoiceOption } from "@/components/primitives";
 import { usePersistedState } from "@/hooks/usePersistedState";
@@ -17,16 +17,11 @@ const NOTATION_OPTIONS: ChoiceOption<Notation>[] = [
   { value: "concert", label: "Concert" },
 ];
 
-type TunerProps = Omit<FlexProps, "title"> & {
-  /** Heading beside the notation control; null leaves it to the page's own title. */
-  title?: ReactNode;
-};
-
 /**
  * The tuner: dial, nearest note and a Listen button. It only listens once asked to, and
  * stops when it unmounts.
  */
-export function Tuner({ title = "Tuner", ...rest }: TunerProps) {
+export function Tuner(props: FlexProps) {
   const { pitch, error, start, stop } = usePitch();
   const [listening, setListening] = useState(false);
   const [notation, setNotation] = usePersistedState<Notation>("tunerNotation", "written");
@@ -53,13 +48,11 @@ export function Tuner({ title = "Tuner", ...rest }: TunerProps) {
   };
 
   return (
-    <Flex direction="column" gap="md" {...rest}>
-      <Flex justify={title ? "space-between" : "center"} align="center" gap="sm" wrap="wrap">
-        {title && (
-          <Heading as="h2" textStyle="heading.md" m={0}>
-            {title}
-          </Heading>
-        )}
+    <Flex direction="column" gap="md" {...props}>
+      <Flex justify="space-between" align="center" gap="sm" wrap="wrap">
+        <Heading as="h2" textStyle="heading.md" m={0}>
+          Tuner
+        </Heading>
         <SegmentedControl
           options={NOTATION_OPTIONS}
           value={notation}

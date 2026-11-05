@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { barAt, buildTimeline, cursorAt, soundingNotes } from "./timeline";
+import { barAt, buildTimeline, cursorAt, endlessTimeline, soundingNotes } from "./timeline";
 
 describe("buildTimeline", () => {
   it("places each note after the one before it", () => {
@@ -90,5 +90,11 @@ describe("soundingNotes", () => {
   it("plays slurred notes legato", () => {
     const notes = soundingNotes(buildTimeline("(C4/q, G4/q), C5/h", "4/4"));
     expect(notes.map((n) => n.legato)).toEqual([true, false, false]);
+  });
+});
+
+describe("endlessTimeline", () => {
+  it("has no notes, a bar of the time signature, and no end", () => {
+    expect(endlessTimeline("6/8")).toEqual({ notes: [], bar: 3, bars: Infinity, end: Infinity });
   });
 });

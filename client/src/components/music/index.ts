@@ -8,3 +8,5 @@ export { TunerGauge } from "./TunerGauge";
 export { PracticeButton } from "./PracticeButton";
 export { NoteValue, TempoMark } from "./TempoMark";
 export { Tuner } from "./Tuner";
+export { BeatDots, SubdivisionControl } from "./Beats";
+export { TempoControl } from "./TempoControl";
