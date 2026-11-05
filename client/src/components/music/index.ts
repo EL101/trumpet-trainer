@@ -7,3 +7,4 @@ export { PitchText } from "./PitchText";
 export { TunerGauge } from "./TunerGauge";
 export { PracticeButton } from "./PracticeButton";
 export { NoteValue, TempoMark } from "./TempoMark";
+export { Tuner } from "./Tuner";

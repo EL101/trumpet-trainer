@@ -69,7 +69,7 @@ export default function LandingPage() {
   if (user) {
     // ProtectedRoute records where a signed-out visitor was headed.
     const from = (location.state as { from?: string } | null)?.from;
-    return <Navigate to={from ?? "/today"} replace />;
+    return <Navigate to={from ?? "/generate"} replace />;
   }
 
   // The sign-in choices wait until all the music and its colour key are down.

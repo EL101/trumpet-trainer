@@ -12,6 +12,7 @@ import {
   ScoreFigure,
   Staff,
   TempoMark,
+  Tuner,
   TunerGauge,
 } from "@/components/music";
 import {
@@ -295,6 +296,9 @@ export default function DesignPreview() {
           <TunerGauge cents={9} width="220px" />
           <TunerGauge cents={-31} width="220px" />
           <TunerGauge cents={null} width="220px" />
+          <Card.Root size="lg" width="360px" maxWidth="100%">
+            <Tuner />
+          </Card.Root>
         </Flex>
         <Flex gap="2xl" mt="xl" wrap="wrap" align="flex-end">
           {["4/4", "2/2", "6/8", "3/8"].map((t) => {

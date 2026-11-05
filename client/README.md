@@ -6,8 +6,11 @@ brass accent, hairline borders, and outlined buttons (never filled).
 
 > The frontend is mid-rehaul. The new design system, shared components and app shell
 > (sidebar) are in place; page content is being rebuilt on top of them one screen at a
-> time (done so far: the landing page, Generate, the practice player and the library). See
-> [Old vs new](#old-vs-new) for what to use and what to avoid.
+> time (done so far: the landing page, Generate, the practice player, the library and the
+> Tuner). See [Old vs new](#old-vs-new) for what to use and what to avoid.
+>
+> Today and Progress aren't built yet, so they're commented out of the sidebar and
+> `App.tsx`, and their routes go to Generate, which is also where signing in lands.
 
 ## Running it
 
@@ -72,7 +75,8 @@ src/
 │   ├── music/             Trumpet-specific UI. Import from "@/components/music".
 │   │                      Staff (VexFlow notation with per-note intonation colour, a
 │   │                      playback cursor and clickable notes), PitchReadout, TunerGauge,
-│   │                      ScoreFigure, IntonationLegend, ExerciseMeta, PitchText (key
+│   │                      Tuner (the working tuner: gauge, readout and microphone, used
+│   │                      by the player's drawer and the Tuner page), ScoreFigure, IntonationLegend, ExerciseMeta, PitchText (key
 │   │                      and note names with ♭ and ♯), TempoMark and NoteValue
 │   │                      ("♩ = 96"; drawn, as the fonts have no music characters),
 │   │                      PracticeButton (opens the player; see below)
@@ -101,9 +105,8 @@ src/
 │                          server, fetched by etudes.ts), playback (the player's audio
 │                          scheduler) and trumpet (its samples), API calls, history,
 │                          library, profile, image handling.
-├── hooks/                 usePitch (microphone), useMetronome, usePlayback (the player's
-│                          transport), usePersistedState (localStorage, or per tab
-│                          with `session`)
+├── hooks/                 usePitch (microphone), usePlayback (the player's transport),
+│                          usePersistedState (localStorage, or per tab with `session`)
 ├── auth/                  Firebase sign-in: useAuth() for state; auth.ts signs in, links
 │                          a guest to Google, and signs out
 ├── profile/               The signed-in user's profile: useProfile()
@@ -248,13 +251,10 @@ lower (`CONCERT_OFFSET` in `lib/tuning.ts`). The trumpet samples are in
 The rehaul replaces the old components gradually. Until a page is rebuilt it keeps
 using the old ones, and both kinds live side by side.
 
-| Old (don't use in new code)                  | New                           |
-| -------------------------------------------- | ----------------------------- |
-| `SheetMusic`                                 | `music/Staff`                 |
-| `SegmentInput`                               | `primitives/SegmentedControl` |
-| `StepperInput`                               | `primitives/Stepper`          |
-| `TunerPendulum`                              | `music/TunerGauge`            |
-| Chakra `Button` / `Card` with stock variants | `primitives/Button` / `Card`  |
+| Old (don't use in new code)                  | New                          |
+| -------------------------------------------- | ---------------------------- |
+| `SheetMusic`                                 | `music/Staff`                |
+| Chakra `Button` / `Card` with stock variants | `primitives/Button` / `Card` |
 
 Once a page no longer uses an old component and nothing else imports it, delete it.
 

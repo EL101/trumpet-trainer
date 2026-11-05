@@ -1,14 +1,14 @@
 export type NavItem = { to: string; label: string };
 
 /**
- * Primary navigation. The mockups list only the first four and move the tuner and
- * metronome into a drawer inside the player; they stay here until that drawer exists.
+ * Primary navigation. The mockups list Today, Generate, Library and Progress, and keep
+ * the tuner in the player's drawer; it stays here too so it can be used on its own.
+ * Today and Progress are hidden until they're built.
  */
 export const NAV_ITEMS: readonly NavItem[] = [
-  { to: "/today", label: "Today" },
+  // { to: "/today", label: "Today" },
   { to: "/generate", label: "Generate" },
   { to: "/library", label: "Library" },
-  { to: "/progress", label: "Progress" },
+  // { to: "/progress", label: "Progress" },
   { to: "/tuner", label: "Tuner" },
-  { to: "/metronome", label: "Metronome" },
 ];
