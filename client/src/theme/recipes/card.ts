@@ -34,7 +34,7 @@ export const cardRecipe = defineSlotRecipe({
   variants: {
     size: {
       sm: { root: { p: "md" } },
-      md: { root: { p: "16px", gap: "6px" } },
+      md: { root: { p: "16px", gap: "6px" }, title: { fontSize: "19px" } },
       lg: { root: { p: "24px", gap: "10px" }, title: { fontSize: "27px", lineHeight: 1.12 } },
     },
     elevation: {

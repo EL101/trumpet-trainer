@@ -3,27 +3,39 @@ import type { User } from "firebase/auth";
 import { toHistoryInput, type MusicInfo } from "@/schema";
 import { ApiError, authedFetch } from "./api";
 
+/**
+ * The user's history as Generate lists it: the newest HISTORY_LIMIT exercises, newest
+ * first. Older rows wait in the database for the hourly prune, but they're no longer
+ * listed, so they aren't in here. Resolves to an empty list without a signed-in user;
+ * throws if it couldn't be asked.
+ */
+export async function listHistory(
+  user: User | undefined | null,
+  signal?: AbortSignal,
+): Promise<MusicInfo[]> {
+  const res = await authedFetch("/api/history", user, { signal });
+  return res ? await res.json() : [];
+}
+
 /** Loads the user's history into `setHistory`, then calls `onLoaded` with it. */
 export function getInitialHistory(
   user: User | undefined | null,
   setHistory: Dispatch<SetStateAction<Record<number, MusicInfo>>>,
   onLoaded?: (entries: MusicInfo[]) => void,
 ) {
+  if (!user) return () => {};
   const controller = new AbortController();
 
-  (async () => {
-    try {
-      const res = await authedFetch("/api/history", user, { signal: controller.signal });
-      if (!res) return;
-
-      const data: MusicInfo[] = await res.json();
+  listHistory(user, controller.signal)
+    .then((data) => {
+      if (controller.signal.aborted) return;
       setHistory(Object.fromEntries(data.map((item) => [item.generationNum, item])));
       onLoaded?.(data);
-    } catch (error) {
+    })
+    .catch((error) => {
       if (error instanceof Error && error.name === "AbortError") return;
       console.error("fetch history error:", error);
-    }
-  })();
+    });
 
   return () => controller.abort();
 }

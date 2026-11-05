@@ -154,7 +154,8 @@ export default function Practice() {
     return () => controller.abort();
   }, [handed, exerciseId, user, attempt]);
 
-  if (missing) return <Navigate to="/generate" replace />;
+  // The notice says why; go back to the page it came from (Generate without one).
+  if (missing) return <Navigate to={from.to} replace />;
   // Loading, or a load that failed: the frame, so the back link is already there.
   if (!exercise) {
     return (

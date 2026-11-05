@@ -107,6 +107,64 @@ describe.each(["history", "library"] as const)("GET /api/%s/:exerciseId", (table
   });
 });
 
+describe("DELETE /api/library/:exerciseId", () => {
+  const remove = (uid: string, exerciseId: string) =>
+    request(app).delete(`/api/library/${exerciseId}`).set(bearer(uid));
+  const save = (table: "history" | "library", uid: string, exerciseId: string) =>
+    request(app)
+      .post(`/api/${table}`)
+      .set(bearer(uid))
+      .send({ ...exerciseBody(), exerciseId });
+
+  it("removes the caller's entry, and only that one", async () => {
+    const uid = newUid();
+    const [gone, kept] = [randomUUID(), randomUUID()];
+    await save("library", uid, gone);
+    await save("library", uid, kept);
+
+    expect((await remove(uid, gone)).status).toBe(204);
+    expect((await request(app).get(`/api/library/${gone}`).set(bearer(uid))).status).toBe(404);
+    const rows = await prisma.library.findMany({ where: { userId: uid } });
+    expect(rows.map((row) => row.exerciseId)).toEqual([kept]);
+  });
+
+  it("leaves the exercise in history", async () => {
+    const uid = newUid();
+    const exerciseId = randomUUID();
+    await save("history", uid, exerciseId);
+    await save("library", uid, exerciseId);
+
+    await remove(uid, exerciseId);
+    expect((await request(app).get(`/api/history/${exerciseId}`).set(bearer(uid))).status).toBe(
+      200,
+    );
+  });
+
+  it("is not found for an unknown id, another user's entry, or an id that isn't a UUID", async () => {
+    const owner = newUid();
+    const exerciseId = randomUUID();
+    await save("library", owner, exerciseId);
+
+    expect((await remove(newUid(), exerciseId)).status).toBe(404);
+    expect((await remove(owner, randomUUID())).status).toBe(404);
+    expect((await remove(owner, "not-a-uuid")).status).toBe(404);
+    expect(await prisma.library.count({ where: { userId: owner } })).toBe(1);
+  });
+
+  it("is not found the second time", async () => {
+    const uid = newUid();
+    const exerciseId = randomUUID();
+    await save("library", uid, exerciseId);
+
+    expect((await remove(uid, exerciseId)).status).toBe(204);
+    expect((await remove(uid, exerciseId)).status).toBe(404);
+  });
+
+  it("needs a signed-in user", async () => {
+    expect((await request(app).delete(`/api/library/${randomUUID()}`)).status).toBe(401);
+  });
+});
+
 describe("GET /api/history/:exerciseId", () => {
   it("returns the newest when the exercise was saved again after a clear", async () => {
     const uid = newUid();

@@ -6,7 +6,7 @@ brass accent, hairline borders, and outlined buttons (never filled).
 
 > The frontend is mid-rehaul. The new design system, shared components and app shell
 > (sidebar) are in place; page content is being rebuilt on top of them one screen at a
-> time (done so far: the landing page, Generate and the practice player). See
+> time (done so far: the landing page, Generate, the practice player and the library). See
 > [Old vs new](#old-vs-new) for what to use and what to avoid.
 
 ## Running it
@@ -57,8 +57,9 @@ src/
 │   ├── tokens.ts          Fonts, spacing, radii, shadows, sizes; registers the roles.
 │   ├── textStyles.ts      Type scale: display.*, heading.*, kicker, meta, figure.*
 │   ├── globalCss.ts       Page background, heading font, focus ring, text selection.
-│   ├── keyframes.ts       Entrance animations (rise-in, pop-in, wipe-in, draw-on, …), one
-│   │                      exit (sink-out) and one loop for waiting (write-note).
+│   ├── keyframes.ts       Entrance animations (rise-in, pop-in, wipe-in, draw-on, …), their
+│   │                      exits (sink-out; fold, which closes what unfold opened) and
+│   │                      loops for waiting (write-note; pulse, for placeholders).
 │   ├── recipes/           Variant definitions per component (button primary/secondary/…)
 │   └── index.ts           Builds the Chakra `system` and re-exports everything.
 │
@@ -91,8 +92,10 @@ src/
 │                          and where the cursor is), meter (the beat each time signature
 │                          is counted in), noteValue (how NoteValue lays out ♩, ♪♪, ♬),
 │                          transport (the player's play/pause/seek states), tuning,
-│                          practice (the player's address and route state), storage and
-│                          motion (prefersReducedMotion, for animation outside CSS).
+│                          practice (the player's address and route state), library (the
+│                          library's filter, its chunks, and where a card's panel goes),
+│                          storage and motion (prefersReducedMotion, for animation
+│                          outside CSS).
 ├── utils/                 App logic: music generation (generateMusic, lipSlurs, built on
 │                          rhythm, melody and notate), etudes (written by Claude on the
 │                          server, fetched by etudes.ts), playback (the player's audio
@@ -173,17 +176,45 @@ has numbered the exercise, because the player loads exercises from history:
   player shows it without a request.
 - **In a new tab, after a reload or from a bookmark,** it loads the exercise with
   `GET /api/history/:exerciseId`, then `GET /api/library/:exerciseId` if history has
-  let it go (pruned past the newest 100, or cleared). An id neither has goes to
-  Generate with an "Exercise not found" notice. Deleted history leaves no trace, so
-  the notice can't tell a cleared exercise from a wrong link, and says it could be
-  either. A load that fails (offline, a server error) stays on the player with a Try
-  again button.
+  let it go (pruned past the newest 100, or cleared). An id neither has goes back to
+  the page that opened the player (Generate if the address doesn't name one) with an
+  "Exercise not found" notice. Deleted history leaves no trace, so the notice can't
+  tell a cleared exercise from a wrong link, and says it could be either. A load that
+  fails (offline, a server error) stays on the player with a Try again button.
 - **The back links** are plain links to the page that opened the player. The address
   names that page (`?from=/generate`), so they work in a new tab too. They hand the
   exercise back as `practiced` in the router state; read it with `readPracticed()` from
   `@/lib/practice` to put it back where it was. Generate doesn't need to: it keeps the
   exercise on its plate in session storage (per tab and per player), so the plate is
   still there after the player, a refresh or the browser's Back button.
+
+Its label defaults to "Practice with feedback"; pass `label` to change it (the library's
+panel says just "Practice").
+
+## The library
+
+`pages/Library.tsx` (route `/library`, mockups 1i and 6a) shows every saved exercise as
+a card with its opening bar, filtered by type and searchable. It loads
+`LIBRARY_PAGE_SIZE` (24) at a time from `GET /api/library/page`, which does the
+filtering and search on the server, so a big library neither downloads nor draws every
+score at once. Placeholder cards stand where the next chunk goes, and it loads as they
+come within half a screen of view; its cards then come in one after another. Pages
+follow on from the last entry loaded rather than an offset, so removing cards doesn't
+make the next chunk skip any. (`GET /api/library` still sends the whole library, for
+Generate's saved marks.) Clicking a card unfolds a
+panel across the grid under that card's row, with the whole exercise, its details and
+Practice. The grid is `auto-fill`, so the page reads the number of columns back from the
+browser to know where a row ends (`rowEnd()` in `lib/library.ts`). Its rows are spaced
+with margins rather than a row gap, so the gap under a panel opens with it. The player's
+back links (and the browser's Back button) return with the practised exercise's panel
+open again, loading chunks until it's among them. The filter and search are kept per tab. Exercises get into the library
+from Generate's "Save to library". The panel's "Remove from library" asks first, and
+looks for the exercise in the history Generate lists (`listHistory()`, its newest 100)
+to say whether it can be saved again from there. Anywhere else, including a row past
+the newest 100 that the hourly prune hasn't deleted yet, or a lookup that failed, it
+says it **can't** be. Choosing a card moves focus to its panel's heading, and each card's
+`aria-label` (`cardLabel()`) gives its key, length and date, so two cards with the same
+number can be told apart.
 
 The staff is written for B♭ trumpet, so the player sounds every note a whole tone
 lower (`CONCERT_OFFSET` in `lib/tuning.ts`). The trumpet samples are in
