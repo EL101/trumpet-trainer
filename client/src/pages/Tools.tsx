@@ -5,10 +5,8 @@ import { BeatDots, SubdivisionControl, TempoControl, Tuner } from "@/components/
 import { Button, Card, ChoiceGrid, Field } from "@/components/primitives";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { useMetronome } from "@/hooks/useMetronome";
-import { TIME_SIGNATURES, type TimeSignature } from "@/lib/generatorOptions";
-import { MAX_TEMPO, MIN_TEMPO } from "@/lib/meter";
-
-const DEFAULT_TEMPO = 80;
+import { isTimeSignature, TIME_SIGNATURES, type TimeSignature } from "@/lib/generatorOptions";
+import { clampTempo, DEFAULT_TEMPO } from "@/lib/meter";
 
 const TIME_OPTIONS = TIME_SIGNATURES.map((t) => ({ value: t, label: t }));
 
@@ -30,10 +28,12 @@ export default function Tools() {
 
 /** The metronome on its own. It clicks until stopped, or until the page is left. */
 function Metronome() {
-  const [timeSig, setTimeSig] = usePersistedState<TimeSignature>("metronomeTimeSig", "4/4");
+  const [timeSig, setTimeSig] = usePersistedState<TimeSignature>("metronomeTimeSig", "4/4", {
+    accept: isTimeSignature,
+  });
   const [storedTempo, setTempo] = usePersistedState("metronomeTempo", DEFAULT_TEMPO);
   const [clicksPerBeat, setClicksPerBeat] = usePersistedState("metronomeSubdivision", 1);
-  const tempo = Math.min(MAX_TEMPO, Math.max(MIN_TEMPO, Number(storedTempo) || DEFAULT_TEMPO));
+  const tempo = clampTempo(storedTempo);
   const { pulse, subdivision, running, beat, start, stop } = useMetronome({
     timeSig,
     tempo,

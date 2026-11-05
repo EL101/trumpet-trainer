@@ -48,7 +48,14 @@ import {
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { usePlayback } from "@/hooks/usePlayback";
 import { EXERCISE_TYPE_LABELS, KEYLESS } from "@/lib/generatorOptions";
-import { beatAt, MAX_TEMPO, MIN_TEMPO, pulseOf, type Pulse } from "@/lib/meter";
+import {
+  beatAt,
+  clampTempo,
+  DEFAULT_TEMPO,
+  pulseOf,
+  subdivisionFor,
+  type Pulse,
+} from "@/lib/meter";
 import { prefersReducedMotion } from "@/lib/motion";
 import {
   backTo,
@@ -64,8 +71,6 @@ import { getHistoryEntry } from "@/utils/history";
 import { getLibraryEntry } from "@/utils/library";
 import { lipSlurFingerings } from "@/utils/lipSlurs";
 import type { MusicInfo } from "@/schema";
-
-const DEFAULT_TEMPO = 80;
 
 /** The tools drawer opening and closing, timed and eased like the sidebar's entrance. */
 const DRAWER_MS = 300;
@@ -172,13 +177,12 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
   const pulse = useMemo(() => pulseOf(timeSig), [timeSig]);
 
   const [storedTempo, setTempo] = usePersistedState("practiceTempo", DEFAULT_TEMPO);
-  const tempo = Math.min(MAX_TEMPO, Math.max(MIN_TEMPO, Number(storedTempo) || DEFAULT_TEMPO));
+  const tempo = clampTempo(storedTempo);
   const [notesOn, setNotesOn] = usePersistedState("practiceNotes", true);
   const [clickOn, setClickOn] = usePersistedState("practiceClick", true);
   const [clicksPerBeat, setClicksPerBeat] = usePersistedState("practiceSubdivision", 1);
   const [countIn, setCountIn] = usePersistedState("practiceCountIn", true);
-  // A choice made in another meter (sixteenths, then 6/8) falls back to the beat.
-  const subdivision = pulse.subdivisions.some((s) => s.per === clicksPerBeat) ? clicksPerBeat : 1;
+  const subdivision = subdivisionFor(pulse, clicksPerBeat);
   const [toolsOpen, setToolsOpen] = usePersistedState("practiceToolsOpen", true);
   const [showFingerings] = usePersistedState("showFingerings", true);
   const [resultsOpen, setResultsOpen] = useState(false);

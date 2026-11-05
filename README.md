@@ -3,10 +3,10 @@
 Practice with generated exercises and live feedback: the app listens through your
 microphone and scores each note for pitch and rhythm.
 
-| Folder               | What's in it                                                                                                      |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| [`client/`](client/) | React + Vite frontend. **[Read the client README](client/README.md)** for the folder structure and design system. |
-| [`server/`](server/) | Express API with Postgres (Prisma) and Firebase auth.                                                             |
+| Folder               | What's in it                                                                                                         |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| [`client/`](client/) | React + Vite frontend. **[Read the client README](client/README.md)** for the design system and where new code goes. |
+| [`server/`](server/) | Express API with Postgres (Prisma) and Firebase auth.                                                                |
 
 ## Running locally
 

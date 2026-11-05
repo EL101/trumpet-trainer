@@ -25,6 +25,21 @@ export const HALF_NOTE = "\u{1D15E}";
 /** Tempo limits, in beats per minute, as on a mechanical metronome. */
 export const MIN_TEMPO = 40;
 export const MAX_TEMPO = 208;
+/** Where the player and the metronome start. */
+export const DEFAULT_TEMPO = 80;
+
+/** A stored tempo kept within the limits; one that isn't a number is the default. */
+export function clampTempo(tempo: unknown) {
+  return Math.min(MAX_TEMPO, Math.max(MIN_TEMPO, Number(tempo) || DEFAULT_TEMPO));
+}
+
+/**
+ * The clicks per beat to give: `per` if the pulse offers it, otherwise the plain beat
+ * (a choice made in another meter, say sixteenths before switching to 6/8).
+ */
+export function subdivisionFor(pulse: Pulse, per: number) {
+  return pulse.subdivisions.some((s) => s.per === per) ? per : 1;
+}
 
 const QUARTER: Pulse = {
   beats: 4,

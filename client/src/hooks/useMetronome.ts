@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { beatAt, pulseOf } from "@/lib/meter";
+import { beatAt, pulseOf, subdivisionFor } from "@/lib/meter";
 import { endlessTimeline } from "@/lib/timeline";
 import { getCtx } from "@/utils/click";
 import { Playback } from "@/utils/playback";
@@ -23,8 +23,7 @@ export function useMetronome({
     () => new Playback(getCtx(), endlessTimeline(timeSig), pulse),
     [timeSig, pulse],
   );
-  // Clicks per beat that this time signature doesn't offer fall back to the beat.
-  const clicks = pulse.subdivisions.some((s) => s.per === subdivision) ? subdivision : 1;
+  const clicks = subdivisionFor(pulse, subdivision);
   const [running, setRunning] = useState(false);
   const [beat, setBeat] = useState<number | null>(null);
 
