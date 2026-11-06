@@ -185,5 +185,7 @@ model PracticeScore {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, exerciseId, createdAt(sort: Desc)], map: "idx_practice_scores_user_exercise_created")
+  /// Only runs that still have feedback: the newest read back, and the prune's search.
+  @@index([userId, exerciseId, createdAt(sort: Desc)], map: "idx_practice_scores_with_feedback", where: raw("right_notes_feedback IS NOT NULL"))
   @@map("practice_scores")
 }

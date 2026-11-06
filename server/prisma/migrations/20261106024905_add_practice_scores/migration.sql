@@ -46,9 +46,16 @@ CREATE TABLE "practice_scores" (
     )
 );
 
--- The newest score for an exercise, and a user's scores per exercise for the prune.
+-- Every run of an exercise, newest first: the prune counts the newer runs of each one
+-- with feedback.
 -- CreateIndex
 CREATE INDEX "idx_practice_scores_user_exercise_created" ON "practice_scores"("user_id", "exercise_id", "created_at" DESC);
+
+-- Only the runs that still have feedback, which stay few (an exercise's newest 20) while
+-- the table keeps every run: the newest one read back per exercise, and the hourly
+-- prune's search for feedback to clear, which would otherwise read the whole table.
+-- CreateIndex
+CREATE INDEX "idx_practice_scores_with_feedback" ON "practice_scores"("user_id", "exercise_id", "created_at" DESC) WHERE ("right_notes_feedback" IS NOT NULL);
 
 -- AddForeignKey
 ALTER TABLE "practice_scores" ADD CONSTRAINT "practice_scores_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;

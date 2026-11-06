@@ -60,8 +60,10 @@ export function latestScore(userId: string, exerciseId: string) {
  * Raw SQL: the scores aren't related to history or library rows in the schema (an
  * exercise can be in either), so Prisma can't write the NOT EXISTS. A run is past the
  * limit when `limit` newer runs of its exercise exist; that's counted per run that still
- * has feedback, stopping at the limit, so the (user, exercise, created) index does the
- * work and the table isn't ranked whole each hour. Covered in test/scores.test.ts.
+ * has feedback, stopping at the limit. The runs with feedback come from their own partial
+ * index (idx_practice_scores_with_feedback) and the count from the (user, exercise,
+ * created) one, so the work follows the feedback kept, not the size of the table, which
+ * keeps every run. Covered in test/scores.test.ts.
  */
 export async function pruneFeedback(limit = FEEDBACK_PER_EXERCISE) {
   const orphans = await prisma.$executeRaw`
