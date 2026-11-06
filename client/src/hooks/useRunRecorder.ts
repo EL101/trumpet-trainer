@@ -54,6 +54,11 @@ export function useRunRecorder({
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
       });
+      // Left before the permission prompt was answered: don't keep the microphone open.
+      if (!mounted.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        return false;
+      }
       const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
       analyser.fftSize = FRAME;
@@ -66,7 +71,15 @@ export function useRunRecorder({
     }
   }, [ctx]);
 
-  useEffect(() => close, [close]);
+  // Whether the page using it is still mounted (`open` may finish after it's gone).
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      close();
+    };
+  }, [close]);
 
   // A new take from `from`: forget what an earlier one heard from there on.
   useEffect(() => {

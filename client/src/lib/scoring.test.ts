@@ -63,6 +63,28 @@ describe("scoreRun", () => {
     expect(run.cents.slice(0, 8)).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
   });
 
+  it("never says a wrong note was played as the note written", () => {
+    // Under half on C4, and as many frames on D4 as on E♭4: the tie must not land on C4.
+    const timeline = buildTimeline("C4/q", "4/4");
+    const samples = hear(
+      1,
+      { midi: 60, from: 0.25, to: 0.45 },
+      { midi: 62, from: 0.45, to: 0.65 },
+      { midi: 63, from: 0.65, to: 0.85 },
+    );
+    const run = scoreRun(timeline, samples, TIMING);
+
+    expect(run.parts.rightNotes.notes).toEqual([
+      expect.objectContaining({
+        written: 60,
+        played: 62,
+        text: "Played D4 instead of C4, too high.",
+      }),
+    ]);
+    // Both pitches played over the C are wrong notes, so both are drawn.
+    expect(run.ghosts.map((g) => g.midi)).toEqual([62, 63]);
+  });
+
   it("marks a wrong note with what was played, as a ghost over the written one", () => {
     const { timeline, samples } = asWritten(SCALE, "4/4", (s, i) =>
       i === 6 ? { ...s, midi: 67 } : s,

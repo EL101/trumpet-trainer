@@ -64,7 +64,7 @@ import {
   type PracticeOrigin,
 } from "@/lib/practice";
 import { scoreRun, type ScoredRun } from "@/lib/scoring";
-import { transcribe, wrongNotes, type GhostNote } from "@/lib/transcribe";
+import type { GhostNote } from "@/lib/transcribe";
 import { barAt, buildTimeline, cursorAt } from "@/lib/timeline";
 import { barNow } from "@/lib/transport";
 import { getKeySig } from "@/utils/generateMusic";
@@ -282,14 +282,15 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
         beat: pulse.quarters,
         secondsPerQuarter: 60 / (liveInputs.current.tempo * pulse.quarters),
       };
-      const ghosts = wrongNotes(transcribe(samples, timeline, timing.secondsPerQuarter), timeline);
+      // One pass over what's heard gives both the ghosts and the intonation.
+      const scored = scoreRun(timeline, samples, timing);
       // Only the notes that are over: one still sounding (or to come) isn't judged yet.
-      const cents = scoreRun(timeline, samples, timing).cents.map((c, i) => {
+      const cents = scored.cents.map((c, i) => {
         const note = timeline.notes[i];
         return note.start + note.length <= now ? c : null;
       });
       setLive((last) => ({
-        ghosts,
+        ghosts: scored.ghosts,
         // The same colours as last time keep the staff from being drawn again.
         cents: last && last.cents.every((c, i) => c === cents[i]) ? last.cents : cents,
       }));

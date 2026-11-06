@@ -216,7 +216,9 @@ function hear(
   const pitches = voiced.map((s) => pitchOf(s)!);
   const semitones = pitches.map(Math.round);
   const right = semitones.filter((n) => n === note.midi).length / semitones.length >= 0.5;
-  const played = right ? note.midi : mode(semitones);
+  // Not right means under half on the written note, so some frame is elsewhere: what was
+  // played is the most common of those, never the written note itself.
+  const played = right ? note.midi : mode(semitones.filter((n) => n !== note.midi));
   const onPlayed = pitches.filter((p) => Math.round(p) === played);
   const settled = median(onPlayed);
   const spread = standardDeviation(onPlayed.map((p) => (p - settled) * 100));
