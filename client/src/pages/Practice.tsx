@@ -330,14 +330,19 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
 
   /** Starts `start` with the microphone listening if the run is scored. */
   const begin = async (start: () => void) => {
-    if (scoring && !(await recorder.open())) {
-      notify({
-        tone: "error",
-        title: "Couldn't use the microphone",
-        description:
-          "Allow it in your browser to be scored, or switch to Listen to hear the music.",
-      });
-      return;
+    if (scoring) {
+      const opened = await recorder.open();
+      // The player was left while the browser asked: nothing to start or report.
+      if (opened === null) return;
+      if (!opened) {
+        notify({
+          tone: "error",
+          title: "Couldn't use the microphone",
+          description:
+            "Allow it in your browser to be scored, or switch to Listen to hear the music.",
+        });
+        return;
+      }
     }
     start();
   };

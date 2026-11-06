@@ -8,8 +8,9 @@ const FRAME = 2048;
  * Listens through the microphone while a scored run plays, and keeps what it hears as
  * pitch samples placed in the music, for `scoreRun`.
  *
- * `open` asks for the microphone (resolving to whether it got it) and `close` lets it
- * go. While `recording`, every frame is placed in the music with `positionHeardAt`, on
+ * `open` asks for the microphone, resolving to whether it got it, or to null if the page
+ * was left while the browser asked (nothing to start, nothing to report). `close` lets
+ * it go. While `recording`, every frame is placed in the music with `positionHeardAt`, on
  * the same audio clock as the playback (`ctx`), allowing for the microphone's own delay.
  * Each take starts at `from`: what was heard from there on in an earlier take is
  * dropped, so going back over a bar records it afresh. Frames from the count-in, before
@@ -46,7 +47,7 @@ export function useRunRecorder({
     open.stream.getTracks().forEach((t) => t.stop());
   }, []);
 
-  const open = useCallback(async () => {
+  const open = useCallback(async (): Promise<boolean | null> => {
     if (mic.current) return true;
     try {
       // Raw sound: the browser's voice-call processing would smooth out the very
@@ -57,7 +58,7 @@ export function useRunRecorder({
       // Left before the permission prompt was answered: don't keep the microphone open.
       if (!mounted.current) {
         stream.getTracks().forEach((t) => t.stop());
-        return false;
+        return null;
       }
       const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
@@ -67,7 +68,8 @@ export function useRunRecorder({
       return true;
     } catch (error) {
       console.error("Mic error:", error);
-      return false;
+      // Turned down after the page was left: no one to tell.
+      return mounted.current ? false : null;
     }
   }, [ctx]);
 
