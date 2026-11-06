@@ -18,7 +18,13 @@ import { AuthUserContext } from "@/auth/AuthUserContext";
 import { useEtudes } from "@/etudes/useEtudes";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { AppShell, PageHeader } from "@/components/layout";
-import { ExerciseMeta, PitchText, PracticeButton, Staff } from "@/components/music";
+import {
+  ExerciseMeta,
+  LastFeedbackButton,
+  PitchText,
+  PracticeButton,
+  Staff,
+} from "@/components/music";
 import {
   Button,
   ChoiceGrid,
@@ -558,6 +564,7 @@ function CurrentExercise({
 
         <Flex gap="sm" wrap="wrap">
           <PracticeButton exercise={exercise} originLabel="Generate" />
+          <LastFeedbackButton exercise={exercise} />
           <SaveToLibraryButton exercise={exercise} saved={saved} onSaved={onSaved} />
           {exercise?.exerciseType === "LIP_SLURS" && (
             <Button variant="ghost" onClick={onToggleFingerings}>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Pulse } from "@/lib/meter";
 import type { Timeline } from "@/lib/timeline";
 import {
@@ -21,7 +21,7 @@ import { loadTrumpet } from "@/utils/trumpet";
  * otherwise Play starts there.
  *
  * `position` is where the music is, in quarter notes from the top. While counting in
- * it runs up to `from`, where the music starts.
+ * it runs up to `from`, where the music starts. `replay` goes back to the top and plays.
  */
 export function usePlayback(
   timeline: Timeline,
@@ -32,9 +32,12 @@ export function usePlayback(
     click,
     subdivision,
     countIn,
+    onFinish,
   }: PlaybackSettings & {
     /** Whether Play counts in a bar first. */
     countIn: boolean;
+    /** Called once the music plays to its end. */
+    onFinish?: () => void;
   },
 ) {
   const playback = useMemo(() => new Playback(getCtx(), timeline, pulse), [timeline, pulse]);
@@ -67,6 +70,12 @@ export function usePlayback(
 
   useEffect(() => () => playback.stop(), [playback]);
 
+  // The latest callback, for the frame loop.
+  const finished = useRef(onFinish);
+  useEffect(() => {
+    finished.current = onFinish;
+  });
+
   // Follow the music frame by frame while it plays.
   const running = status === "countIn" || status === "playing";
   useEffect(() => {
@@ -75,8 +84,10 @@ export function usePlayback(
       const now = playback.position();
       if (now === null) return;
       setTransport((t) => followMusic(t, timeline, now));
-      if (now >= timeline.end) playback.stop();
-      else frame = requestAnimationFrame(follow);
+      if (now >= timeline.end) {
+        playback.stop();
+        finished.current?.();
+      } else frame = requestAnimationFrame(follow);
     });
     return () => cancelAnimationFrame(frame);
   }, [running, playback, timeline]);
@@ -104,5 +115,24 @@ export function usePlayback(
     setTransport(AT_TOP);
   };
 
-  return { status, position, from, sound, play, pause, seek, restart };
+  /** Back to the top and straight into it: Play from the top, count-in and all. */
+  const replay = () => {
+    playback.start(0, { countIn });
+    setTransport(startPlaying(AT_TOP, timeline, countIn));
+  };
+
+  return {
+    status,
+    position,
+    from,
+    sound,
+    play,
+    pause,
+    seek,
+    restart,
+    replay,
+    /** The audio clock, and where the music was as heard at a time on it (null if stopped). */
+    ctx: playback.ctx,
+    positionHeardAt: (time: number) => playback.positionHeardAt(time),
+  };
 }

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { parseMeasures, parseNote, resolveMeasuresPerLine } from "./notation";
+import {
+  barExcerpt,
+  parseMeasures,
+  parseNote,
+  resolveMeasuresPerLine,
+  spellInKey,
+} from "./notation";
 
 describe("parseNote", () => {
   it("parses pitch, duration, dots and rests", () => {
@@ -125,5 +131,37 @@ describe("resolveMeasuresPerLine", () => {
     expect(resolveMeasuresPerLine(-3, 8)).toBe(8);
     expect(resolveMeasuresPerLine(0.5, 8)).toBe(8);
     expect(resolveMeasuresPerLine(Number.NaN, 0)).toBe(1);
+  });
+});
+
+describe("spellInKey", () => {
+  it("writes the key's own notes without an accidental", () => {
+    expect(spellInKey(70, "F")).toEqual({ name: "Bb4", accidental: "", line: 3 });
+    expect(spellInKey(78, "D")).toEqual({ name: "F#5", accidental: "", line: 5 });
+  });
+
+  it("marks a note outside the key, spelt the way the key leans", () => {
+    expect(spellInKey(71, "F")).toEqual({ name: "B4", accidental: "n", line: 3 });
+    expect(spellInKey(68, "Bb")).toEqual({ name: "Ab4", accidental: "b", line: 2.5 });
+    expect(spellInKey(61, "Eb")).toEqual({ name: "Db4", accidental: "b", line: 0.5 });
+    expect(spellInKey(61, "G")).toEqual({ name: "C#4", accidental: "#", line: 0 });
+    expect(spellInKey(66, "C")).toEqual({ name: "Gb4", accidental: "b", line: 2 });
+  });
+
+  it("finds the octave of a note spelt across one", () => {
+    expect(spellInKey(71, "Gb")).toEqual({ name: "Cb5", accidental: "", line: 3.5 });
+    expect(spellInKey(60, "C#")).toEqual({ name: "B#3", accidental: "", line: -0.5 });
+  });
+});
+
+describe("barExcerpt", () => {
+  it("writes one bar out on its own, with where it starts", () => {
+    const notes = "C4/q, D4, E4/h, (F4/8, G4~), G4/q., B4/q/r";
+    expect(barExcerpt(notes, "4/4", 1)).toEqual({
+      // The staff pads the bar out with a rest.
+      notes: "F4/8, G4/8, G4/q., B4/q/r, B4/8/r",
+      first: 3,
+    });
+    expect(barExcerpt(notes, "4/4", 0).notes).toBe("C4/q, D4/q, E4/h");
   });
 });

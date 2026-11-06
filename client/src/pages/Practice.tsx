@@ -1,13 +1,4 @@
-import {
-  Box,
-  Dialog,
-  Flex,
-  Grid,
-  Heading,
-  Portal,
-  Text,
-  useBreakpointValue,
-} from "@chakra-ui/react";
+import { Box, Flex, Grid, Heading, Text, useBreakpointValue } from "@chakra-ui/react";
 import {
   ArrowLeft,
   Award,
@@ -15,6 +6,10 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  ClipboardList,
+  Eye,
+  Headphones,
+  Mic,
   Pause,
   Play,
   RotateCcw,
@@ -23,13 +18,14 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { useContext, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, Navigate, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { AuthUserContext } from "@/auth/AuthUserContext";
 import { FocusShell, NAV_ITEMS } from "@/components/layout";
 import {
   BeatDots,
   ExerciseMeta,
+  ScoreCard,
   Staff,
   SubdivisionControl,
   TempoControl,
@@ -45,8 +41,10 @@ import {
   SegmentedControl,
   type ChoiceOption,
 } from "@/components/primitives";
+import { useLatestScore } from "@/hooks/useLatestScore";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { usePlayback } from "@/hooks/usePlayback";
+import { useRunRecorder } from "@/hooks/useRunRecorder";
 import { EXERCISE_TYPE_LABELS, KEYLESS } from "@/lib/generatorOptions";
 import {
   beatAt,
@@ -65,11 +63,15 @@ import {
   type PracticedState,
   type PracticeOrigin,
 } from "@/lib/practice";
+import { scoreRun, type ScoredRun } from "@/lib/scoring";
+import { transcribe, wrongNotes, type GhostNote } from "@/lib/transcribe";
 import { barAt, buildTimeline, cursorAt } from "@/lib/timeline";
 import { barNow } from "@/lib/transport";
+import { getKeySig } from "@/utils/generateMusic";
 import { getHistoryEntry } from "@/utils/history";
 import { getLibraryEntry } from "@/utils/library";
 import { lipSlurFingerings } from "@/utils/lipSlurs";
+import { saveScore } from "@/utils/scores";
 import type { MusicInfo } from "@/schema";
 
 /** The tools drawer opening and closing, timed and eased like the sidebar's entrance. */
@@ -87,6 +89,38 @@ const COUNT_IN_OPTIONS: ChoiceOption<"off" | "bar">[] = [
   { value: "off", label: "Off" },
   { value: "bar", label: "One bar" },
 ];
+
+/** How often a scored run's marks on the staff catch up with what's been heard, in ms. */
+const LIVE_MS = 150;
+
+/** Listen hears the exercise played; Play is the player's own run, heard and scored. */
+type Mode = "listen" | "play";
+
+const MODE_OPTIONS: ChoiceOption<Mode>[] = [
+  {
+    value: "listen",
+    label: (
+      <Flex as="span" align="center" gap="xs">
+        <Headphones size={14} aria-hidden />
+        Listen
+      </Flex>
+    ),
+  },
+  {
+    value: "play",
+    label: (
+      <Flex as="span" align="center" gap="xs">
+        <Mic size={14} aria-hidden />
+        Play
+      </Flex>
+    ),
+  },
+];
+
+const MODE_CAPTIONS: Record<Mode, string> = {
+  listen: "Hear the exercise played on a trumpet, with the metronome if it's on.",
+  play: "Play it yourself and get a score. Only the metronome sounds, if it's on.",
+};
 
 /**
  * The player (mockup 1e), at `/practice/<exerciseId>`. PracticeButton hands it the
@@ -173,6 +207,7 @@ export default function Practice() {
 
 function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin }) {
   const { notes, timeSig, exerciseType } = exercise;
+  const { user } = useContext(AuthUserContext);
   const timeline = useMemo(() => buildTimeline(notes, timeSig), [notes, timeSig]);
   const pulse = useMemo(() => pulseOf(timeSig), [timeSig]);
 
@@ -185,7 +220,18 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
   const subdivision = subdivisionFor(pulse, clicksPerBeat);
   const [toolsOpen, setToolsOpen] = usePersistedState("practiceToolsOpen", true);
   const [showFingerings] = usePersistedState("showFingerings", true);
-  const [resultsOpen, setResultsOpen] = useState(false);
+  const [storedMode, setMode] = usePersistedState<Mode>("practiceMode", "play");
+  const scoring = storedMode !== "listen";
+  // The run just scored, marked on the staff until the next one starts.
+  const [run, setRun] = useState<(ScoredRun & { tempo: number }) | null>(null);
+  const latest = useLatestScore(exercise.exerciseId);
+  // The score card, open on the run just played or on the last one saved.
+  const [card, setCard] = useState<{ open: boolean; showing: "run" | "saved" }>({
+    open: false,
+    showing: "run",
+  });
+  const openCard = (showing: "run" | "saved") => setCard({ open: true, showing });
+  const closeCard = () => setCard((c) => ({ ...c, open: false }));
 
   const {
     status,
@@ -196,15 +242,114 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
     pause,
     seek,
     restart,
+    replay,
+    ctx,
+    positionHeardAt,
   } = usePlayback(timeline, pulse, {
     tempo,
-    notes: notesOn,
+    // A scored run is the player's own: the trumpet stays quiet.
+    notes: notesOn && !scoring,
     click: clickOn,
     subdivision,
     countIn,
+    onFinish: () => {
+      if (scoring) finishRun();
+    },
   });
   const countingIn = status === "countIn";
   const running = countingIn || status === "playing";
+  const recording = scoring && running;
+  // A scored take keeps one tempo, the one saved with its score: fixed from Play until
+  // it ends or restarts (paused included, since Resume carries the take on).
+  const tempoLocked = scoring && (running || status === "paused");
+  const recorder = useRunRecorder({ ctx, positionHeardAt, recording, from: startsAt });
+  const { heard } = recorder;
+
+  // What's been heard so far in a scored run, marked on the staff as it comes in: the
+  // wrong notes as ghosts, and each note's intonation once it's over.
+  const [live, setLive] = useState<{ ghosts: GhostNote[]; cents: (number | null)[] } | null>(null);
+  const liveInputs = useRef({ positionHeardAt, tempo });
+  useEffect(() => {
+    liveInputs.current = { positionHeardAt, tempo };
+  });
+  useEffect(() => {
+    if (!recording) return;
+    const timer = setInterval(() => {
+      const now = liveInputs.current.positionHeardAt(ctx.currentTime);
+      if (now === null) return;
+      const samples = heard();
+      const timing = {
+        beat: pulse.quarters,
+        secondsPerQuarter: 60 / (liveInputs.current.tempo * pulse.quarters),
+      };
+      const ghosts = wrongNotes(transcribe(samples, timeline, timing.secondsPerQuarter), timeline);
+      // Only the notes that are over: one still sounding (or to come) isn't judged yet.
+      const cents = scoreRun(timeline, samples, timing).cents.map((c, i) => {
+        const note = timeline.notes[i];
+        return note.start + note.length <= now ? c : null;
+      });
+      setLive((last) => ({
+        ghosts,
+        // The same colours as last time keep the staff from being drawn again.
+        cents: last && last.cents.every((c, i) => c === cents[i]) ? last.cents : cents,
+      }));
+    }, LIVE_MS);
+    return () => clearInterval(timer);
+  }, [recording, heard, ctx, timeline, pulse]);
+
+  /** Scores what the microphone heard, shows it, and saves it. */
+  const finishRun = () => {
+    recorder.close();
+    const scored = scoreRun(timeline, recorder.heard(), {
+      beat: pulse.quarters,
+      secondsPerQuarter: 60 / (tempo * pulse.quarters),
+      keySig: KEYLESS.has(exerciseType) ? "C" : getKeySig(exercise.musicKey),
+    });
+    if (!scored.heard) {
+      notify({
+        tone: "error",
+        title: "Didn't hear you play",
+        description: "Check that the browser is using the right microphone, then try again.",
+      });
+      return;
+    }
+    setRun({ ...scored, tempo });
+    openCard("run");
+    saveScore(exercise.exerciseId, tempo, scored, user)
+      .then((saved) => saved && latest.setScore(saved))
+      .catch((error) => {
+        console.error("save score error:", error);
+        notify({
+          tone: "error",
+          title: "Couldn't save your score",
+          description: "It's shown here, but it won't be under Last feedback later.",
+        });
+      });
+  };
+
+  /** Starts `start` with the microphone listening if the run is scored. */
+  const begin = async (start: () => void) => {
+    if (scoring && !(await recorder.open())) {
+      notify({
+        tone: "error",
+        title: "Couldn't use the microphone",
+        description:
+          "Allow it in your browser to be scored, or switch to Listen to hear the music.",
+      });
+      return;
+    }
+    start();
+  };
+  const playHere = () => {
+    setRun(null);
+    void begin(play);
+  };
+  const playFromTop = () => {
+    setRun(null);
+    setLive(null);
+    recorder.clear();
+    void begin(replay);
+  };
 
   const fingerings = useMemo(
     () => (exerciseType === "LIP_SLURS" && showFingerings ? lipSlurFingerings(notes) : undefined),
@@ -221,17 +366,31 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
   };
 
   // One button that changes, so keyboard focus stays put as it does.
-  const main =
+  const main: { icon: ReactNode; label: string; onClick: () => void } =
     status === "finished"
-      ? { icon: <Award />, label: "View results", onClick: () => setResultsOpen(true) }
+      ? run
+        ? { icon: <Award />, label: "View results", onClick: () => openCard("run") }
+        : {
+            icon: <RotateCcw />,
+            label: scoring ? "Play again" : "Listen again",
+            onClick: playFromTop,
+          }
       : running
         ? { icon: <Pause />, label: "Pause", onClick: pause }
-        : { icon: <Play />, label: status === "paused" ? "Resume" : "Play", onClick: play };
+        : {
+            icon: <Play />,
+            label: status === "paused" ? "Resume" : scoring ? "Play" : "Listen",
+            onClick: playHere,
+          };
 
   const mainButton = useRef<HTMLButtonElement>(null);
   // Restart disables itself, so hand keyboard focus on to Play.
   const restartHere = () => {
     restart();
+    setRun(null);
+    setLive(null);
+    recorder.close();
+    recorder.clear();
     mainButton.current?.focus();
   };
 
@@ -239,10 +398,27 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
   const bar = barNow({ status, position, from: startsAt }, timeline);
   const toBar = (n: number) => seek(n * timeline.bar);
 
+  // Back to the top, ready to play again, with the last run's marks taken off the staff.
   const tryAgain = () => {
-    setResultsOpen(false);
+    closeCard();
+    setRun(null);
+    setLive(null);
     restart();
+    recorder.clear();
   };
+
+  const changeMode = (mode: Mode) => {
+    setMode(mode);
+    setRun(null);
+    setLive(null);
+    restart();
+    recorder.close();
+    recorder.clear();
+  };
+
+  const shown = card.showing === "run" ? run : latest.score;
+  // While a take is recorded the staff follows it; after, it shows the run as scored.
+  const marks = recording ? live : (run ?? live);
 
   return (
     <FocusShell
@@ -293,15 +469,40 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
           scale={scale}
           measuresPerLine={perLine}
           labels={fingerings}
+          cents={marks?.cents}
+          ghosts={marks?.ghosts}
           cursor={cursorAt(timeline, countingIn ? startsAt : position)}
           onNoteClick={(i) => seek(timeline.notes[i].start)}
           role="img"
           aria-label={`Score of ${typeLabel}${exercise.generationNum ? ` No. ${exercise.generationNum}` : ""}`}
         />
-        <TempoControl pulse={pulse} tempo={tempo} onChange={setTempo} />
+        <TempoControl
+          pulse={pulse}
+          tempo={tempo}
+          onChange={setTempo}
+          locked={tempoLocked}
+          lockedNote="The tempo is set for this take. Restart to change it."
+        />
       </Flex>
 
       <Flex direction="column" align="center" gap="sm">
+        <Flex justify="center" align="center" gap="md" wrap="wrap">
+          <SegmentedControl
+            options={MODE_OPTIONS.map((o) => ({ ...o, disabled: running }))}
+            value={scoring ? "play" : "listen"}
+            onChange={changeMode}
+            aria-label="Mode"
+          />
+          {latest.score && !running ? (
+            <Button variant="ghost" size="sm" onClick={() => openCard("saved")}>
+              <ClipboardList />
+              Last feedback
+            </Button>
+          ) : null}
+        </Flex>
+        <Text textStyle="caption" color="fg.muted" textAlign="center">
+          {MODE_CAPTIONS[scoring ? "play" : "listen"]}
+        </Text>
         <Flex justify="center" align="center" gap="sm">
           <IconButton
             aria-label="Restart"
@@ -319,7 +520,9 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
             size="lg"
             minWidth="168px"
             // Waits for the trumpet only if it's to be heard: the click needs no samples.
-            disabled={status !== "finished" && !running && notesOn && sound === "loading"}
+            disabled={
+              status !== "finished" && !running && notesOn && !scoring && sound === "loading"
+            }
             onClick={main.onClick}
           >
             {main.icon}
@@ -334,26 +537,54 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
           </IconButton>
           <IconButton
             aria-label="Hear the notes"
-            aria-pressed={notesOn}
-            disabled={sound === "failed"}
+            aria-pressed={notesOn && !scoring}
+            // Playing, the notes are the player's own.
+            disabled={sound === "failed" || scoring}
             onClick={() => setNotesOn((on) => !on)}
           >
-            {notesOn && sound !== "failed" ? <Volume2 /> : <VolumeX />}
+            {notesOn && !scoring && sound !== "failed" ? <Volume2 /> : <VolumeX />}
           </IconButton>
         </Flex>
         <Text role="status" textStyle="meta" color="fg.muted">
-          {sound === "loading" && "Loading trumpet sounds…"}
-          {sound === "failed" && "The trumpet sound couldn't be loaded, so only the click plays."}
+          {!scoring && sound === "loading" && "Loading trumpet sounds…"}
+          {!scoring &&
+            sound === "failed" &&
+            "The trumpet sound couldn't be loaded, so only the click plays."}
         </Text>
       </Flex>
 
-      <ResultsDialog
-        open={resultsOpen}
-        onOpenChange={setResultsOpen}
-        back={back}
-        backLabel={backTo(from)}
-        onTryAgain={tryAgain}
-      />
+      {shown ? (
+        <ScoreCard
+          open={card.open}
+          onOpenChange={(open) => (open ? setCard((c) => ({ ...c, open })) : closeCard())}
+          exercise={exercise}
+          score={shown}
+          tempo={shown.tempo}
+          playedAt={card.showing === "saved" ? latest.score?.createdAt : undefined}
+          actions={
+            card.showing === "run" ? (
+              <>
+                <Button variant="ghost" onClick={closeCard}>
+                  <Eye />
+                  See it on the staff
+                </Button>
+                <Button onClick={tryAgain}>
+                  <RotateCcw />
+                  Try again
+                </Button>
+                <Button asChild variant="primary">
+                  <Link to={back.to} state={back.state}>
+                    <ArrowLeft />
+                    {backTo(from)}
+                  </Link>
+                </Button>
+              </>
+            ) : (
+              <Button onClick={closeCard}>Close</Button>
+            )
+          }
+        />
+      ) : null}
     </FocusShell>
   );
 }
@@ -536,46 +767,5 @@ function MetronomeTool({
             : "No count-in and no click: the music starts as soon as you press Play."}
       </Text>
     </Flex>
-  );
-}
-
-/** A placeholder until scoring arrives. */
-function ResultsDialog({
-  open,
-  onOpenChange,
-  back,
-  backLabel,
-  onTryAgain,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  back: { to: string; state: PracticedState };
-  backLabel: string;
-  onTryAgain: () => void;
-}) {
-  return (
-    <Dialog.Root placement="center" open={open} onOpenChange={(e) => onOpenChange(e.open)}>
-      <Portal>
-        <Dialog.Backdrop bg="bg.backdrop" />
-        <Dialog.Positioner>
-          <Dialog.Content maxWidth="400px" p="lg" gap="md" borderWidth="1px" borderColor="border">
-            <Dialog.Title textStyle="heading.lg">Congrats!</Dialog.Title>
-            <Dialog.Description textStyle="body">Your score is: --</Dialog.Description>
-            <Flex justify="flex-end" gap="sm" mt="sm" wrap="wrap">
-              <Button onClick={onTryAgain}>
-                <RotateCcw />
-                Try again
-              </Button>
-              <Button asChild variant="primary">
-                <Link to={back.to} state={back.state}>
-                  <ArrowLeft />
-                  {backLabel}
-                </Link>
-              </Button>
-            </Flex>
-          </Dialog.Content>
-        </Dialog.Positioner>
-      </Portal>
-    </Dialog.Root>
   );
 }

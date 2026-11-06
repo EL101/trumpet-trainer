@@ -91,6 +91,7 @@ model User {
   history          History[]
   library          Library[]
   etudeGenerations EtudeGeneration[]
+  practiceScores   PracticeScore[]
 
   @@index([isAnonymous, lastSeenAt], map: "idx_users_anonymous_last_seen")
   @@map("users")
@@ -145,4 +146,44 @@ model UserAvatar {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_avatars")
+}
+
+/// One scored run of an exercise in the player's Play mode: a 0–100 score for each
+/// of the four things it judges, their weighted average, and the feedback written
+/// under each. The player and the exercise cards show the newest one per exercise.
+/// Rows are kept for the user's progress: the hourly prune only clears feedback.
+model PracticeScore {
+  id                 String       @id @default(uuid())
+  userId             String       @map("user_id")
+  /// The exercise played, as its history and library rows name it. Not a foreign
+  /// key: an exercise can be in either table, or move from one to the other, and its
+  /// scores outlive it (the user's progress).
+  exerciseId         String       @map("exercise_id") @db.Uuid
+  /// What the exercise was, copied from its row when the run was saved, so the score
+  /// still says what was played once the exercise is gone.
+  exerciseType       ExerciseType @map("exercise_type")
+  timeSig            String       @map("time_sig")
+  musicKey           String       @map("music_key")
+  noteRange          String       @map("note_range")
+  difficulty         String
+  /// Beats per minute the run was played at.
+  tempo              Int
+  overall            Int
+  rightNotesScore    Int          @map("right_notes_score")
+  rhythmScore        Int          @map("rhythm_score")
+  intonationScore    Int          @map("intonation_score")
+  toneScore          Int          @map("tone_score")
+  /// Each a list of `{ bar, text, … }` notes, as `ScoreNoteSchema` describes. All four
+  /// are cleared (null) once the run's feedback is let go: its exercise is gone, or
+  /// it's past the exercise's newest scores. The scores above stay.
+  rightNotesFeedback Json?        @map("right_notes_feedback")
+  rhythmFeedback     Json?        @map("rhythm_feedback")
+  intonationFeedback Json?        @map("intonation_feedback")
+  toneFeedback       Json?        @map("tone_feedback")
+  createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, exerciseId, createdAt(sort: Desc)], map: "idx_practice_scores_user_exercise_created")
+  @@map("practice_scores")
 }

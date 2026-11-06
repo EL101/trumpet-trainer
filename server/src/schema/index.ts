@@ -14,3 +14,4 @@ export {
   type AvatarUpload,
   type Profile,
 } from "./profile.js";
+export { ScoreInputSchema, ScoreNoteSchema, type ScoreInput } from "./score.js";

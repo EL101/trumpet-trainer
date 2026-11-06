@@ -1,3 +1,4 @@
+import { Key, Note } from "tonal";
 import { splitNotes } from "@/utils/splitNotes";
 
 export type ParsedNote = {
@@ -52,4 +53,55 @@ export function parseMeasures(notes: string, timeSig: string): ParsedNote[][] {
 export function resolveMeasuresPerLine(requested: number | undefined, measureCount: number) {
   if (requested != null && requested >= 1) return Math.floor(requested);
   return Math.max(1, measureCount);
+}
+
+const LETTERS = "CDEFGAB";
+
+/** A written note spelt for a key, and where it sits on the staff. */
+export type Spelling = {
+  /** "Bb4", "F#5". */
+  name: string;
+  /** The accidental to draw by it, given the key signature: "" for none, "n" for a natural. */
+  accidental: "" | "#" | "b" | "n";
+  /** Its line, as VexFlow counts: 0 for middle C, 1 for the bottom line, 0.5 a step. */
+  line: number;
+};
+
+/**
+ * How to write a pitch (a MIDI number) in a major key signature ("F", "Bb", "C"): as
+ * the key's own note if it's in the scale, otherwise with sharps in sharp keys and flats
+ * in flat ones (and in C).
+ */
+export function spellInKey(midi: number, keySig: string): Spelling {
+  const scale = Key.majorKey(keySig).scale;
+  const flats = scale.some((pc) => pc.endsWith("b")) || scale.every((pc) => pc.length === 1);
+  const pc =
+    scale.find((p) => Note.chroma(p) === ((midi % 12) + 12) % 12) ??
+    Note.pitchClass(flats ? Note.fromMidi(midi) : Note.fromMidiSharps(midi));
+  const { letter, acc } = Note.get(pc);
+  // Cb5 is a B4, B#3 a C4: find the octave whose note this is.
+  const guess = Math.floor(midi / 12) - 1;
+  const octave = [guess - 1, guess, guess + 1].find((o) => Note.midi(`${pc}${o}`) === midi)!;
+  const inKey = Note.get(scale.find((p) => p[0] === letter)!).acc;
+  return {
+    name: `${pc}${octave}`,
+    accidental: acc === inKey ? "" : acc === "" ? "n" : (acc[0] as "#" | "b"),
+    line: ((octave - 4) * 7 + LETTERS.indexOf(letter)) / 2,
+  };
+}
+
+/**
+ * One bar of an exercise as a note string of its own (every duration written out, ties
+ * and slurs left off, as they'd lead nowhere), and the index of its first note in the
+ * whole exercise, rests counted. `bar` counts from 0.
+ */
+export function barExcerpt(notes: string, timeSig: string, bar: number) {
+  const measures = parseMeasures(notes, timeSig);
+  const first = measures.slice(0, bar).reduce((sum, m) => sum + m.length, 0);
+  const tokens = (measures[bar] ?? []).map((n) => {
+    const [name, octave] = n.key.split("/");
+    const pitch = `${name[0].toUpperCase()}${name.slice(1)}${octave}`;
+    return `${pitch}/${n.duration}${n.dotted ? "." : ""}${n.rest ? "/r" : ""}`;
+  });
+  return { notes: tokens.join(", "), first };
 }

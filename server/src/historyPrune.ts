@@ -1,4 +1,5 @@
 import { HISTORY_LIMIT, pruneHistory } from "./queries/exercises.js";
+import { FEEDBACK_PER_EXERCISE, pruneFeedback } from "./queries/scores.js";
 
 const PRUNE_INTERVAL_MS = 60 * 60 * 1000;
 
@@ -17,10 +18,23 @@ async function runOnce() {
     // Never let a prune failure take the process down; the next tick retries.
     console.error("History prune failed:", err);
   }
+  // After history: the feedback of exercises it has just let go (and that aren't in
+  // the library) goes with them. The scores themselves stay, for the user's progress.
+  try {
+    const cleared = await pruneFeedback();
+    if (cleared > 0) {
+      console.log(
+        `Feedback prune: cleared ${cleared} score(s)' feedback, of exercises gone or past the newest ${FEEDBACK_PER_EXERCISE}`,
+      );
+    }
+  } catch (err) {
+    console.error("Feedback prune failed:", err);
+  }
 }
 
 /**
- * Periodically delete history rows past each user's newest HISTORY_LIMIT.
+ * Periodically delete history rows past each user's newest HISTORY_LIMIT, then clear
+ * the feedback of scores no history or library row shows any more.
  *
  * GET /api/history only ever returns those newest rows, so the extra rows that
  * build up between runs are already invisible; this just reclaims their space.

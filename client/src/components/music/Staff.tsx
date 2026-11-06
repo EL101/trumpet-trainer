@@ -21,7 +21,9 @@ import { prefersReducedMotion } from "@/lib/motion";
 import { roles } from "@/theme";
 import { getKeySig } from "@/utils/generateMusic";
 import type { Key } from "@/schema";
-import { parseMeasures, resolveMeasuresPerLine } from "@/lib/notation";
+import { parseMeasures, resolveMeasuresPerLine, spellInKey } from "@/lib/notation";
+import { buildTimeline, cursorAt, type Timeline } from "@/lib/timeline";
+import type { GhostNote } from "@/lib/transcribe";
 
 export type StaffProps = Omit<BoxProps, "children" | "width" | "color"> & {
   /** App note format, e.g. "G4/8, A4, B4/q, C5/h". */
@@ -37,6 +39,11 @@ export type StaffProps = Omit<BoxProps, "children" | "width" | "color"> & {
   measuresPerLine?: number;
   /** Cents deviation per note (rests included in the count); colours each note. */
   cents?: readonly (number | null)[];
+  /**
+   * Notes played that weren't the ones written, drawn in red where they were played,
+   * with their note values. Positions are in quarter notes from the top.
+   */
+  ghosts?: readonly GhostNote[];
   /** Fractional note index for the playback cursor. */
   cursor?: number;
   /** Makes the notes clickable: called with the index (rests counted) of the note clicked. */
@@ -66,6 +73,7 @@ export function Staff({
   scale = 1,
   measuresPerLine,
   cents,
+  ghosts,
   cursor,
   onNoteClick,
   annotate,
@@ -183,6 +191,15 @@ export function Staff({
     noteColor,
     showText,
   ]);
+
+  // Ghosts are drawn on their own too: while a run plays they come in as they're heard.
+  const timeline = useMemo(() => buildTimeline(notes, timeSig), [notes, timeSig]);
+  useEffect(() => {
+    if (!drawing || !ghosts?.length) return;
+    const keySig = musicKey ? getKeySig(musicKey) : "C";
+    const marks = drawGhosts(drawing.svg, drawing.placed, timeline, ghosts, keySig);
+    return () => marks.forEach((mark) => mark.remove());
+  }, [drawing, ghosts, timeline, musicKey]);
 
   useEffect(() => {
     if (!drawing || cursor == null) return;
@@ -611,15 +628,115 @@ function noteCenterX(n: StaveNote) {
   return (n.getNoteHeadBeginX() + n.getNoteHeadEndX()) / 2;
 }
 
+/** A ghost note's head and stem, in staff units, like VexFlow's. */
+const GHOST_HEAD = { rx: 6.3, ry: 4.6, tilt: -20 };
+const GHOST_STEM = 35;
+const ACCIDENTAL_GLYPHS = { "#": "♯", b: "♭", n: "♮" } as const;
+
+/**
+ * Draws each note played that wasn't the one written (`ghosts`) in red, where it was
+ * played and as long as it was held: its head (open for a half or whole note), stem,
+ * flags and dot, spelt for the key with an accidental if the key signature needs one,
+ * and ledger lines off the staff. A ghost that starts with a written note sits beside it,
+ * as a second would. Returns what it drew, for removal.
+ */
+function drawGhosts(
+  svg: SVGSVGElement,
+  placed: Placed[],
+  timeline: Timeline,
+  ghosts: readonly GhostNote[],
+  keySig: string,
+) {
+  if (!placed.length) return [];
+  const color = roles.intonation.bad;
+  return ghosts.map((ghost) => {
+    const { line, accidental } = spellInKey(ghost.midi, keySig);
+    const at = Math.min(ghost.start, timeline.end);
+    const { x: along, placed: p } = xAt(placed, cursorAt(timeline, at));
+    let x = along;
+    const head = p.note.getNoteHeadEndX() - p.note.getNoteHeadBeginX();
+    // One played with a written note sits beside it, so neither hides the other.
+    if (!p.rest && Math.abs(noteCenterX(p.note) - x) < head) x = noteCenterX(p.note) + head * 1.1;
+    const y = p.stave.getYForNote(line);
+    const group = svgEl("g", {
+      "data-ghost": ghost.midi,
+      "data-length": ghost.length,
+      opacity: 0.8,
+    });
+    const stroke = (attrs: Record<string, string | number>, width = 1) =>
+      group.appendChild(svgEl("line", { ...attrs, "stroke-width": width }, { stroke: color }));
+
+    // Ledger lines from the staff out to the ghost: below the bottom line, above the top.
+    for (let l = 0; l >= Math.ceil(line); l--) {
+      const ly = p.stave.getYForNote(l);
+      stroke({ x1: x - 9, x2: x + 9, y1: ly, y2: ly });
+    }
+    for (let l = 6; l <= Math.floor(line); l++) {
+      const ly = p.stave.getYForNote(l);
+      stroke({ x1: x - 9, x2: x + 9, y1: ly, y2: ly });
+    }
+    if (accidental) {
+      const t = svgEl(
+        "text",
+        { x: x - GHOST_HEAD.rx - 3, y: y + 4.5, "text-anchor": "end", "font-size": 14 },
+        { fill: color },
+      );
+      t.textContent = ACCIDENTAL_GLYPHS[accidental];
+      group.appendChild(t);
+    }
+
+    const open = ghost.length >= 2;
+    group.appendChild(
+      svgEl(
+        "ellipse",
+        {
+          cx: x,
+          cy: y,
+          rx: open ? GHOST_HEAD.rx - 0.8 : GHOST_HEAD.rx,
+          ry: open ? GHOST_HEAD.ry - 0.8 : GHOST_HEAD.ry,
+          transform: `rotate(${GHOST_HEAD.tilt} ${x} ${y})`,
+          "stroke-width": open ? 1.6 : 0,
+        },
+        { fill: open ? "none" : color, stroke: color },
+      ),
+    );
+
+    // A stem for all but a whole note: up from the lower half of the staff, else down,
+    // with a flag for an eighth and two for a sixteenth.
+    if (ghost.length < 4) {
+      const up = line < 3;
+      const sx = up ? x + GHOST_HEAD.rx - 0.6 : x - GHOST_HEAD.rx + 0.6;
+      const tip = up ? y - GHOST_STEM : y + GHOST_STEM;
+      stroke({ x1: sx, x2: sx, y1: y, y2: tip }, 1.3);
+      const flags = ghost.length <= 0.25 ? 2 : ghost.length < 1 ? 1 : 0;
+      for (let f = 0; f < flags; f++) {
+        const fy = up ? tip + f * 7 : tip - f * 7;
+        const d = up ? `M ${sx} ${fy} c 0 6 10 8 8 18` : `M ${sx} ${fy} c 0 -6 10 -8 8 -18`;
+        group.appendChild(
+          svgEl("path", { d, "stroke-width": 1.6, fill: "none" }, { stroke: color }),
+        );
+      }
+    }
+    if ([3, 1.5, 0.75].includes(ghost.length)) {
+      // In the space above, if the head sits on a line.
+      const dy = Number.isInteger(line) ? -5 : 0;
+      group.appendChild(
+        svgEl("circle", { cx: x + GHOST_HEAD.rx + 5, cy: y + dy, r: 1.7 }, { fill: color }),
+      );
+    }
+    svg.appendChild(group);
+    return group;
+  });
+}
+
 const CURSOR_BAND = 28;
 
 /**
- * Draws the cursor band and rule behind the notes; returns them for removal. Through a
- * note the cursor glides towards the next one, or for a line's last note, towards the
- * line's end.
+ * Where a fractional note index (`cursorAt`) falls across the staff, and the note it's
+ * in. Through a note it glides towards the next one, or for a line's last note, towards
+ * the line's end.
  */
-function drawCursor(svg: SVGSVGElement, placed: Placed[], cursor: number) {
-  if (!placed.length) return [];
+function xAt(placed: Placed[], cursor: number) {
   const i0 = Math.max(0, Math.min(placed.length - 1, Math.floor(cursor)));
   const q0 = placed[i0];
   const q1 = placed[i0 + 1];
@@ -628,7 +745,13 @@ function drawCursor(svg: SVGSVGElement, placed: Placed[], cursor: number) {
     q1 && q1.stave.getY() === q0.stave.getY()
       ? noteCenterX(q1.note)
       : Math.max(from, q0.stave.getNoteEndX() - CURSOR_BAND / 2);
-  const x = from + (to - from) * Math.min(1, Math.max(0, cursor - i0));
+  return { x: from + (to - from) * Math.min(1, Math.max(0, cursor - i0)), placed: q0 };
+}
+
+/** Draws the cursor band and rule behind the notes (at `xAt`); returns them for removal. */
+function drawCursor(svg: SVGSVGElement, placed: Placed[], cursor: number) {
+  if (!placed.length) return [];
+  const { x, placed: q0 } = xAt(placed, cursor);
   const top = q0.stave.getYForLine(0) - 20;
   const bottom = q0.stave.getYForLine(4) + 20;
 

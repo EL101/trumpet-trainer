@@ -129,6 +129,52 @@ has numbered the exercise, because the player loads exercises from history:
 Its label defaults to "Practice with feedback"; pass `label` to change it (the library's
 panel says just "Practice").
 
+### Listen, Play and the score card
+
+The player has two modes (kept per browser). **Listen** plays the exercise on the
+trumpet. **Play** is the player's own run: the trumpet stays quiet (only the count-in and
+the metronome, if it's on, sound), and the microphone listens. When the run ends it's
+scored and the score card opens. The tempo is saved with the score, so in Play the tempo
+control is locked (`TempoControl`'s `locked`) from Play until the take ends or restarts,
+paused included.
+
+- **Listening:** `hooks/useRunRecorder.ts` reads the microphone on the playback's own
+  audio clock and places every frame in the music with `Playback.positionHeardAt()`,
+  allowing for the speakers' and the microphone's delay. Going back over a bar records
+  it afresh.
+- **Scoring:** `scoreRun()` in `lib/scoring.ts` (pure, with tests) scores four parts
+  from 0 to 100: right notes, rhythm, intonation, and steadiness & tone, weighted
+  40/30/20/10 (`SCORE_PARTS`) into the overall score. Each part comes with feedback
+  lines (`{ bar, beat, text, … }`) worded for the player: sharp, flat, wavered,
+  rushed, never cents. It also gives per-note cents and ghost notes for the staff.
+- **Transcribing:** `transcribe()` in `lib/transcribe.ts` splits what was heard into the
+  notes played (pitch, start, end), and `toGhost()` writes each as a note value from how
+  long it lasted at the tempo, snapped to a sixteenth. `wrongNotes()` picks the ones that
+  aren't the note written where they sounded. A held note carries on through a little
+  wavering or being out of tune, and through the microphone losing it for up to 0.2 s,
+  unless a written note starts in that silence (then it's a tongued repeat). Pitches
+  heard below the trumpet's range
+  are subharmonics, taken back up to the note due (`heardPitch()` in `lib/hearing.ts`).
+- **On the staff, as it plays:** every 150 ms the player marks what's been heard so far:
+  wrong notes as red ghost notes (`Staff`'s `ghosts`) where and as long as they sounded,
+  with stems, flags and dots, spelt for the key by `spellInKey()`, and each written note's
+  intonation colour once it's over. While a take records, the staff shows only its live
+  marks; the scored run's replace them when it ends. Ghosts are drawn over the staff on their own, like the
+  cursor, so they don't redraw it.
+- **The score card** is `music/ScoreCard` (mockup B): the overall score and weights in a
+  side column, then a row per part. A wrong note's line shows its bar with the note
+  played drawn over it, held for as long as it was. Closing it ("See it on the staff")
+  leaves the run marked on the staff. Try again (or Restart) takes the marks off and goes
+  back to the top.
+- **Saved scores:** each scored run is saved with `POST /api/scores` (`utils/scores.ts`),
+  each score and each part's feedback in its own column. `GET /api/scores/latest/:id`
+  gives the newest that still has its feedback. `LastFeedbackButton` (beside Practice on
+  Generate and in the library's panel) and the player's "Last feedback" open it. Scores
+  are never deleted, for the user's progress: each keeps what its exercise was (type,
+  key, time signature, range, difficulty), and the hourly prune only clears the
+  feedback, of runs past an exercise's newest 20 and of exercises in neither history nor
+  the library.
+
 ## The library
 
 `pages/Library.tsx` (route `/library`, mockups 1i and 6a) shows every saved exercise as
