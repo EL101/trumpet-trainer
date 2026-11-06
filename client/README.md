@@ -136,12 +136,16 @@ trumpet. **Play** is the player's own run: the trumpet stays quiet (only the cou
 the metronome, if it's on, sound), and the microphone listens. When the run ends it's
 scored and the score card opens. The tempo is saved with the score, so in Play the tempo
 control is locked (`TempoControl`'s `locked`) from Play until the take ends or restarts,
-paused included.
+paused included. A run is scored whole, so Play always starts from the top: clicking a
+note or the previous and next bar buttons doesn't move the music, it shows a brief
+notice (`notify`'s `duration: BRIEF_NOTICE_MS`, with an `id` so repeats don't stack)
+saying to switch to Listen. If the page is hidden mid-take (another tab, a locked phone)
+the take pauses, since the microphone is read on animation frames, which stop there.
 
 - **Listening:** `hooks/useRunRecorder.ts` reads the microphone on the playback's own
   audio clock and places every frame in the music with `Playback.positionHeardAt()`,
-  allowing for the speakers' and the microphone's delay. Going back over a bar records
-  it afresh.
+  allowing for the speakers' and the microphone's delay. Resume goes back to the start
+  of the bar paused in and records it afresh.
 - **Scoring:** `scoreRun()` in `lib/scoring.ts` (pure, with tests) scores four parts
   from 0 to 100: right notes, rhythm, intonation, and steadiness & tone, weighted
   40/30/20/10 (`SCORE_PARTS`) into the overall score. Each part comes with feedback
@@ -173,7 +177,11 @@ paused included.
   are never deleted, for the user's progress: each keeps what its exercise was (type,
   key, time signature, range, difficulty), and the hourly prune only clears the
   feedback, of runs past an exercise's newest 20 and of exercises in neither history nor
-  the library.
+  the library. A user can save at most 10 runs a minute and 300 a day (`SCORE_LIMITS` in
+  `server/src/queries/scores.ts`, counted in the database under a lock on the user's row).
+  Past either, the save is turned down with a 429 naming the limit, and the player says
+  "Score not saved: too many runs" (`scoreLimitOf()`), still showing the run's card.
+- **Pausing** turns the microphone off; Resume opens it again and the take carries on.
 
 ## The library
 
@@ -208,6 +216,8 @@ lower (`CONCERT_OFFSET` in `lib/tuning.ts`). The trumpet samples are in
 
 - **Use text styles, not ad-hoc font sizes:**
   `<Text textStyle="heading.md">`, `<Heading textStyle="display.md">`, `<Text textStyle="kicker">`.
+  Between the sizes: `subheading` (a row's label, a size up from `heading.sm`) and
+  `small` (body a size down, for short lines in a list).
 - **Spacing:** the design system's scale is `xs`, `sm`, `md`, `lg`, `xl`, `2xl`
   (4.6px through 36.8px). Chakra's numeric scale (`p={4}`) still works, but it's what
   the old pages use.

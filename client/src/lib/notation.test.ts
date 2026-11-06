@@ -3,6 +3,7 @@ import {
   barExcerpt,
   parseMeasures,
   parseNote,
+  pitchName,
   resolveMeasuresPerLine,
   spellInKey,
 } from "./notation";
@@ -151,6 +152,14 @@ describe("spellInKey", () => {
   it("finds the octave of a note spelt across one", () => {
     expect(spellInKey(71, "Gb")).toEqual({ name: "Cb5", accidental: "", line: 3.5 });
     expect(spellInKey(60, "C#")).toEqual({ name: "B#3", accidental: "", line: -0.5 });
+  });
+});
+
+describe("pitchName", () => {
+  it("writes VexFlow's key as the app does, accidentals and all", () => {
+    expect(pitchName(parseNote("Bb4/q", "q"))).toBe("Bb4");
+    expect(pitchName(parseNote("C#5/8", "q"))).toBe("C#5");
+    expect(pitchName(parseNote("G3/h/r", "q"))).toBe("G3");
   });
 });
 

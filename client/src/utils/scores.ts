@@ -30,6 +30,22 @@ function fromRow(row: ScoreRow): SavedScore {
   return { exerciseId, tempo, overall, createdAt, parts };
 }
 
+/** A limit on how many scored runs can be saved: `max` of them a `per`. */
+export type ScoreLimit = { max: number; per: "minute" | "day" };
+
+/**
+ * The limit a save was turned down for (the server's 429), or null if `error` isn't
+ * that. Mirrors the server's SCORE_LIMITS.
+ */
+export function scoreLimitOf(error: unknown): ScoreLimit | null {
+  if (!(error instanceof ApiError) || error.status !== 429) return null;
+  const limit = (error.body as { limit?: Partial<ScoreLimit> } | null)?.limit;
+  if (typeof limit?.max !== "number" || (limit.per !== "minute" && limit.per !== "day")) {
+    return null;
+  }
+  return { max: limit.max, per: limit.per };
+}
+
 /** Saves a scored run. Resolves to it as saved, or null without a signed-in user; throws if it couldn't be. */
 export async function saveScore(
   exerciseId: string,

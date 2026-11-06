@@ -98,10 +98,14 @@ export function spellInKey(midi: number, keySig: string): Spelling {
 export function barExcerpt(notes: string, timeSig: string, bar: number) {
   const measures = parseMeasures(notes, timeSig);
   const first = measures.slice(0, bar).reduce((sum, m) => sum + m.length, 0);
-  const tokens = (measures[bar] ?? []).map((n) => {
-    const [name, octave] = n.key.split("/");
-    const pitch = `${name[0].toUpperCase()}${name.slice(1)}${octave}`;
-    return `${pitch}/${n.duration}${n.dotted ? "." : ""}${n.rest ? "/r" : ""}`;
-  });
+  const tokens = (measures[bar] ?? []).map(
+    (n) => `${pitchName(n)}/${n.duration}${n.dotted ? "." : ""}${n.rest ? "/r" : ""}`,
+  );
   return { notes: tokens.join(", "), first };
+}
+
+/** A parsed note's pitch as the app writes it: VexFlow's "bb/4" is "Bb4". */
+export function pitchName({ key }: ParsedNote) {
+  const [name, octave] = key.split("/");
+  return `${name[0].toUpperCase()}${name.slice(1)}${octave}`;
 }

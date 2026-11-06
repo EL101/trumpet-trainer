@@ -1,6 +1,7 @@
-import { Prisma } from "../generated/prisma/client.js";
+import { Prisma, type History, type PracticeScore } from "../generated/prisma/client.js";
 import { prisma } from "../db.js";
 import type { ScoreInput } from "../schema/index.js";
+import { findExercise } from "./exercises.js";
 
 /**
  * Scored runs that keep their feedback, per exercise. Older runs, and every run of an
@@ -8,35 +9,69 @@ import type { ScoreInput } from "../schema/index.js";
  */
 export const FEEDBACK_PER_EXERCISE = 20;
 
-/** What an exercise was, as a score keeps it. */
-const EXERCISE_INFO = {
-  exerciseType: true,
-  timeSig: true,
-  musicKey: true,
-  noteRange: true,
-  difficulty: true,
-} as const;
+/**
+ * How many scored runs a user can save: so many in any minute, and so many in any 24
+ * hours (rolling, like the etude quota). The day comes first, so a user over both is
+ * told about the one that lasts.
+ */
+export const SCORE_LIMITS = [
+  { max: 300, per: "day", windowMs: 24 * 60 * 60 * 1000 },
+  { max: 10, per: "minute", windowMs: 60 * 1000 },
+] as const;
 
-export type ExerciseInfo = Prisma.HistoryGetPayload<{ select: typeof EXERCISE_INFO }>;
+export type ScoreLimit = (typeof SCORE_LIMITS)[number];
+
+/** What an exercise was, as a score keeps it. */
+export type ExerciseInfo = Pick<
+  History,
+  "exerciseType" | "timeSig" | "musicKey" | "noteRange" | "difficulty"
+>;
 
 /**
  * The user's exercise, from their history or else their library, as a score keeps it:
  * null if it's in neither (not theirs, or gone).
  */
-export async function findExercise(
+export async function findExerciseInfo(
   userId: string,
   exerciseId: string,
 ): Promise<ExerciseInfo | null> {
-  const where = { userId, exerciseId };
   const [history, library] = await Promise.all([
-    prisma.history.findFirst({ where, select: EXERCISE_INFO }),
-    prisma.library.findFirst({ where, select: EXERCISE_INFO }),
+    findExercise("history", userId, exerciseId),
+    findExercise("library", userId, exerciseId),
   ]);
-  return history ?? library;
+  const row = history ?? library;
+  if (!row) return null;
+  const { exerciseType, timeSig, musicKey, noteRange, difficulty } = row;
+  return { exerciseType, timeSig, musicKey, noteRange, difficulty };
 }
 
-export function insertScore(userId: string, exercise: ExerciseInfo, input: ScoreInput) {
-  return prisma.practiceScore.create({ data: { userId, ...exercise, ...input } });
+/**
+ * Saves a scored run, unless the user has saved as many as a limit allows in its window
+ * (`SCORE_LIMITS`): then nothing is saved, and the limit is returned.
+ *
+ * The count and the insert run in one transaction holding a lock on the user's row, so
+ * two saves at once are counted one after the other and can't both slip in under a
+ * limit. Raw SQL for the lock, which Prisma can't take. NO KEY UPDATE, not UPDATE, so
+ * it doesn't hold up the user's other writes that point at their row (history, the
+ * library). Covered in test/scores.test.ts.
+ */
+export function insertScore(
+  userId: string,
+  exercise: ExerciseInfo,
+  input: ScoreInput,
+): Promise<{ saved: PracticeScore } | { limited: ScoreLimit }> {
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT 1 FROM users WHERE id = ${userId} FOR NO KEY UPDATE`;
+    for (const limit of SCORE_LIMITS) {
+      const used = await tx.practiceScore.count({
+        where: { userId, createdAt: { gt: new Date(Date.now() - limit.windowMs) } },
+      });
+      if (used >= limit.max) return { limited: limit };
+    }
+    return {
+      saved: await tx.practiceScore.create({ data: { userId, ...exercise, ...input } }),
+    };
+  });
 }
 
 /**

@@ -173,7 +173,7 @@ export function ScoreCard({
                       borderBottomWidth="1px"
                       borderColor="border"
                     >
-                      <Heading as="h3" textStyle="heading.sm" fontSize="18px" m={0}>
+                      <Heading as="h3" textStyle="subheading" m={0}>
                         {label}
                       </Heading>
                       <Text
@@ -200,12 +200,7 @@ export function ScoreCard({
                             ))}
                           </Flex>
                         ) : (
-                          <Text
-                            textStyle="body"
-                            fontSize="14px"
-                            fontStyle="italic"
-                            color="fg.muted"
-                          >
+                          <Text textStyle="small" fontStyle="italic" color="fg.muted">
                             Nothing to work on here.
                           </Text>
                         )}
@@ -241,7 +236,7 @@ function FeedbackLine({ note, exercise }: { note: ScoreNote; exercise: MusicInfo
   );
   if (note.played === undefined || note.index === undefined || note.bar === undefined) {
     return (
-      <Text as="li" textStyle="body" fontSize="14px">
+      <Text as="li" textStyle="small">
         {text}
       </Text>
     );
@@ -255,7 +250,7 @@ function FeedbackLine({ note, exercise }: { note: ScoreNote; exercise: MusicInfo
         played={note.played}
         playedLength={note.playedLength}
       />
-      <Text textStyle="body" fontSize="14px" flex="1" minWidth="150px">
+      <Text textStyle="small" flex="1" minWidth="150px">
         {text}
       </Text>
     </Flex>

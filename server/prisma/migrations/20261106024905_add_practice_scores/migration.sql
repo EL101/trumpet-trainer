@@ -51,6 +51,11 @@ CREATE TABLE "practice_scores" (
 -- CreateIndex
 CREATE INDEX "idx_practice_scores_user_exercise_created" ON "practice_scores"("user_id", "exercise_id", "created_at" DESC);
 
+-- A user's runs by when they were saved: the rate limit counts those in the last minute
+-- and the last day on every save, which would otherwise read every run the user has.
+-- CreateIndex
+CREATE INDEX "idx_practice_scores_user_created" ON "practice_scores"("user_id", "created_at" DESC);
+
 -- Only the runs that still have feedback, which stay few (an exercise's newest 20) while
 -- the table keeps every run: the newest one read back per exercise, and the hourly
 -- prune's search for feedback to clear, which would otherwise read the whole table.

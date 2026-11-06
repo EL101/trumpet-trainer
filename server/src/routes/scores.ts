@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { ScoreInputSchema } from "../schema/index.js";
-import { findExercise, insertScore, latestScore } from "../queries/scores.js";
+import { findExerciseInfo, insertScore, latestScore } from "../queries/scores.js";
 
 const router = Router();
 
@@ -16,11 +16,20 @@ router.post("/", requireAuth, async (req: Request, res: Response) => {
   try {
     // Only the user's own exercises get scores, and each keeps what its exercise was
     // (from the server's own row, not the request) for when the exercise is gone.
-    const exercise = await findExercise(uid, parsed.data.exerciseId);
+    const exercise = await findExerciseInfo(uid, parsed.data.exerciseId);
     if (!exercise) {
       return res.status(404).json({ error: "Exercise not found" });
     }
-    res.status(201).json(await insertScore(uid, exercise, parsed.data));
+    const result = await insertScore(uid, exercise, parsed.data);
+    if ("limited" in result) {
+      // `limit` says which (`max` runs a `per`), for the player to say so.
+      const { max, per } = result.limited;
+      return res.status(429).json({
+        error: `Too many scored runs: at most ${max} can be saved a ${per}.`,
+        limit: { max, per },
+      });
+    }
+    res.status(201).json(result.saved);
   } catch (err) {
     console.error("Failed to save score:", err);
     res.status(500).json({ error: "Failed to save score" });

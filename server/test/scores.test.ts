@@ -152,6 +152,81 @@ describe("POST /api/scores", () => {
   });
 });
 
+/** Scores straight into the table, saved `ago` minutes back from now. */
+async function addRecentScores(userId: string, exerciseId: string, ago: number[]) {
+  await prisma.practiceScore.createMany({
+    data: ago.map((minutes) => ({
+      ...scoreBody(exerciseId),
+      ...exerciseInfo,
+      userId,
+      createdAt: new Date(Date.now() - minutes * 60_000),
+    })),
+  });
+}
+
+describe("POST /api/scores rate limit", () => {
+  it("turns down an eleventh run in a minute, saying which limit", async () => {
+    const uid = newUid();
+    const exerciseId = await userWithExercise(uid);
+    await addRecentScores(uid, exerciseId, Array(10).fill(0.5));
+
+    const res = await post(uid, scoreBody(exerciseId));
+
+    expect(res.status).toBe(429);
+    expect(res.body.limit).toEqual({ max: 10, per: "minute" });
+    expect(await prisma.practiceScore.count({ where: { userId: uid } })).toBe(10);
+  });
+
+  it("turns down a 301st run in a day, spread out over it", async () => {
+    const uid = newUid();
+    const exerciseId = await userWithExercise(uid);
+    // One every 4 minutes, from 2 minutes ago back 20 hours: none in the last minute.
+    await addRecentScores(
+      uid,
+      exerciseId,
+      Array.from({ length: 300 }, (_, i) => 2 + i * 4),
+    );
+
+    const res = await post(uid, scoreBody(exerciseId));
+
+    expect(res.status).toBe(429);
+    expect(res.body.limit).toEqual({ max: 300, per: "day" });
+  });
+
+  it("counts only the runs inside each window", async () => {
+    const uid = newUid();
+    const exerciseId = await userWithExercise(uid);
+    // Ten a couple of minutes ago, and 300 more over a day ago.
+    await addRecentScores(uid, exerciseId, Array(10).fill(2));
+    await addRecentScores(uid, exerciseId, Array(300).fill(24 * 60 + 5));
+
+    expect((await post(uid, scoreBody(exerciseId))).status).toBe(201);
+  });
+
+  it("counts each user's runs on their own", async () => {
+    const busy = newUid();
+    const busyExercise = await userWithExercise(busy);
+    await addRecentScores(busy, busyExercise, Array(10).fill(0.5));
+    const uid = newUid();
+    const exerciseId = await userWithExercise(uid);
+
+    expect((await post(uid, scoreBody(exerciseId))).status).toBe(201);
+  });
+
+  it("lets only ten of twelve saves sent at once through", async () => {
+    const uid = newUid();
+    const exerciseId = await userWithExercise(uid);
+
+    const statuses = (
+      await Promise.all(Array.from({ length: 12 }, () => post(uid, scoreBody(exerciseId))))
+    ).map((res) => res.status);
+
+    expect(statuses.filter((s) => s === 201)).toHaveLength(10);
+    expect(statuses.filter((s) => s === 429)).toHaveLength(2);
+    expect(await prisma.practiceScore.count({ where: { userId: uid } })).toBe(10);
+  });
+});
+
 describe("GET /api/scores/latest/:exerciseId", () => {
   it("sends the newest scored run of the exercise", async () => {
     const uid = newUid();

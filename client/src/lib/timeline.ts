@@ -1,7 +1,7 @@
 import { Note } from "tonal";
 import { DURATION_TO_BEATS } from "@/utils/splitNotes";
 import { barQuarters, pulseOf } from "./meter";
-import { parseMeasures, type ParsedNote } from "./notation";
+import { parseMeasures, pitchName, type ParsedNote } from "./notation";
 
 /** One note or rest of an exercise, placed in time. Positions and lengths are in quarter notes. */
 export type TimedNote = {
@@ -61,7 +61,7 @@ export function buildTimeline(notes: string, timeSig: string): Timeline {
       start,
       length,
       midi: note.rest ? null : midiOf(note),
-      name: note.rest ? null : nameOf(note),
+      name: note.rest ? null : pitchName(note),
       tied: note.tied,
       slurred: inSlur && !note.slurEnd,
     });
@@ -131,11 +131,5 @@ export function soundingNotes({ notes }: Timeline): SoundingNote[] {
 }
 
 function midiOf(note: ParsedNote) {
-  return Note.midi(nameOf(note));
-}
-
-/** "bb/4" → "Bb4". */
-function nameOf(note: ParsedNote) {
-  const [name, octave] = note.key.split("/");
-  return `${name[0].toUpperCase()}${name.slice(1)}${octave}`;
+  return Note.midi(pitchName(note));
 }

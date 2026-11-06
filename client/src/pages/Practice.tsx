@@ -33,6 +33,7 @@ import {
   Tuner,
 } from "@/components/music";
 import {
+  BRIEF_NOTICE_MS,
   Button,
   IconButton,
   Kicker,
@@ -71,7 +72,7 @@ import { getKeySig } from "@/utils/generateMusic";
 import { getHistoryEntry } from "@/utils/history";
 import { getLibraryEntry } from "@/utils/library";
 import { lipSlurFingerings } from "@/utils/lipSlurs";
-import { saveScore } from "@/utils/scores";
+import { saveScore, scoreLimitOf } from "@/utils/scores";
 import type { MusicInfo } from "@/schema";
 
 /** The tools drawer opening and closing, timed and eased like the sidebar's entrance. */
@@ -265,6 +266,36 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
   const recorder = useRunRecorder({ ctx, positionHeardAt, recording, from: startsAt });
   const { heard } = recorder;
 
+  // Paused, the microphone goes off (and the browser's microphone light with it): Resume
+  // opens it again, and what the take has heard so far is kept.
+  const pauseHere = () => {
+    pause();
+    recorder.close();
+  };
+
+  // A hidden page (another tab, a locked phone) stops the frames the microphone is read
+  // on while the music plays on, which would score the rest as missed: pause the take
+  // instead, and Resume carries it on.
+  const pauseTake = useRef(pauseHere);
+  useEffect(() => {
+    pauseTake.current = pauseHere;
+  });
+  useEffect(() => {
+    if (!recording) return;
+    const onHide = () => {
+      if (!document.hidden) return;
+      pauseTake.current();
+      // Toasts wait out a hidden page, so this is there when the player comes back.
+      notify({
+        tone: "info",
+        title: "Your run is paused",
+        description: "It paused when the page was hidden. Resume to carry on.",
+      });
+    };
+    document.addEventListener("visibilitychange", onHide);
+    return () => document.removeEventListener("visibilitychange", onHide);
+  }, [recording]);
+
   // What's been heard so far in a scored run, marked on the staff as it comes in: the
   // wrong notes as ghosts, and each note's intonation once it's over.
   const [live, setLive] = useState<{ ghosts: GhostNote[]; cents: (number | null)[] } | null>(null);
@@ -319,6 +350,18 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
     saveScore(exercise.exerciseId, tempo, scored, user)
       .then((saved) => saved && latest.setScore(saved))
       .catch((error) => {
+        const limit = scoreLimitOf(error);
+        if (limit) {
+          notify({
+            tone: "error",
+            title: "Score not saved: too many runs",
+            description:
+              limit.per === "minute"
+                ? `Only ${limit.max} runs a minute can be saved. Take a breath, then play again to save the next one.`
+                : `You've reached the limit of ${limit.max} saved runs a day. This one is shown here, but it won't be under Last feedback.`,
+          });
+          return;
+        }
         console.error("save score error:", error);
         notify({
           tone: "error",
@@ -382,7 +425,7 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
             onClick: playFromTop,
           }
       : running
-        ? { icon: <Pause />, label: "Pause", onClick: pause }
+        ? { icon: <Pause />, label: "Pause", onClick: pauseHere }
         : {
             icon: <Play />,
             label: status === "paused" ? "Resume" : scoring ? "Play" : "Listen",
@@ -402,7 +445,19 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
 
   // Previous and next bar: from the bar being heard, or the one Play would start in.
   const bar = barNow({ status, position, from: startsAt }, timeline);
-  const toBar = (n: number) => seek(n * timeline.bar);
+  // A scored run is played through from the top, so in Play the music can't be jumped
+  // around: trying to says so, briefly (once, however many times it's tried).
+  const jumpTo = (to: number) => {
+    if (!scoring) return seek(to);
+    notify({
+      id: "play-from-the-top",
+      tone: "info",
+      title: "Play starts from the top",
+      description: "To jump around the music, switch to Listen.",
+      duration: BRIEF_NOTICE_MS,
+    });
+  };
+  const toBar = (n: number) => jumpTo(n * timeline.bar);
 
   // Back to the top, ready to play again, with the last run's marks taken off the staff.
   const tryAgain = () => {
@@ -478,7 +533,7 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
           cents={marks?.cents}
           ghosts={marks?.ghosts}
           cursor={cursorAt(timeline, countingIn ? startsAt : position)}
-          onNoteClick={(i) => seek(timeline.notes[i].start)}
+          onNoteClick={(i) => jumpTo(timeline.notes[i].start)}
           role="img"
           aria-label={`Score of ${typeLabel}${exercise.generationNum ? ` No. ${exercise.generationNum}` : ""}`}
         />
