@@ -58,8 +58,10 @@ export function latestScore(userId: string, exerciseId: string) {
  * rows were cleared.
  *
  * Raw SQL: the scores aren't related to history or library rows in the schema (an
- * exercise can be in either), so Prisma can't write the NOT EXISTS, and keeping the
- * newest per exercise needs a window function. Covered in test/scores.test.ts.
+ * exercise can be in either), so Prisma can't write the NOT EXISTS. A run is past the
+ * limit when `limit` newer runs of its exercise exist; that's counted per run that still
+ * has feedback, stopping at the limit, so the (user, exercise, created) index does the
+ * work and the table isn't ranked whole each hour. Covered in test/scores.test.ts.
  */
 export async function pruneFeedback(limit = FEEDBACK_PER_EXERCISE) {
   const orphans = await prisma.$executeRaw`
@@ -74,18 +76,17 @@ export async function pruneFeedback(limit = FEEDBACK_PER_EXERCISE) {
         SELECT 1 FROM library l WHERE l.user_id = s.user_id AND l.exercise_id = s.exercise_id
       )`;
   const excess = await prisma.$executeRaw`
-    UPDATE practice_scores
+    UPDATE practice_scores s
     SET right_notes_feedback = NULL, rhythm_feedback = NULL,
         intonation_feedback = NULL, tone_feedback = NULL
-    WHERE right_notes_feedback IS NOT NULL
-      AND id IN (
-        SELECT id FROM (
-          SELECT id, row_number() OVER (
-            PARTITION BY user_id, exercise_id ORDER BY created_at DESC, id DESC
-          ) AS place
-          FROM practice_scores
-        ) ranked
-        WHERE place > ${limit}
-      )`;
+    WHERE s.right_notes_feedback IS NOT NULL
+      AND (
+        SELECT count(*) FROM (
+          SELECT 1 FROM practice_scores n
+          WHERE n.user_id = s.user_id AND n.exercise_id = s.exercise_id
+            AND (n.created_at, n.id) > (s.created_at, s.id)
+          LIMIT ${limit}
+        ) newer
+      ) >= ${limit}`;
   return orphans + excess;
 }
