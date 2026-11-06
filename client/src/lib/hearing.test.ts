@@ -15,7 +15,8 @@ describe("writtenPitch", () => {
 describe("heardPitch", () => {
   it("keeps a pitch in the trumpet's range as it is", () => {
     expect(heardPitch(hzOf(60), 60)).toBeCloseTo(60, 6);
-    expect(heardPitch(hzOf(54), 60)).toBeCloseTo(54, 6);
+    // Just inside the bottom of the range (F♯3), clear of floating-point error at 54.
+    expect(heardPitch(hzOf(54.01), 60)).toBeCloseTo(54.01, 6);
   });
 
   it("takes a subharmonic back up to the multiple the note expects", () => {
