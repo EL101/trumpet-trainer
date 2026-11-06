@@ -7,7 +7,6 @@ import {
   Portal,
   Text,
   useBreakpointValue,
-  VisuallyHidden,
 } from "@chakra-ui/react";
 import {
   ArrowLeft,
@@ -16,8 +15,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
-  Mic,
-  MicOff,
   Pause,
   Play,
   RotateCcw,
@@ -28,16 +25,16 @@ import {
 } from "lucide-react";
 import { useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useLocation, useParams, useSearchParams } from "react-router-dom";
-import { Note } from "tonal";
 import { AuthUserContext } from "@/auth/AuthUserContext";
 import { FocusShell, NAV_ITEMS } from "@/components/layout";
 import {
+  BeatDots,
   ExerciseMeta,
-  NoteValue,
-  PitchReadout,
   Staff,
+  SubdivisionControl,
+  TempoControl,
   TempoMark,
-  TunerGauge,
+  Tuner,
 } from "@/components/music";
 import {
   Button,
@@ -46,16 +43,19 @@ import {
   notify,
   Rule,
   SegmentedControl,
-  Slider,
-  Stepper,
   type ChoiceOption,
 } from "@/components/primitives";
 import { usePersistedState } from "@/hooks/usePersistedState";
-import usePitch from "@/hooks/usePitch";
 import { usePlayback } from "@/hooks/usePlayback";
-import { formatPitch } from "@/lib/format";
 import { EXERCISE_TYPE_LABELS, KEYLESS } from "@/lib/generatorOptions";
-import { beatAt, MAX_TEMPO, MIN_TEMPO, pulseOf, type Pulse } from "@/lib/meter";
+import {
+  beatAt,
+  clampTempo,
+  DEFAULT_TEMPO,
+  pulseOf,
+  subdivisionFor,
+  type Pulse,
+} from "@/lib/meter";
 import { prefersReducedMotion } from "@/lib/motion";
 import {
   backTo,
@@ -67,13 +67,10 @@ import {
 } from "@/lib/practice";
 import { barAt, buildTimeline, cursorAt } from "@/lib/timeline";
 import { barNow } from "@/lib/transport";
-import { CONCERT_OFFSET, nearestNote } from "@/lib/tuning";
 import { getHistoryEntry } from "@/utils/history";
 import { getLibraryEntry } from "@/utils/library";
 import { lipSlurFingerings } from "@/utils/lipSlurs";
 import type { MusicInfo } from "@/schema";
-
-const DEFAULT_TEMPO = 80;
 
 /** The tools drawer opening and closing, timed and eased like the sidebar's entrance. */
 const DRAWER_MS = 300;
@@ -85,13 +82,6 @@ const DRAWER_PADDING = 28;
 /** Open or closed, the toggle sits where the rail centres it, so it stays put as the drawer slides. */
 const TOGGLE_SIZE = 30;
 const TOGGLE_INSET = (RAIL_WIDTH - TOGGLE_SIZE) / 2;
-
-type Notation = "written" | "concert";
-
-const NOTATION_OPTIONS: ChoiceOption<Notation>[] = [
-  { value: "written", label: "Written" },
-  { value: "concert", label: "Concert" },
-];
 
 const COUNT_IN_OPTIONS: ChoiceOption<"off" | "bar">[] = [
   { value: "off", label: "Off" },
@@ -187,13 +177,12 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
   const pulse = useMemo(() => pulseOf(timeSig), [timeSig]);
 
   const [storedTempo, setTempo] = usePersistedState("practiceTempo", DEFAULT_TEMPO);
-  const tempo = Math.min(MAX_TEMPO, Math.max(MIN_TEMPO, Number(storedTempo) || DEFAULT_TEMPO));
+  const tempo = clampTempo(storedTempo);
   const [notesOn, setNotesOn] = usePersistedState("practiceNotes", true);
   const [clickOn, setClickOn] = usePersistedState("practiceClick", true);
   const [clicksPerBeat, setClicksPerBeat] = usePersistedState("practiceSubdivision", 1);
   const [countIn, setCountIn] = usePersistedState("practiceCountIn", true);
-  // A choice made in another meter (sixteenths, then 6/8) falls back to the beat.
-  const subdivision = pulse.subdivisions.some((s) => s.per === clicksPerBeat) ? clicksPerBeat : 1;
+  const subdivision = subdivisionFor(pulse, clicksPerBeat);
   const [toolsOpen, setToolsOpen] = usePersistedState("practiceToolsOpen", true);
   const [showFingerings] = usePersistedState("showFingerings", true);
   const [resultsOpen, setResultsOpen] = useState(false);
@@ -369,44 +358,6 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
   );
 }
 
-/** The tempo as a stepper for fine steps and a slider for big ones. */
-function TempoControl({
-  pulse,
-  tempo,
-  onChange,
-}: {
-  pulse: Pulse;
-  tempo: number;
-  onChange: (tempo: number) => void;
-}) {
-  return (
-    // One group for screen readers, so the two controls are "fine" and "slider" within it.
-    // A floated legend lays out like any other flex item.
-    <Flex as="fieldset" justify="center" align="center" gap="md" wrap="wrap" minWidth={0}>
-      <Text as="legend" float="left" p={0} textStyle="meta" color="fg.muted">
-        Tempo
-      </Text>
-      <Stepper
-        value={tempo}
-        onChange={onChange}
-        min={MIN_TEMPO}
-        max={MAX_TEMPO}
-        format={(v) => <TempoMark pulse={pulse} bpm={v} />}
-        aria-label="Tempo, fine"
-      />
-      <Slider
-        value={tempo}
-        onChange={onChange}
-        min={MIN_TEMPO}
-        max={MAX_TEMPO}
-        width="160px"
-        aria-label="Tempo, slider"
-        aria-valuetext={`${tempo} beats per minute`}
-      />
-    </Flex>
-  );
-}
-
 /**
  * The right-hand drawer of tools, collapsible to a rail. It slides open and shut; on
  * narrow screens, where it sits below the music, it folds up instead.
@@ -509,7 +460,7 @@ function ToolsDrawer({
                   pb="xs"
                   _motionSafe={{ animation: `appear ${motion} backwards` }}
                 >
-                  <TunerTool />
+                  <Tuner />
                   <Rule />
                   <MetronomeTool {...metronome} />
                 </Flex>
@@ -518,77 +469,6 @@ function ToolsDrawer({
           </Grid>
         </Box>
       )}
-    </Flex>
-  );
-}
-
-/** The tuner. It only listens once asked to, and stops when the drawer closes. */
-function TunerTool() {
-  const { pitch, error, start, stop } = usePitch();
-  const [listening, setListening] = useState(false);
-  const [notation, setNotation] = usePersistedState<Notation>("tunerNotation", "written");
-  const active = listening && !error;
-  const heard = active ? nearestNote(pitch) : null;
-  // The microphone hears concert pitch; written is a whole tone above it.
-  const written = (midi: number) => midi - CONCERT_OFFSET;
-  const name = (midi: number) => formatPitch(Note.fromMidi(midi));
-  const shown = heard && (notation === "written" ? written(heard.midi) : heard.midi);
-  const other =
-    heard &&
-    (notation === "written"
-      ? `Concert ${name(heard.midi)}`
-      : `Written ${name(written(heard.midi))}`);
-
-  const toggle = () => {
-    if (active) {
-      stop();
-      setListening(false);
-    } else {
-      setListening(true);
-      void start();
-    }
-  };
-
-  return (
-    <Flex direction="column" gap="md">
-      <Flex justify="space-between" align="center" gap="sm" wrap="wrap">
-        <Heading as="h2" textStyle="heading.md" m={0}>
-          Tuner
-        </Heading>
-        <SegmentedControl
-          options={NOTATION_OPTIONS}
-          value={notation}
-          onChange={setNotation}
-          aria-label="Notes shown as"
-        />
-      </Flex>
-      <TunerGauge cents={heard?.cents ?? null} alignSelf="center" />
-      <PitchReadout
-        note={shown != null ? name(shown) : null}
-        cents={heard?.cents ?? null}
-        justify="center"
-      />
-      <Text
-        textStyle="caption"
-        color="fg.muted"
-        textAlign="center"
-        fontVariantNumeric="tabular-nums"
-      >
-        {heard
-          ? `${other} · ${pitch} Hz`
-          : active
-            ? "Listening…"
-            : "Uses your microphone only while it's listening."}
-      </Text>
-      {error && (
-        <Text role="alert" textStyle="meta" color="fg.error" textAlign="center">
-          The microphone couldn't be opened. Check that this site may use it.
-        </Text>
-      )}
-      <Button size="sm" alignSelf="center" onClick={toggle}>
-        {active ? <MicOff /> : <Mic />}
-        {active ? "Stop listening" : "Listen"}
-      </Button>
     </Flex>
   );
 }
@@ -617,18 +497,6 @@ function MetronomeTool({
   countIn,
   onCountInChange,
 }: MetronomeToolProps) {
-  const options = pulse.subdivisions.map((s) => ({
-    value: String(s.per),
-    label: (
-      <>
-        <span aria-hidden>
-          <NoteValue symbol={s.symbol} />
-        </span>
-        <VisuallyHidden>{s.label}</VisuallyHidden>
-      </>
-    ),
-  }));
-
   return (
     <Flex direction="column" gap="md">
       <Flex justify="space-between" align="center">
@@ -646,24 +514,8 @@ function MetronomeTool({
         </IconButton>
       </Flex>
       <Flex justify="space-between" align="center" gap="sm" wrap="wrap">
-        <Flex gap="sm" aria-hidden>
-          {Array.from({ length: pulse.beats }, (_, i) => (
-            <Box
-              key={i}
-              boxSize="20px"
-              borderRadius="full"
-              borderWidth={i === beat ? "1.5px" : "1px"}
-              borderColor={i === beat ? "accent.solid" : i === 0 ? "border.strong" : "border"}
-              bg={i === beat ? "accent.subtle" : undefined}
-            />
-          ))}
-        </Flex>
-        <SegmentedControl
-          options={options}
-          value={String(subdivision)}
-          onChange={(v) => onSubdivisionChange(Number(v))}
-          aria-label="Clicks per beat"
-        />
+        <BeatDots pulse={pulse} beat={beat} />
+        <SubdivisionControl pulse={pulse} value={subdivision} onChange={onSubdivisionChange} />
       </Flex>
       <Flex justify="space-between" align="center" gap="sm" wrap="wrap">
         <Text as="span" textStyle="meta" color="fg.muted">

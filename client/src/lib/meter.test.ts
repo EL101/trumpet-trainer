@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { barQuarters, beatAt, HALF_NOTE, pulseOf } from "./meter";
+import {
+  barQuarters,
+  beatAt,
+  clampTempo,
+  DEFAULT_TEMPO,
+  HALF_NOTE,
+  MAX_TEMPO,
+  MIN_TEMPO,
+  pulseOf,
+  subdivisionFor,
+} from "./meter";
 
 describe("pulseOf", () => {
   it("counts simple quarter-note meters in quarters", () => {
@@ -52,5 +62,29 @@ describe("beatAt", () => {
   it("counts compound meters in dotted quarters", () => {
     const pulse = pulseOf("6/8");
     expect([0, 1.4, 1.5, 2.9].map((p) => beatAt(pulse, p))).toEqual([0, 0, 1, 1]);
+  });
+});
+
+describe("clampTempo", () => {
+  it("keeps a tempo within the limits", () => {
+    expect(clampTempo(96)).toBe(96);
+    expect(clampTempo(10)).toBe(MIN_TEMPO);
+    expect(clampTempo(400)).toBe(MAX_TEMPO);
+  });
+
+  it("falls back to the default for a stored value that isn't a number", () => {
+    expect([undefined, null, "fast", NaN].map(clampTempo)).toEqual(Array(4).fill(DEFAULT_TEMPO));
+  });
+});
+
+describe("subdivisionFor", () => {
+  it("gives the clicks per beat the pulse offers", () => {
+    expect(subdivisionFor(pulseOf("4/4"), 4)).toBe(4);
+    expect(subdivisionFor(pulseOf("6/8"), 3)).toBe(3);
+  });
+
+  it("falls back to the plain beat for one it doesn't", () => {
+    expect(subdivisionFor(pulseOf("6/8"), 4)).toBe(1);
+    expect(subdivisionFor(pulseOf("4/4"), 3)).toBe(1);
   });
 });

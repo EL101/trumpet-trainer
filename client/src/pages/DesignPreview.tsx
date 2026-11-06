@@ -3,6 +3,7 @@ import { BookmarkPlus, Pause, Play, RotateCcw, SkipBack, SkipForward } from "luc
 import { useState, type ReactNode } from "react";
 import { AppShell, FocusShell, PageHeader, Sidebar } from "@/components/layout";
 import {
+  BeatDots,
   ExerciseMeta,
   IntonationLegend,
   NoteValue,
@@ -11,7 +12,10 @@ import {
   PracticeButton,
   ScoreFigure,
   Staff,
+  SubdivisionControl,
+  TempoControl,
   TempoMark,
+  Tuner,
   TunerGauge,
 } from "@/components/music";
 import {
@@ -60,6 +64,7 @@ export default function DesignPreview() {
   const [bars, setBars] = useState(2);
   const [cursor, setCursor] = useState(3.4);
   const [tempo, setTempo] = useState(96);
+  const [clicksPerBeat, setClicksPerBeat] = useState(2);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   return (
@@ -295,6 +300,9 @@ export default function DesignPreview() {
           <TunerGauge cents={9} width="220px" />
           <TunerGauge cents={-31} width="220px" />
           <TunerGauge cents={null} width="220px" />
+          <Card.Root size="lg" width="360px" maxWidth="100%">
+            <Tuner />
+          </Card.Root>
         </Flex>
         <Flex gap="2xl" mt="xl" wrap="wrap" align="flex-end">
           {["4/4", "2/2", "6/8", "3/8"].map((t) => {
@@ -315,6 +323,16 @@ export default function DesignPreview() {
               </Flex>
             );
           })}
+        </Flex>
+        <Flex gap="2xl" mt="xl" wrap="wrap" align="center">
+          <BeatDots pulse={pulseOf("4/4")} beat={1} />
+          <BeatDots pulse={pulseOf("6/8")} beat={null} />
+          <SubdivisionControl
+            pulse={pulseOf("4/4")}
+            value={clicksPerBeat}
+            onChange={setClicksPerBeat}
+          />
+          <TempoControl pulse={pulseOf("4/4")} tempo={tempo} onChange={setTempo} />
         </Flex>
         <Flex gap="2xl" mt="xl" wrap="wrap">
           <SectionHeading number={1} title="Instrument" description="Transposition and tuning" />

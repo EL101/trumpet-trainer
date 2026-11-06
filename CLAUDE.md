@@ -9,13 +9,13 @@ scripts with `--prefix client` / `--prefix server`, or from inside the folder.
 
 ## Frontend
 
-[client/README.md](client/README.md) is the map of the frontend: the folder layout,
+[client/README.md](client/README.md) is the guide to the frontend: how the layers fit,
 the colour roles, where new code goes, and which old components are being replaced.
 Read it before working in `client/`.
 
-**Keep that README current.** If you add, move or remove folders in `client/src`, add
-a shared component, theme layer or colour role, or retire an old component, update the
-README in the same change.
+**Keep that README current.** If you add, move or remove a layer, add a colour role,
+change where a kind of code goes, or retire an old component, update the README in the
+same change.
 
 ### Where code goes
 
@@ -61,8 +61,7 @@ README in the same change.
 ### Components
 
 - New pages must not use the old components listed in the README's "Old vs new" table
-  (`SheetMusic`, `SegmentInput`, `StepperInput`, Chakra's stock `Button`/`Card`
-  variants, …). Use the replacements.
+  (`SheetMusic`, Chakra's stock `Button`/`Card` variants, …). Use the replacements.
 - Component files export only components (React fast refresh requires it). Put helper
   functions and constants in `lib/` or in a sibling `.ts` file (e.g. `navItems.ts`).
 - Accessibility: `IconButton` requires `aria-label`. Choice controls are built on

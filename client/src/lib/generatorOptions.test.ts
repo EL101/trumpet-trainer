@@ -3,6 +3,7 @@ import { getKeySig, PRACTICAL_MAJOR, PRACTICAL_MINOR } from "@/utils/generateMus
 import {
   difficultyFor,
   isCommonKey,
+  isTimeSignature,
   KEY_ROWS,
   keyChoices,
   measureLimitsFor,
@@ -71,5 +72,12 @@ describe("measuresFor", () => {
   it("moves a length outside them to the nearest limit", () => {
     expect(measuresFor("ETUDES", 2)).toBe(4);
     expect(measuresFor("RANDOM", 16)).toBe(measureLimitsFor("RANDOM").max);
+  });
+});
+
+describe("isTimeSignature", () => {
+  it("accepts only the time signatures on offer", () => {
+    expect(["4/4", "12/8"].every(isTimeSignature)).toBe(true);
+    expect([null, 4, "5/4", "4-4"].some(isTimeSignature)).toBe(false);
   });
 });

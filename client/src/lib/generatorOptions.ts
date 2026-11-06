@@ -35,6 +35,10 @@ export function isCommonKey(key: Key): boolean {
 export const TIME_SIGNATURES = ["4/4", "3/4", "2/4", "2/2", "6/8", "3/8", "9/8", "12/8"] as const;
 export type TimeSignature = (typeof TIME_SIGNATURES)[number];
 
+export function isTimeSignature(value: unknown): value is TimeSignature {
+  return (TIME_SIGNATURES as readonly unknown[]).includes(value);
+}
+
 export const MEASURE_LIMITS = { min: 1, max: 8 } as const;
 
 /** Bars an etude can be. Mirrors the server's ETUDE_MEASURES: phrases need room. */

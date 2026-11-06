@@ -36,6 +36,11 @@ export type SoundingNote = {
   legato: boolean;
 };
 
+/** No notes and no end: what the metronome plays on its own, counted in `timeSig`. */
+export function endlessTimeline(timeSig: string): Timeline {
+  return { notes: [], bar: barQuarters(pulseOf(timeSig)), bars: Infinity, end: Infinity };
+}
+
 /** Places an exercise's notes in time, from the same parse the staff draws. */
 export function buildTimeline(notes: string, timeSig: string): Timeline {
   const measures = parseMeasures(notes, timeSig);

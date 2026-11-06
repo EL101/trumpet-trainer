@@ -6,8 +6,11 @@ brass accent, hairline borders, and outlined buttons (never filled).
 
 > The frontend is mid-rehaul. The new design system, shared components and app shell
 > (sidebar) are in place; page content is being rebuilt on top of them one screen at a
-> time (done so far: the landing page, Generate, the practice player and the library). See
-> [Old vs new](#old-vs-new) for what to use and what to avoid.
+> time (done so far: the landing page, Generate, the practice player, the library and
+> Tools). See [Old vs new](#old-vs-new) for what to use and what to avoid.
+>
+> Today and Progress aren't built yet, so they're commented out of the sidebar and
+> `App.tsx`, and their routes go to Generate, which is also where signing in lands.
 
 ## Running it
 
@@ -45,71 +48,6 @@ components/music/         staff, pitch readout, scores, intonation
 components/primitives/    buttons, cards, inputs, tags, … (no app logic)
    │
 theme/                    colours, fonts, spacing, component variants
-```
-
-## Folder map
-
-```
-src/
-├── theme/                 THE DESIGN SYSTEM. Start here to change how anything looks.
-│   ├── palette.ts         Every raw colour value. The only file allowed to contain hex.
-│   ├── roles.ts           Names colours by job: fg.muted, accent.solid, intonation.good…
-│   ├── tokens.ts          Fonts, spacing, radii, shadows, sizes; registers the roles.
-│   ├── textStyles.ts      Type scale: display.*, heading.*, kicker, meta, figure.*
-│   ├── globalCss.ts       Page background, heading font, focus ring, text selection.
-│   ├── keyframes.ts       Entrance animations (rise-in, pop-in, wipe-in, draw-on, …), their
-│   │                      exits (sink-out; fold, which closes what unfold opened) and
-│   │                      loops for waiting (write-note; pulse, for placeholders).
-│   ├── recipes/           Variant definitions per component (button primary/secondary/…)
-│   └── index.ts           Builds the Chakra `system` and re-exports everything.
-│
-├── components/
-│   ├── primitives/        Generic building blocks. Import from "@/components/primitives".
-│   │                      Button, IconButton, Card, Tag, Input, NativeSelect, Field,
-│   │                      SegmentedControl, RadioGroup, ChoiceGrid, Stepper, Slider,
-│   │                      Rule, Kicker, Stat, SectionHeading, Bookplate, Toaster (mounted
-│   │                      once in App.tsx; show a corner notice with notify())
-│   ├── music/             Trumpet-specific UI. Import from "@/components/music".
-│   │                      Staff (VexFlow notation with per-note intonation colour, a
-│   │                      playback cursor and clickable notes), PitchReadout, TunerGauge,
-│   │                      ScoreFigure, IntonationLegend, ExerciseMeta, PitchText (key
-│   │                      and note names with ♭ and ♯), TempoMark and NoteValue
-│   │                      ("♩ = 96"; drawn, as the fonts have no music characters),
-│   │                      PracticeButton (opens the player; see below)
-│   ├── layout/            Page frames. Import from "@/components/layout".
-│   │                      AppShell (sidebar + content), FocusShell (the player's frame:
-│   │                      a top bar with a back link, and a drawer beside the music),
-│   │                      Sidebar, PageHeader. The sidebar collapses to a book spine;
-│   │                      useSidebar.ts holds its state (remembered on desktop,
-│   │                      collapsed by default on phones, where opening it dims the page)
-│   ├── ui/                Chakra's generated setup (provider, tooltip). Rarely touched.
-│   └── *.tsx              OLD components. See "Old vs new" below.
-│
-├── pages/                 One file per route; routes are declared in App.tsx.
-├── lib/                   Pure helpers for the new UI: intonation colours, formatting,
-│                          the generator's keys, time signatures and labels, notation (the
-│                          note parser Staff draws from), timeline (when each note sounds
-│                          and where the cursor is), meter (the beat each time signature
-│                          is counted in), noteValue (how NoteValue lays out ♩, ♪♪, ♬),
-│                          transport (the player's play/pause/seek states), tuning,
-│                          practice (the player's address and route state), library (the
-│                          library's filter, its chunks, and where a card's panel goes),
-│                          storage and motion (prefersReducedMotion, for animation
-│                          outside CSS).
-├── utils/                 App logic: music generation (generateMusic, lipSlurs, built on
-│                          rhythm, melody and notate), etudes (written by Claude on the
-│                          server, fetched by etudes.ts), playback (the player's audio
-│                          scheduler) and trumpet (its samples), API calls, history,
-│                          library, profile, image handling.
-├── hooks/                 usePitch (microphone), useMetronome, usePlayback (the player's
-│                          transport), usePersistedState (localStorage, or per tab
-│                          with `session`)
-├── auth/                  Firebase sign-in: useAuth() for state; auth.ts signs in, links
-│                          a guest to Google, and signs out
-├── profile/               The signed-in user's profile: useProfile()
-├── etudes/                The etude being written, app-wide: useEtudes() starts one,
-│                          waits on it, and posts a notice when it's done
-└── schema/                Shared TypeScript types (exercises, music, profile)
 ```
 
 ## The colour rule
@@ -248,13 +186,10 @@ lower (`CONCERT_OFFSET` in `lib/tuning.ts`). The trumpet samples are in
 The rehaul replaces the old components gradually. Until a page is rebuilt it keeps
 using the old ones, and both kinds live side by side.
 
-| Old (don't use in new code)                  | New                           |
-| -------------------------------------------- | ----------------------------- |
-| `SheetMusic`                                 | `music/Staff`                 |
-| `SegmentInput`                               | `primitives/SegmentedControl` |
-| `StepperInput`                               | `primitives/Stepper`          |
-| `TunerPendulum`                              | `music/TunerGauge`            |
-| Chakra `Button` / `Card` with stock variants | `primitives/Button` / `Card`  |
+| Old (don't use in new code)                  | New                          |
+| -------------------------------------------- | ---------------------------- |
+| `SheetMusic`                                 | `music/Staff`                |
+| Chakra `Button` / `Card` with stock variants | `primitives/Button` / `Card` |
 
 Once a page no longer uses an old component and nothing else imports it, delete it.
 

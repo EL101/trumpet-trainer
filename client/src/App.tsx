@@ -8,13 +8,13 @@ import PitchTest from "./pages/PitchTest";
 import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
 import { ProtectedRoute } from "./ProtectedRoute";
 import Profile from "./pages/Profile";
-import Today from "./pages/Today";
+// Today and Progress aren't built yet; their routes go to Generate until they are.
+// import Today from "./pages/Today";
 import { SheetMusic } from "./components/SheetMusic";
 import { Generate } from "./pages/Generate";
 import { Library } from "./pages/Library";
-import Metronome from "./pages/Metronome";
-import Tuner from "./pages/Tuner";
-import Progress from "./pages/Progress";
+import Tools from "./pages/Tools";
+// import Progress from "./pages/Progress";
 import DesignPreview from "./pages/DesignPreview";
 import Practice from "./pages/Practice";
 import { PRACTICE_PATH } from "./lib/practice";
@@ -40,9 +40,10 @@ function App() {
                   />
                 }
               />
-              <Route element={<ProtectedRoute />}>
+              {/* <Route element={<ProtectedRoute />}>
                 <Route path="/today" element={<Today />} />
-              </Route>
+              </Route> */}
+              <Route path="/today" element={<Navigate to="/generate" replace />} />
               <Route element={<ProtectedRoute />}>
                 <Route path="/generate" element={<Generate />} />
               </Route>
@@ -55,14 +56,15 @@ function App() {
                 <Route path={PRACTICE_PATH} element={<Navigate to="/generate" replace />} />
               </Route>
               <Route element={<ProtectedRoute />}>
-                <Route path="/metronome" element={<Metronome />} />
+                <Route path="/tools" element={<Tools />} />
               </Route>
-              <Route element={<ProtectedRoute />}>
-                <Route path="/tuner" element={<Tuner />} />
-              </Route>
-              <Route element={<ProtectedRoute />}>
+              {/* The tuner and metronome had pages of their own before Tools. */}
+              <Route path="/tuner" element={<Navigate to="/tools" replace />} />
+              <Route path="/metronome" element={<Navigate to="/tools" replace />} />
+              {/* <Route element={<ProtectedRoute />}>
                 <Route path="/progress" element={<Progress />} />
-              </Route>
+              </Route> */}
+              <Route path="/progress" element={<Navigate to="/generate" replace />} />
               <Route element={<ProtectedRoute />}>
                 <Route path="/profile" element={<Profile />} />
               </Route>

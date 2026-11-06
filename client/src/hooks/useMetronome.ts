@@ -1,51 +1,57 @@
-import { getCtx, scheduleClick } from "@/utils/click";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { beatAt, pulseOf, subdivisionFor } from "@/lib/meter";
+import { endlessTimeline } from "@/lib/timeline";
+import { getCtx } from "@/utils/click";
+import { Playback } from "@/utils/playback";
 
-type useMetronomeProps = {
+/**
+ * The metronome on its own: the player's playback with no notes and no end, so it
+ * clicks until stopped (or unmounted). `beat` is the beat of the bar sounding now, from
+ * 0, or null while stopped; `subdivision` is the clicks per beat it actually gives.
+ */
+export function useMetronome({
+  timeSig,
+  tempo,
+  subdivision,
+}: {
+  timeSig: string;
   tempo: number;
   subdivision: number;
-  isPlaying: boolean;
-  beats: number;
-};
-
-export default function useMetronome({ tempo, beats, subdivision, isPlaying }: useMetronomeProps) {
-  const [currTick, setCurrTick] = useState<number>(-1);
+}) {
+  const pulse = useMemo(() => pulseOf(timeSig), [timeSig]);
+  const playback = useMemo(
+    () => new Playback(getCtx(), endlessTimeline(timeSig), pulse),
+    [timeSig, pulse],
+  );
+  const clicks = subdivisionFor(pulse, subdivision);
+  const [running, setRunning] = useState(false);
+  const [beat, setBeat] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!isPlaying) {
-      return;
-    }
+    playback.update({ tempo, notes: false, click: true, subdivision: clicks });
+  }, [playback, tempo, clicks]);
 
-    let tick = 0;
-
-    const ctx = getCtx();
-    let nextBeatTime = ctx.currentTime;
-    const tickAhead = 0.1;
-    const timeouts: number[] = [];
-    const scheduler = () => {
-      while (nextBeatTime < ctx.currentTime + tickAhead) {
-        const beat = Math.floor(tick * subdivision) % beats;
-        const isWholeBeat = tick % (1 / subdivision) === 0;
-        scheduleClick(nextBeatTime, beat === 0 && isWholeBeat, ctx);
-
-        const delayMs = (nextBeatTime - ctx.currentTime) * 1000;
-        const thisTick = tick;
-        const id = setTimeout(() => setCurrTick(thisTick), Math.max(0, delayMs));
-        timeouts.push(id);
-        nextBeatTime += 60 / (tempo / subdivision);
-
-        tick += 1;
-        tick %= beats / subdivision;
-      }
-    };
-    scheduler();
-    const id = setInterval(scheduler, 25);
-
+  // A new time signature is a new playback: it picks up from the top of a bar.
+  useEffect(() => {
+    if (!running) return;
+    playback.start(0, { countIn: false });
+    let frame = requestAnimationFrame(function follow() {
+      const now = playback.position();
+      setBeat(now === null ? null : beatAt(pulse, now));
+      frame = requestAnimationFrame(follow);
+    });
     return () => {
-      clearInterval(id);
-      timeouts.forEach((timeout) => clearTimeout(timeout));
+      cancelAnimationFrame(frame);
+      playback.stop();
     };
-  }, [tempo, subdivision, isPlaying, beats]);
+  }, [running, playback, pulse]);
 
-  return isPlaying ? currTick : -1;
+  return {
+    pulse,
+    subdivision: clicks,
+    running,
+    beat: running ? beat : null,
+    start: () => setRunning(true),
+    stop: () => setRunning(false),
+  };
 }
