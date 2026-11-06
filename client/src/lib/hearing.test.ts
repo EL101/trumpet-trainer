@@ -23,6 +23,11 @@ describe("heardPitch", () => {
     expect(heardPitch(hzOf(60) / 2, 60)).toBeCloseTo(60, 6);
   });
 
+  it("hears nothing above the highest MIDI note, which a score can't hold", () => {
+    expect(heardPitch(hzOf(127), 127)).toBeCloseTo(127, 6);
+    expect(heardPitch(hzOf(128), 127)).toBeNull();
+  });
+
   it("returns null for a pitch below the range that no multiple near the note explains", () => {
     // 48's multiples are 60, 67, 72…: 61 is a semitone from 60, beyond the slack.
     expect(heardPitch(hzOf(60) / 2, 61)).toBeNull();

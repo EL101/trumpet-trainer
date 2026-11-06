@@ -22,6 +22,8 @@ const MIN_LEVEL = 0.003;
  * multiple of it nearest the note expected, if one is within SUBHARMONIC_SLACK.
  */
 const LOWEST_WRITTEN = 54;
+/** The highest MIDI note: a score's pitches are sent as MIDI numbers up to this. */
+const HIGHEST_MIDI = 127;
 const SUBHARMONIC_SLACK = 0.6;
 
 /** The written pitch (MIDI, fractional) of a concert-pitch frequency. */
@@ -35,7 +37,9 @@ export function writtenPitch(hz: number) {
  */
 export function heardPitch(hz: number, expected: number): number | null {
   const pitch = writtenPitch(hz);
-  if (pitch >= LOWEST_WRITTEN) return pitch;
+  // Above the highest MIDI note isn't a pitch the trumpet, or a score, can hold: a frame
+  // that high is no note at all.
+  if (pitch >= LOWEST_WRITTEN) return Math.round(pitch) <= HIGHEST_MIDI ? pitch : null;
   let best: number | null = null;
   // Up to a tenth: past that the multiples are too close together to tell apart.
   for (let k = 2; k <= 10; k++) {
