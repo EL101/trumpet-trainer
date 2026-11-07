@@ -3,7 +3,7 @@ import type { PitchSample } from "./hearing";
 import { newLiveScore, rewindLive, updateLive } from "./liveScore";
 import { heardUntil, scoreRun } from "./scoring";
 import { buildTimeline, soundingNotes, type Timeline } from "./timeline";
-import { transcribe, wrongNotes } from "./transcribe";
+import { BRIDGE_SECONDS, judgePlayed, restartPoint, toMark, transcribe } from "./transcribe";
 import { CONCERT_OFFSET } from "./tuning";
 
 /** Frames a quarter note: 60 a second at ♩ = 120. */
@@ -48,12 +48,21 @@ const END = 9.5;
 
 /** The marks working over every sample would give, with the music heard up to `now`. */
 function fullMarks(timeline: Timeline, samples: PitchSample[], now: number) {
-  const ghosts = wrongNotes(transcribe(samples, timeline, TIMING.secondsPerQuarter), timeline);
+  const transcribed = transcribe(samples, timeline, TIMING.secondsPerQuarter);
   const cents = scoreRun(timeline, samples, TIMING).cents.map((c, i) => {
     const note = timeline.notes[i];
     return note.start + note.length <= now ? c : null;
   });
-  return { ghosts, cents };
+  // The last note is still sounding, so not judged, until it's over.
+  const heardTo = samples.at(-1)?.at ?? -Infinity;
+  const last = transcribed.length - 1;
+  const sounding =
+    last >= 0 && restartPoint(transcribed, heardTo, TIMING.secondsPerQuarter) !== last;
+  const played = transcribed.map((p, i) =>
+    toMark(judgePlayed(p, timeline), cents, sounding && i === last),
+  );
+  const silentTo = heardTo - BRIDGE_SECONDS / TIMING.secondsPerQuarter;
+  return { played, cents, restsTo: Math.max(0, Math.floor(silentTo * 4) / 4) };
 }
 
 /**
@@ -106,13 +115,34 @@ describe("updateLive", () => {
     expect(live.locked.get(2)).toBe(28);
   });
 
+  it("doesn't judge a note until it's over, so one played early isn't drawn and taken off", () => {
+    // Each note comes in a third of a beat early: while it's held, its middle is still in
+    // the note before.
+    const timeline = buildTimeline("C5/q, D5, E5, F5", "4/4");
+    const samples = hear(
+      0,
+      4,
+      { midi: 72, from: 0, to: 0.6 },
+      { midi: 74, from: 0.66, to: 1.6 },
+      { midi: 76, from: 1.66, to: 2.9 },
+      { midi: 77, from: 3, to: 3.9 },
+    );
+    const live = newLiveScore();
+    for (let n = 0; n <= samples.length; n += 9) {
+      const sofar = samples.slice(0, n);
+      const now = (sofar.at(-1)?.at ?? 0) + DELAY;
+      const { played } = updateLive(live, sofar, timeline, TIMING, now);
+      expect(played.filter((m) => m.status === "wrong")).toEqual([]);
+    }
+  });
+
   it("gives the same marks as an unchanged update, so the staff isn't redrawn", () => {
     const timeline = buildTimeline(NOTES, "4/4");
     const samples = hear(0, 3, ...SOUNDS);
     const live = newLiveScore();
     const first = updateLive(live, samples, timeline, TIMING, 3);
     const again = updateLive(live, samples, timeline, TIMING, 3);
-    expect(again.ghosts).toBe(first.ghosts);
+    expect(again.played).toBe(first.played);
     expect(again.cents).toBe(first.cents);
   });
 });
@@ -149,7 +179,7 @@ describe("rewindLive", () => {
     // From there, update by update, it matches working over what the recorder has.
     playThrough(live, timeline, [...kept, ...retake], from);
     const final = updateLive(live, [...kept, ...retake], timeline, TIMING, 20);
-    expect(final.ghosts.map((g) => g.midi)).toEqual([75]);
+    expect(final.played.filter((m) => m.status === "wrong").map((m) => m.midi)).toEqual([75]);
   });
 
   it("from the top, forgets everything", () => {
@@ -158,7 +188,7 @@ describe("rewindLive", () => {
     playThrough(live, timeline, hear(0, END, ...SOUNDS));
 
     rewindLive(live, 0, timeline, TIMING.beat);
-    expect(live).toMatchObject({ kept: [], keptGhosts: [], restartAt: 0 });
+    expect(live).toMatchObject({ kept: [], keptJudged: [], restartAt: 0 });
     expect(live.locked.size).toBe(0);
   });
 });

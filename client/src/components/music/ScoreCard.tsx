@@ -9,7 +9,7 @@ import { pulseOf } from "@/lib/meter";
 import { barExcerpt } from "@/lib/notation";
 import { notePlace, SCORE_PARTS, type RunScore, type ScoreNote } from "@/lib/scoring";
 import { buildTimeline } from "@/lib/timeline";
-import { toGhost } from "@/lib/transcribe";
+import { toGhost, type PlayedMark } from "@/lib/transcribe";
 import type { MusicInfo } from "@/schema";
 import { PitchText } from "./PitchText";
 import { Staff } from "./Staff";
@@ -294,13 +294,15 @@ function WrongNoteBar({
     () => barExcerpt(exercise.notes, exercise.timeSig, bar),
     [exercise.notes, exercise.timeSig, bar],
   );
-  const ghosts = useMemo(() => {
+  // The wrong note, on the excerpt's played staff.
+  const marks = useMemo((): PlayedMark[] => {
     const timeline = buildTimeline(exercise.notes, exercise.timeSig);
     const written = timeline.notes[index];
     if (!written) return [];
     // Where the note falls in its bar, which the excerpt starts at.
     const start = written.start - bar * timeline.bar;
-    return [toGhost({ start, end: start + (playedLength ?? written.length), midi: played })];
+    const ghost = toGhost({ start, end: start + (playedLength ?? written.length), midi: played });
+    return [{ ...ghost, status: "wrong", cents: null }];
   }, [exercise.notes, exercise.timeSig, bar, index, played, playedLength]);
   if (!notes) return null;
   return (
@@ -309,7 +311,7 @@ function WrongNoteBar({
       timeSig={exercise.timeSig}
       musicKey={KEYLESS.has(exercise.exerciseType) ? undefined : exercise.musicKey}
       barlines={false}
-      ghosts={ghosts}
+      played={marks}
       width={156}
       scale={0.6}
       aria-hidden

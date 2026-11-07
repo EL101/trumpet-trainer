@@ -100,18 +100,6 @@ export function barAt({ bar, bars }: Timeline, position: number): number {
   return Math.min(bars - 1, Math.max(0, Math.floor(position / bar + 1e-9)));
 }
 
-/**
- * The notes written in the bar `at` falls in, from its start up to `at` (one starting
- * right there included), as spelt on the staff ("Bb4"): what sets each line's accidental
- * for a note drawn at `at` (see `spellInKey`). Rests are left out.
- */
-export function writtenInBarTo(timeline: Timeline, at: number): string[] {
-  const barStart = barAt(timeline, at) * timeline.bar;
-  return timeline.notes
-    .filter((n) => n.name !== null && n.start >= barStart - 1e-9 && n.start <= at + 1e-9)
-    .map((n) => n.name!);
-}
-
 /** The notes to play, in order. */
 export function soundingNotes({ notes }: Timeline): SoundingNote[] {
   const sounding: SoundingNote[] = [];

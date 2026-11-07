@@ -16,7 +16,7 @@ import { loadTrumpet } from "@/utils/trumpet";
 /**
  * Plays an exercise along with its staff. `play` counts in a bar (unless `countIn` is
  * off), then starts from the top or picks up at the start of the bar it was paused in;
- * `pause` stops; `restart` goes back to the top, before the count-in, paused. `seek`
+ * `pause` stops, with the cursor back at the start of its bar; `restart` goes back to the top, before the count-in, paused. `seek`
  * moves to a position: while playing the music carries straight on from there, and
  * otherwise Play starts there.
  *

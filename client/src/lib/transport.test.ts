@@ -58,9 +58,9 @@ describe("followMusic", () => {
 });
 
 describe("pauseAt", () => {
-  it("leaves the cursor where it stopped, to resume from the top of its bar", () => {
+  it("moves the cursor back to the top of its bar, where it resumes", () => {
     const playing: Transport = { status: "playing", position: 5.5, from: 0 };
-    expect(pauseAt(playing, timeline, 5.6)).toEqual({ status: "paused", position: 5.6, from: 4 });
+    expect(pauseAt(playing, timeline, 5.6)).toEqual({ status: "paused", position: 4, from: 4 });
   });
 
   it("resumes from a barline it's paused right on", () => {

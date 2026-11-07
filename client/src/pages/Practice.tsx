@@ -66,7 +66,7 @@ import {
 } from "@/lib/practice";
 import { newLiveScore, rewindLive, updateLive } from "@/lib/liveScore";
 import { scoreRun, type ScoredRun } from "@/lib/scoring";
-import type { GhostNote } from "@/lib/transcribe";
+import type { PlayedMark } from "@/lib/transcribe";
 import { barAt, buildTimeline, cursorAt } from "@/lib/timeline";
 import { barNow } from "@/lib/transport";
 import { getKeySig } from "@/utils/generateMusic";
@@ -94,6 +94,8 @@ const COUNT_IN_OPTIONS: ChoiceOption<"off" | "bar">[] = [
 
 /** How often a scored run's marks on the staff catch up with what's been heard, in ms. */
 const LIVE_MS = 150;
+/** Nothing played yet: the played staff is drawn, empty, so it's there before a run. */
+const NOTHING_PLAYED: PlayedMark[] = [];
 
 /** Listen hears the exercise played; Play is the player's own run, heard and scored. */
 type Mode = "listen" | "play";
@@ -297,9 +299,13 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
     return () => document.removeEventListener("visibilitychange", onHide);
   }, [recording]);
 
-  // What's been heard so far in a scored run, marked on the staff as it comes in: the
-  // wrong notes as ghosts, and each note's intonation once it's over.
-  const [live, setLive] = useState<{ ghosts: GhostNote[]; cents: (number | null)[] } | null>(null);
+  // What's been heard so far in a scored run, drawn on the played staff as it comes in:
+  // each note, judged right (with its intonation) or wrong once it's over.
+  const [live, setLive] = useState<{
+    played: PlayedMark[];
+    cents: (number | null)[];
+    restsTo: number;
+  } | null>(null);
   // What the live marks keep between updates, so each works only on what's still open
   // (see lib/liveScore.ts). A take from the top rewinds it to nothing.
   const liveScore = useRef(newLiveScore());
@@ -323,7 +329,12 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
       const marks = updateLive(liveScore.current, heard(), timeline, timing, now);
       // The same marks as last time keep the staff from being drawn again.
       setLive((last) =>
-        last && last.ghosts === marks.ghosts && last.cents === marks.cents ? last : marks,
+        last &&
+        last.played === marks.played &&
+        last.cents === marks.cents &&
+        last.restsTo === marks.restsTo
+          ? last
+          : marks,
       );
     }, LIVE_MS);
     return () => clearInterval(timer);
@@ -519,8 +530,10 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
           scale={scale}
           measuresPerLine={perLine}
           labels={fingerings}
-          cents={marks?.cents}
-          ghosts={marks?.ghosts}
+          // In Play, what's played goes on a staff of its own under the music.
+          played={scoring ? (marks?.played ?? NOTHING_PLAYED) : undefined}
+          // Silences as rests: a finished run's to the end, a take's as far as it's heard.
+          playedTo={recording || !run ? live?.restsTo : timeline.end}
           cursor={cursorAt(timeline, countingIn ? startsAt : position)}
           onNoteClick={(i) => jumpTo(timeline.notes[i].start)}
           role="img"

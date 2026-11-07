@@ -2,10 +2,13 @@ import type { PitchSample } from "./hearing";
 import { heardUntil, noteCents, type Timing } from "./scoring";
 import { soundingNotes, type Timeline } from "./timeline";
 import {
+  BRIDGE_SECONDS,
+  judgePlayed,
   restartPoint,
+  toMark,
   transcribe,
-  wrongNotes,
-  type GhostNote,
+  type JudgedNote,
+  type PlayedMark,
   type PlayedNote,
 } from "./transcribe";
 
@@ -15,9 +18,9 @@ import {
  * the written notes whose stretch hasn't all been heard yet.
  */
 export type LiveScore = {
-  /** The notes played before `restartAt`, which are final, and their ghosts. */
+  /** The notes played before `restartAt`, which are final, and how they were judged. */
   kept: PlayedNote[];
-  keptGhosts: GhostNote[];
+  keptJudged: JudgedNote[];
   /** Where transcription starts again: the start of the latest note definitely over. */
   restartAt: number;
   /**
@@ -26,13 +29,13 @@ export type LiveScore = {
    */
   locked: Map<number, number | null>;
   /** The marks last given, given again while they're the same, so the staff isn't redrawn. */
-  ghosts: GhostNote[];
+  played: PlayedMark[];
   cents: (number | null)[];
 };
 
 /** Live marks with nothing heard yet. */
 export function newLiveScore(): LiveScore {
-  return { kept: [], keptGhosts: [], restartAt: 0, locked: new Map(), ghosts: [], cents: [] };
+  return { kept: [], keptJudged: [], restartAt: 0, locked: new Map(), played: [], cents: [] };
 }
 
 /**
@@ -45,7 +48,7 @@ export function rewindLive(live: LiveScore, from: number, timeline: Timeline, be
   const before = live.kept.filter((note) => note.end < from);
   const reopened = before.pop();
   live.kept = before;
-  live.keptGhosts = wrongNotes(before, timeline);
+  live.keptJudged = before.map((p) => judgePlayed(p, timeline));
   live.restartAt = reopened ? reopened.start : 0;
   const sounding = soundingNotes(timeline);
   for (const k of live.locked.keys()) {
@@ -55,11 +58,15 @@ export function rewindLive(live: LiveScore, from: number, timeline: Timeline, be
 
 /**
  * The marks for the staff from what's been heard so far (`samples`, in order), with the
- * music heard up to `now`: the wrong notes played as ghosts, and each written note's
- * cents once it's over. Works the same as `scoreRun` and `wrongNotes` over every sample,
- * but only on what's still open: it transcribes from `live.restartAt`, moves the notes
- * now final into `live.kept`, and locks in each written note once all of it is heard.
- * Updates `live` in place.
+ * music heard up to `now`: every note played, judged right or wrong once it's over (one
+ * still sounding is marked so), and each written note's cents once it's over. Works the
+ * same as `scoreRun` over every sample, but only on what's still open: it transcribes
+ * from `live.restartAt`, moves the notes now final into `live.kept`, and locks in each
+ * written note once all of it is heard. Updates `live` in place.
+ *
+ * `restsTo` is where silence after the last note is known to, on a sixteenth, for the
+ * played staff's rests (see `silences`): BRIDGE_SECONDS before the newest frame, as a
+ * silence shorter than that may yet be the note carrying on.
  */
 export function updateLive(
   live: LiveScore,
@@ -67,22 +74,26 @@ export function updateLive(
   timeline: Timeline,
   time: Timing,
   now: number,
-): { ghosts: GhostNote[]; cents: (number | null)[] } {
+): { played: PlayedMark[]; cents: (number | null)[]; restsTo: number } {
   // The newest frame heard: it lags the music by the frame's and the microphone's delays.
   const heardTo = samples.length ? samples[samples.length - 1].at : -Infinity;
 
   const open = transcribe(samples, timeline, time.secondsPerQuarter, live.restartAt);
   const over = restartPoint(open, heardTo, time.secondsPerQuarter);
   const done = open.slice(0, Math.max(0, over));
-  const doneGhosts = wrongNotes(done, timeline);
-  const ghosts = [
-    ...live.keptGhosts,
-    ...doneGhosts,
-    ...wrongNotes(open.slice(done.length), timeline),
+  const doneJudged = done.map((p) => judgePlayed(p, timeline));
+  const judged = [
+    ...live.keptJudged,
+    ...doneJudged,
+    ...open.slice(done.length).map((p) => judgePlayed(p, timeline)),
   ];
+  // The note still sounding isn't judged until it's over: it's judged by the written
+  // note under its middle, which moves on as it's held, so a note played a little early
+  // would be marked wrong (against the note before it), then right.
+  const sounding = open.length > 0 && over !== open.length - 1;
   if (over > 0) {
     live.kept.push(...done);
-    live.keptGhosts.push(...doneGhosts);
+    live.keptJudged.push(...doneJudged);
     live.restartAt = open[over].start;
   }
 
@@ -102,16 +113,26 @@ export function updateLive(
     }
   }
 
-  if (!sameGhosts(ghosts, live.ghosts)) live.ghosts = ghosts;
+  const played = judged.map((j, i) => toMark(j, cents, sounding && i === judged.length - 1));
+  if (!sameMarks(played, live.played)) live.played = played;
   if (!cents.every((c, i) => c === live.cents[i]) || cents.length !== live.cents.length) {
     live.cents = cents;
   }
-  return { ghosts: live.ghosts, cents: live.cents };
+  const silentTo = heardTo - BRIDGE_SECONDS / time.secondsPerQuarter;
+  const restsTo = Math.max(0, Math.floor(silentTo * 4) / 4);
+  return { played: live.played, cents: live.cents, restsTo };
 }
 
-function sameGhosts(a: readonly GhostNote[], b: readonly GhostNote[]) {
+function sameMarks(a: readonly PlayedMark[], b: readonly PlayedMark[]) {
   return (
     a.length === b.length &&
-    a.every((g, i) => g.start === b[i].start && g.length === b[i].length && g.midi === b[i].midi)
+    a.every(
+      (m, i) =>
+        m.start === b[i].start &&
+        m.length === b[i].length &&
+        m.midi === b[i].midi &&
+        m.status === b[i].status &&
+        m.cents === b[i].cents,
+    )
   );
 }

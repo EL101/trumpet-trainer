@@ -14,11 +14,18 @@ export type PlayedNote = {
 export type GhostNote = {
   /** Where it starts, in quarter notes from the top. */
   start: number;
-  /** Its note value, in quarter notes: 4 a whole note … 0.25 a sixteenth, dotted ones too. */
+  /**
+   * How long it was held, in quarter notes: up to a whole note, a note value (4 a whole
+   * note … 0.25 a sixteenth, dotted ones too); longer, whole beats. Drawn as tied notes
+   * where it crosses a barline or no one note value fits (see `ghostPieces`).
+   */
   length: number;
   /** Written pitch as a MIDI number. */
   midi: number;
 };
+
+/** One note of a ghost as written: a note value, tied to the next one if `tied`. */
+export type GhostPiece = GhostNote & { tied: boolean };
 
 /** The note values a played note is written as, in quarter notes. */
 export const NOTE_VALUES = [4, 3, 2, 1.5, 1, 0.75, 0.5, 0.25] as const;
@@ -43,20 +50,27 @@ const ONSET_SLACK_SECONDS = 0.1;
 /** Notes shorter than this, in seconds, are dropped: a crack or a stray sound. */
 const SHORTEST_SECONDS = 0.08;
 /**
- * At a fast tempo a sixteenth can be shorter than CHANGE_SECONDS or SHORTEST_SECONDS, and
- * would be lost: there, each is this share of a sixteenth instead (see `forTempo`).
+ * At a fast tempo the shortest note written (a sixteenth, say) can be shorter than
+ * CHANGE_SECONDS or SHORTEST_SECONDS, and would be lost: there, each is this share of it
+ * instead (see `forTempo`).
  */
-const SIXTEENTH_SHARE = 0.6;
+const SHORTEST_WRITTEN_SHARE = 0.6;
 /** However fast the tempo, a sound shorter than this, in seconds, is a blip: the metronome's click. */
 const BLIP_SECONDS = 0.03;
 
 /**
- * A length in `seconds` that a note has to last, shortened at a fast tempo to a share
- * of a sixteenth so the shortest notes written still count: never longer than `seconds`
- * (slow tempos are as they were), and never shorter than BLIP_SECONDS.
+ * A length in `seconds` that a note has to last, shortened at a fast tempo to a share of
+ * the shortest note written (`shortestWritten`, in quarter notes) so those still count:
+ * never longer than `seconds` (slow tempos, and music with no notes that short, are as
+ * they were), and never shorter than BLIP_SECONDS. Only as short as the music needs: a
+ * split attack (the note speaking on the partial next to it for a moment) is as long as
+ * a fast sixteenth, so it would be kept as a note in music that has none.
  */
-export function forTempo(seconds: number, secondsPerQuarter: number) {
-  return Math.min(seconds, Math.max(BLIP_SECONDS, 0.25 * secondsPerQuarter * SIXTEENTH_SHARE));
+export function forTempo(seconds: number, secondsPerQuarter: number, shortestWritten: number) {
+  return Math.min(
+    seconds,
+    Math.max(BLIP_SECONDS, shortestWritten * secondsPerQuarter * SHORTEST_WRITTEN_SHARE),
+  );
 }
 
 /**
@@ -79,8 +93,9 @@ export function transcribe(
   const due = dueNote(sounding);
   const quarters = (seconds: number) => seconds / secondsPerQuarter;
   const slack = quarters(ONSET_SLACK_SECONDS);
-  const shortest = quarters(forTempo(SHORTEST_SECONDS, secondsPerQuarter));
-  const change = quarters(forTempo(CHANGE_SECONDS, secondsPerQuarter));
+  const shortestWritten = Math.min(...sounding.map((n) => n.length));
+  const shortest = quarters(forTempo(SHORTEST_SECONDS, secondsPerQuarter, shortestWritten));
+  const change = quarters(forTempo(CHANGE_SECONDS, secondsPerQuarter, shortestWritten));
   const notes: PlayedNote[] = [];
   // The note being played: `last` is where its pitch was last heard, `heard` where
   // anything was (a blip of another note keeps it going, but doesn't lengthen it).
@@ -153,27 +168,142 @@ export function restartPoint(
   return last - 1;
 }
 
-/** A played note written as a ghost: its start snapped to a sixteenth, its length to a note value. */
+/**
+ * A played note written as a ghost: its start snapped to a sixteenth, its length to the
+ * nearest note value, or held past a whole note, to the nearest beat.
+ */
 export function toGhost({ start, end, midi }: PlayedNote): GhostNote {
   const length = end - start;
-  const value = NOTE_VALUES.reduce((best, v) =>
-    Math.abs(Math.log(v / length)) < Math.abs(Math.log(best / length)) ? v : best,
-  );
+  const beats = Math.round(length);
+  const value =
+    beats > 4
+      ? beats
+      : NOTE_VALUES.reduce((best, v) =>
+          Math.abs(Math.log(v / length)) < Math.abs(Math.log(best / length)) ? v : best,
+        );
   return { start: Math.round(start * 4) / 4, length: value, midi };
 }
 
+/** Lengths this close, in quarter notes, are the same: sums of sixteenths stray only by rounding. */
+const SAME_LENGTH = 1e-6;
+
 /**
- * The ghosts to draw: each played note that isn't the note written where it sounded
- * (the one under its middle), or that sounded where a rest is written.
+ * A ghost written as notes: split at each barline, and within a bar into the longest note
+ * values that fit, each tied to the next. Stops where the music ends (`timeline.end`), as
+ * the staff does; one starting there or after is a single note, as long as fits.
  */
-export function wrongNotes(played: readonly PlayedNote[], timeline: Timeline): GhostNote[] {
-  return played
-    .filter((p) => {
-      const middle = (p.start + p.end) / 2;
-      const written = timeline.notes.find((n) => n.start <= middle && middle < n.start + n.length);
-      return written?.midi !== p.midi;
-    })
-    .map(toGhost);
+export function ghostPieces(
+  ghost: GhostNote,
+  timeline: Pick<Timeline, "bar" | "end">,
+): GhostPiece[] {
+  const longest = (room: number) =>
+    NOTE_VALUES.find((v) => v <= room + SAME_LENGTH) ?? NOTE_VALUES[NOTE_VALUES.length - 1];
+  if (ghost.start >= timeline.end)
+    return [{ ...ghost, length: longest(ghost.length), tied: false }];
+
+  const end = Math.min(ghost.start + ghost.length, timeline.end);
+  const pieces: GhostPiece[] = [];
+  let at = ghost.start;
+  while (end - at >= NOTE_VALUES[NOTE_VALUES.length - 1] - SAME_LENGTH) {
+    const barEnd = (Math.floor(at / timeline.bar + SAME_LENGTH) + 1) * timeline.bar;
+    const length = longest(Math.min(barEnd, end) - at);
+    pieces.push({ start: at, length, midi: ghost.midi, tied: true });
+    at += length;
+  }
+  if (!pieces.length) return [{ ...ghost, length: longest(ghost.length), tied: false }];
+  pieces[pieces.length - 1].tied = false;
+  return pieces;
+}
+
+/** A silence on the played staff: a rest, as long as a note value, or a whole bar's rest. */
+export type RestMark = { start: number; length: number; wholeBar: boolean };
+
+/** The rests a silence is written as, in quarter notes: a half rest down to a sixteenth. */
+const REST_VALUES = [2, 1, 0.5, 0.25] as const;
+
+/**
+ * The silences in what was played, as rests: before the first note, between notes, and
+ * after the last up to `to` (where the silence is known to; the music's end at most).
+ * Each is split at barlines: a whole bar of silence is one whole-bar rest, and otherwise
+ * each rest is the longest that fits and starts on a multiple of its own length in the
+ * bar, as rests are written (two quarters, not a half, from beat 2). Silences shorter
+ * than a sixteenth aren't written. `played` must be in order of `start`.
+ */
+export function silences(
+  played: readonly GhostNote[],
+  timeline: Pick<Timeline, "bar" | "end">,
+  to: number,
+): RestMark[] {
+  const shortest = REST_VALUES[REST_VALUES.length - 1];
+  const rests: RestMark[] = [];
+  const fill = (from: number, until: number) => {
+    let at = from;
+    while (until - at >= shortest - SAME_LENGTH) {
+      const barStart = Math.floor(at / timeline.bar + SAME_LENGTH) * timeline.bar;
+      const barEnd = barStart + timeline.bar;
+      const end = Math.min(until, barEnd);
+      if (Math.abs(at - barStart) < SAME_LENGTH && end > barEnd - SAME_LENGTH) {
+        rests.push({ start: at, length: timeline.bar, wholeBar: true });
+        at = barEnd;
+        continue;
+      }
+      const offset = at - barStart;
+      const length =
+        REST_VALUES.find(
+          (v) =>
+            v <= end - at + SAME_LENGTH &&
+            Math.abs(offset / v - Math.round(offset / v)) < SAME_LENGTH,
+        ) ?? shortest;
+      rests.push({ start: at, length, wholeBar: false });
+      at += length;
+    }
+  };
+  let heard = 0;
+  for (const note of played) {
+    fill(heard, note.start);
+    heard = Math.max(heard, note.start + note.length);
+  }
+  fill(heard, Math.min(to, timeline.end));
+  return rests;
+}
+
+/**
+ * A played note as judged: written as a ghost, with the written note it was (an index
+ * into `timeline.notes`), or null if it wasn't the note written where it sounded (the one
+ * under its middle) or sounded where a rest is written.
+ */
+export type JudgedNote = GhostNote & { written: number | null };
+
+export function judgePlayed(p: PlayedNote, timeline: Timeline): JudgedNote {
+  const middle = (p.start + p.end) / 2;
+  const i = timeline.notes.findIndex((n) => n.start <= middle && middle < n.start + n.length);
+  return { ...toGhost(p), written: i >= 0 && timeline.notes[i].midi === p.midi ? i : null };
+}
+
+/** A played note as the played staff draws it. */
+export type PlayedMark = GhostNote & {
+  /**
+   * `right`: the note written where it sounded; `wrong`: another (or one where a rest
+   * is written); `sounding`: still being played, so not judged yet.
+   */
+  status: "right" | "wrong" | "sounding";
+  /** A right note's intonation: its written note's cents, once that's judged. */
+  cents: number | null;
+};
+
+/**
+ * A judged note as the played staff draws it, with its written note's cents from
+ * `cents` (per written note, rests counted). `sounding` for one still being played.
+ */
+export function toMark(
+  judged: JudgedNote,
+  cents: readonly (number | null)[],
+  sounding = false,
+): PlayedMark {
+  const { written, ...ghost } = judged;
+  if (sounding) return { ...ghost, status: "sounding", cents: null };
+  if (written === null) return { ...ghost, status: "wrong", cents: null };
+  return { ...ghost, status: "right", cents: cents[written] ?? null };
 }
 
 /** The written pitch due at a place in the music: the note sounding, or the nearest one. */

@@ -42,7 +42,8 @@ import {
 } from "@/components/primitives";
 import { MAX_TEMPO, MIN_TEMPO, pulseOf } from "@/lib/meter";
 import type { RunScore } from "@/lib/scoring";
-import type { GhostNote } from "@/lib/transcribe";
+import { buildTimeline } from "@/lib/timeline";
+import type { PlayedMark } from "@/lib/transcribe";
 import type { MusicInfo } from "@/schema";
 
 /** Dev-only gallery of the design-system building blocks (route: /design). */
@@ -69,25 +70,77 @@ const SCORED_EXERCISE: MusicInfo = {
   generationNum: 43,
 };
 
-/** What was played instead, where and for how long, in quarter notes from the top. */
-const PREVIEW_GHOSTS: GhostNote[] = [
-  { start: 9, length: 0.5, midi: 72 },
-  { start: 6.5, length: 0.25, midi: 81 },
-  { start: 20, length: 1, midi: 76 },
-  { start: 26, length: 1.5, midi: 83 },
-  { start: 28, length: 2, midi: 59 },
+/** The run's intonation per written note, in cents (rests counted). */
+const PREVIEW_CENTS = [
+  4,
+  -3,
+  7,
+  2,
+  12,
+  -6,
+  18,
+  6,
+  9,
+  null,
+  -2,
+  3,
+  0,
+  5,
+  -8,
+  14,
+  2,
+  6,
+  -4,
+  9,
+  null,
+  -5,
+  11,
+  3,
+  -24,
+  6,
+  null,
+  null,
 ];
+/**
+ * Where the run went wrong, by written note: what was played there instead, and for how
+ * long if not the note's length. The B♭4 on beat 4 was played as a D4 held over the
+ * barline, through the C5 after it.
+ */
+const PREVIEW_WRONG: Record<number, { midi: number; length?: number }> = {
+  3: { midi: 62, length: 2 },
+  9: { midi: 72 },
+  20: { midi: 76 },
+  26: { midi: 83 },
+  27: { midi: 59 },
+};
+/** Every note played in the run, as the played staff draws it. */
+const PREVIEW_PLAYED: PlayedMark[] = buildTimeline(SCORED_EXERCISE.notes, "4/4").notes.flatMap(
+  (n, i): PlayedMark[] => {
+    // The C5 swallowed by the held D4, and two notes in bar 5 not played: rests.
+    if (n.midi === null || i === 4 || i === 16 || i === 17) return [];
+    const wrong = PREVIEW_WRONG[i];
+    if (wrong) {
+      const length = wrong.length ?? n.length;
+      return [{ start: n.start, length, midi: wrong.midi, status: "wrong", cents: null }];
+    }
+    const cents = PREVIEW_CENTS[i] ?? null;
+    return [{ start: n.start, length: n.length, midi: n.midi, status: "right", cents }];
+  },
+);
 
 /**
- * Ghosts that need room and context: in F major after a written B♮, a B♭ played later in
- * the bar shows its flat; one far below the first line and one far above the second
- * push the lines apart.
+ * Played notes that need room and context: in F major, the B♭ played after a B♮ in the
+ * same bar shows its flat; one far below the first line and one far above the second
+ * push the lines apart. The last is still sounding, so not judged yet.
  */
 const OUT_OF_RANGE_NOTES = "B4/q, A4, G4, F4, C5/h, D5";
-const OUT_OF_RANGE_GHOSTS: GhostNote[] = [
-  { start: 2, length: 1, midi: 70 },
-  { start: 3, length: 1, midi: 55 },
-  { start: 6, length: 2, midi: 93 },
+const OUT_OF_RANGE_PLAYED: PlayedMark[] = [
+  { start: 0, length: 1, midi: 71, status: "right", cents: 3 },
+  { start: 1, length: 1, midi: 69, status: "right", cents: -6 },
+  { start: 2, length: 1, midi: 70, status: "wrong", cents: null },
+  { start: 3, length: 1, midi: 55, status: "wrong", cents: null },
+  { start: 4, length: 2, midi: 72, status: "right", cents: 22 },
+  { start: 6, length: 2, midi: 93, status: "sounding", cents: null },
 ];
 
 const PREVIEW_SCORE: RunScore = {
@@ -577,9 +630,10 @@ export default function DesignPreview() {
           </Box>
           <Box>
             <Text fontSize="12px" color="fg.muted" mb="xs">
-              A scored run: notes coloured by intonation, and red ghost notes where another note was
-              played (`ghosts`), where and as long as it sounded: an eighth, a sixteenth, a quarter,
-              a dotted quarter and a half, with ledger lines and accidentals
+              A scored run: every note played (`played`) on a cue-size staff under each line, where
+              and as long as it sounded, coloured by intonation, or red where it wasn't the note
+              written. A note held across a barline is tied over it, at a line break too, and a
+              silence is written as rests (`playedTo`: two quarters in bar 5)
             </Text>
             <Staff
               notes={SCORED_EXERCISE.notes}
@@ -587,14 +641,15 @@ export default function DesignPreview() {
               musicKey="F major"
               measuresPerLine={4}
               scale={0.8}
-              cents={[4, -3, 7, 2, 12, -6, 18, 6, 9, null, -2, 3, 0, 5, -8, 14, 2, 6, -4, null]}
-              ghosts={PREVIEW_GHOSTS}
+              played={PREVIEW_PLAYED}
+              playedTo={Infinity}
             />
           </Box>
           <Box>
             <Text fontSize="12px" color="fg.muted" mb="xs">
-              Ghosts far off the staff get room between the lines, and take in accidentals written
-              earlier in the bar: after the B♮, the B♭ played on beat 3 shows its flat
+              Played notes far off the staff get room between the lines, and take in accidentals
+              played earlier in the bar: after the B♮, the B♭ on beat 3 shows its flat. The last
+              note is still sounding, so it isn't judged yet
             </Text>
             <Staff
               notes={OUT_OF_RANGE_NOTES}
@@ -603,7 +658,7 @@ export default function DesignPreview() {
               measuresPerLine={1}
               scale={0.8}
               width={360}
-              ghosts={OUT_OF_RANGE_GHOSTS}
+              played={OUT_OF_RANGE_PLAYED}
             />
           </Box>
           <Box>

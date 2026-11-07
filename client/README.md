@@ -104,8 +104,9 @@ shell: it has no sidebar and nothing to go back to.
 
 `pages/Practice.tsx` (route `/practice/<exerciseId>`, mockup 1e) plays one exercise: a
 bar of count-in (which can be turned off), then the notes on a trumpet with a moving
-cursor, a metronome and a tuner in a collapsible drawer. Clicking a note, or the
-previous and next bar buttons beside Play, moves the cursor. Open it with
+cursor, a metronome and a tuner in a collapsible drawer. Clicking a note (or
+dragging along the staff, note by note), or the previous and next bar buttons beside
+Play, moves the cursor. Open it with
 `<PracticeButton exercise={…} originLabel="Generate" />` from any page; the label is
 what the player's back links call that page. The button stays disabled until history
 has numbered the exercise, because the player loads exercises from history:
@@ -144,38 +145,55 @@ the take pauses, since the microphone is read on animation frames, which stop th
 
 - **Listening:** `hooks/useRunRecorder.ts` reads the microphone on the playback's own
   audio clock and places every frame in the music with `Playback.positionHeardAt()`,
-  allowing for the speakers' and the microphone's delay. Resume goes back to the start
-  of the bar paused in and records it afresh.
+  allowing for the speakers' and the microphone's delay. Pausing moves the cursor
+  back to the start of the bar paused in (`pauseAt()`), and Resume records it afresh
+  from there.
 - **Scoring:** `scoreRun()` in `lib/scoring.ts` (pure, with tests) scores four parts
   from 0 to 100: right notes, rhythm, intonation, and steadiness & tone, weighted
   40/30/20/10 (`SCORE_PARTS`) into the overall score. Each part comes with feedback
   lines (`{ bar, beat, text, … }`) worded for the player: sharp, flat, wavered,
-  rushed, never cents. It also gives per-note cents and ghost notes for the staff. A
+  rushed, never cents. It also gives per-note cents and every note played, judged, for the staff. A
   repeated note (the same pitch straight after, not tied or slurred) held over from
   the one before, with no attack of its own, scores nothing for rhythm and says so. A
   held note's release is found over dropouts of up to 0.2 s that it picks up from again
   before its end; after its end, sound that starts again is the next note.
 - **Transcribing:** `transcribe()` in `lib/transcribe.ts` splits what was heard into the
   notes played (pitch, start, end), and `toGhost()` writes each as a note value from how
-  long it lasted at the tempo, snapped to a sixteenth. `wrongNotes()` picks the ones that
-  aren't the note written where they sounded. A held note carries on through a little
+  long it lasted at the tempo, snapped to a sixteenth (held past a whole note, to the
+  nearest beat). `judgePlayed()` finds the written note
+  under each one's middle: it's right if it's that note, wrong if not (or a rest is
+  written there). A held note carries on through a little
   wavering or being out of tune, and through the microphone losing it for up to 0.2 s,
   unless a written note starts in that silence (then it's a tongued repeat). A different
   note has to last 0.07 s to start a new one, and a note 0.08 s to be kept, or at a fast
-  tempo 0.6 of a sixteenth if that's shorter (`forTempo()`), so sixteenths aren't lost,
-  but never under 0.03 s, so the metronome's click is still a blip. Pitches
+  tempo 0.6 of the shortest note written if that's shorter (`forTempo()`), so fast
+  sixteenths aren't lost, but never under 0.03 s, so the metronome's click is still a
+  blip. It goes by the shortest note written, not a sixteenth, so music without fast notes
+  keeps the longer lengths: a split attack (a note speaking on the next partial for a
+  moment) is as long as a fast sixteenth. Pitches
   heard below the trumpet's range
   are subharmonics, taken back up to the note due (`heardPitch()` in `lib/hearing.ts`).
-- **On the staff, as it plays:** every 150 ms the player marks what's been heard so far:
-  wrong notes as red ghost notes (`Staff`'s `ghosts`) where and as long as they sounded,
-  with stems, flags and dots, spelt for the key by `spellInKey()`, and each written note's
-  intonation colour once it's over. While a take records, the staff shows only its live
-  marks; the scored run's replace them when it ends. Ghosts are drawn over the staff on their own, like the
-  cursor, so they don't redraw it. The lines are still spaced, and the drawing sized, to
-  leave room for them (`ghostReach()` in `Staff`), so one far off the staff doesn't run
-  into the next line; the staff is redrawn only when the room they need changes. A
-  ghost's accidental takes in the notes written earlier in its bar, not just the key
-  signature (`spellInKey()`'s `earlier`, from `writtenInBarTo()`).
+- **On the staff, as it plays:** in Play, what's played goes on a staff of its own: a
+  cue-size staff under each line of music (`Staff`'s `played`), drawn empty before a run
+  so nothing moves when notes come in. The written music stays plain ink. Every 150 ms
+  the player puts what's been heard so far on it: each note where and as long as it
+  sounded, with stems, flags and dots, spelt for the key by `spellInKey()` (an
+  accidental takes in the notes played earlier in its bar). A right note takes its
+  written note's intonation colour once that's judged, a wrong one is red, and the one
+  still sounding is faint, as it's judged by the written note under its middle, which
+  moves on as it's held (`toMark()`). One held across a barline, or for a length no one
+  note value fits, is drawn as notes tied together (`ghostPieces()`), across a line
+  break too. Silence is written as faint rests (`silences()`): before the first note,
+  between notes, and after the last, up to where silence is known (`playedTo`: a
+  finished run's end, or for a take, 0.2 s before the newest frame, so a tongue gap
+  never shows as a rest). A whole bar of silence is one whole-bar rest; otherwise each
+  rest is the longest that starts on a multiple of its own length in the bar. While a take records, the staff shows only its live marks; the scored
+  run's replace them when it ends. The score card's wrong-note excerpts use a played
+  staff too. Played notes are drawn on their own, like the cursor, so they don't redraw
+  the staff. The lines are still spaced, and the drawing sized, to leave room for them
+  (`playedReach()` in `Staff`), so one far off the staff doesn't run into the next line;
+  the staff is redrawn only when the room they need changes. Each played staff sits
+  nearer its own line than the next, and lines leave room for ties' arcs as for slurs.
   Each update works only on what's still open (`lib/liveScore.ts`), so it costs the same
   late in a long run as early on. Transcription starts again from the start of the latest
   note played that's definitely over (`restartPoint()`); the notes before it are kept. A

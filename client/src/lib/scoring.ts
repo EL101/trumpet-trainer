@@ -3,10 +3,11 @@ import { firstFrom, heardPitch, isVoiced, type PitchSample } from "./hearing";
 import {
   BRIDGE_SECONDS,
   DROPOUT_SECONDS,
+  judgePlayed,
   toGhost,
+  toMark,
   transcribe,
-  wrongNotes,
-  type GhostNote,
+  type PlayedMark,
   type PlayedNote,
 } from "./transcribe";
 import { spellInKey } from "./notation";
@@ -54,8 +55,8 @@ export type ScoredRun = RunScore & {
   heard: boolean;
   /** Per staff note (rests counted): how far off it was in cents, or null. */
   cents: (number | null)[];
-  /** The notes played that weren't the ones written, as the staff draws them. */
-  ghosts: GhostNote[];
+  /** Every note played, judged, as the played staff draws them. */
+  played: PlayedMark[];
 };
 
 /** The weighted average of four part scores, rounded. */
@@ -183,7 +184,7 @@ export function scoreRun(
       tone: { score: scores.tone, notes: toneNotes(played) },
     },
     cents,
-    ghosts: wrongNotes(transcribed, timeline),
+    played: transcribed.map((p) => toMark(judgePlayed(p, timeline), cents)),
   };
 }
 

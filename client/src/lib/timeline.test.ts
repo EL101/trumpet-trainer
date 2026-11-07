@@ -1,12 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  barAt,
-  buildTimeline,
-  cursorAt,
-  endlessTimeline,
-  soundingNotes,
-  writtenInBarTo,
-} from "./timeline";
+import { barAt, buildTimeline, cursorAt, endlessTimeline, soundingNotes } from "./timeline";
 
 describe("buildTimeline", () => {
   it("places each note after the one before it", () => {
@@ -103,15 +96,5 @@ describe("soundingNotes", () => {
 describe("endlessTimeline", () => {
   it("has no notes, a bar of the time signature, and no end", () => {
     expect(endlessTimeline("6/8")).toEqual({ notes: [], bar: 3, bars: Infinity, end: Infinity });
-  });
-});
-
-describe("writtenInBarTo", () => {
-  it("gives the notes written in the bar up to a place, rests left out", () => {
-    const timeline = buildTimeline("C5/q, B4, Bb4, D5, F#4/h, B4/q/r, G4", "4/4");
-    expect(writtenInBarTo(timeline, 2)).toEqual(["C5", "B4", "Bb4"]);
-    expect(writtenInBarTo(timeline, 1.5)).toEqual(["C5", "B4"]);
-    // The next bar starts afresh.
-    expect(writtenInBarTo(timeline, 7)).toEqual(["F#4", "G4"]);
   });
 });

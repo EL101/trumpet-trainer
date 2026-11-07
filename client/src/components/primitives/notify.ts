@@ -26,7 +26,9 @@ export const BRIEF_NOTICE_MS = 2500;
 /** Show a notice in the bottom-right corner. Needs `<Toaster />` mounted once in the app. */
 export function notify({ tone, title, description, link, id, duration = NOTICE_MS }: Notice) {
   return toaster.create({
-    id,
+    // Only when given: an `id: undefined` replaces the one the toaster makes up, and a
+    // toast without an id throws while rendering, which takes the whole page down.
+    ...(id === undefined ? {} : { id }),
     type: tone,
     title,
     description,

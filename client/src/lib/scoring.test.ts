@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { notePlace, overallScore, scoreRun, type PitchSample } from "./scoring";
+import { notePlace, overallScore, scoreRun, type PitchSample, type ScoredRun } from "./scoring";
 import { buildTimeline } from "./timeline";
 import { CONCERT_OFFSET } from "./tuning";
+
+/** The notes a run played that weren't the ones written, as ghosts. */
+const wrongNotes = (run: ScoredRun) =>
+  run.played
+    .filter((m) => m.status === "wrong")
+    .map(({ start, length, midi }) => ({ start, length, midi }));
 
 /** Frames a quarter note: 60 a second at ♩ = 120. */
 const FRAMES_PER_QUARTER = 30;
@@ -59,8 +65,11 @@ describe("scoreRun", () => {
     for (const part of Object.values(run.parts)) {
       expect(part).toEqual({ score: 100, notes: [] });
     }
-    expect(run.ghosts).toEqual([]);
+    expect(wrongNotes(run)).toEqual([]);
     expect(run.cents.slice(0, 8)).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
+    // Every note played is on the played staff, right, with its written note's cents.
+    expect(run.played).toHaveLength(8);
+    expect(run.played.every((m) => m.status === "right" && m.cents === 0)).toBe(true);
   });
 
   it("never says a wrong note was played as the note written", () => {
@@ -82,7 +91,7 @@ describe("scoreRun", () => {
       }),
     ]);
     // Both pitches played over the C are wrong notes, so both are drawn.
-    expect(run.ghosts.map((g) => g.midi)).toEqual([62, 63]);
+    expect(wrongNotes(run).map((g) => g.midi)).toEqual([62, 63]);
   });
 
   it("marks a wrong note with what was played, as a ghost over the written one", () => {
@@ -104,7 +113,7 @@ describe("scoreRun", () => {
       },
     ]);
     // Drawn where it was played, for as long as it was held: a quarter note.
-    expect(run.ghosts).toEqual([{ start: 6, length: 1, midi: 67 }]);
+    expect(wrongNotes(run)).toEqual([{ start: 6, length: 1, midi: 67 }]);
     // Not the right note, so no intonation colour.
     expect(run.cents[6]).toBeNull();
   });
@@ -119,7 +128,7 @@ describe("scoreRun", () => {
     expect(run.parts.rightNotes.notes).toEqual([
       { bar: 1, beat: 4, index: 3, written: 65, text: "No note heard for F4." },
     ]);
-    expect(run.ghosts).toEqual([]);
+    expect(wrongNotes(run)).toEqual([]);
     // The notes that were played are scored on their own merits.
     expect(run.parts.rhythm.score).toBe(100);
   });
@@ -319,7 +328,7 @@ describe("scoreRun subharmonics", () => {
     const run = scoreRun(timeline, low, TIMING);
 
     expect(run.parts.rightNotes).toEqual({ score: 100, notes: [] });
-    expect(run.ghosts).toEqual([]);
+    expect(wrongNotes(run)).toEqual([]);
   });
 
   it("drops a low sound that isn't a fraction of the note due", () => {
