@@ -180,6 +180,11 @@ model PracticeScore {
   rhythmFeedback     Json?        @map("rhythm_feedback")
   intonationFeedback Json?        @map("intonation_feedback")
   toneFeedback       Json?        @map("tone_feedback")
+  /// When the hourly prune found the run's exercise in neither history nor the library.
+  /// Its feedback is cleared on a later prune if the exercise is still gone, and the mark
+  /// taken off if it's back (history cleared and the exercise saved again). Only while
+  /// there's feedback to clear.
+  feedbackOrphanedAt DateTime?    @map("feedback_orphaned_at") @db.Timestamptz(6)
   createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -189,5 +194,7 @@ model PracticeScore {
   @@index([userId, createdAt(sort: Desc)], map: "idx_practice_scores_user_created")
   /// Only runs that still have feedback: the newest read back, and the prune's search.
   @@index([userId, exerciseId, createdAt(sort: Desc)], map: "idx_practice_scores_with_feedback", where: raw("right_notes_feedback IS NOT NULL"))
+  /// Only the runs marked as orphaned, which are few: the prune's search for them.
+  @@index([feedbackOrphanedAt], map: "idx_practice_scores_orphaned", where: raw("feedback_orphaned_at IS NOT NULL"))
   @@map("practice_scores")
 }

@@ -86,26 +86,67 @@ export function latestScore(userId: string, exerciseId: string) {
 }
 
 /**
+ * How long a run stays marked as orphaned before its feedback can be cleared: past the
+ * next hourly prune, so its exercise has a whole run's time to come back (history
+ * cleared, the exercise saved again). Also keeps two server instances' prunes, run close
+ * together, from marking and clearing in one go.
+ */
+export const ORPHAN_GRACE_MS = 30 * 60 * 1000;
+
+/**
  * Lets go of the feedback no one will be shown: that of exercises in neither the
  * user's history nor their library (pruned, cleared or removed), and that of runs past
  * each exercise's newest `limit`. The four feedback columns are cleared; the row, its
- * scores and what the exercise was stay, for the user's progress. Returns how many
- * rows were cleared.
+ * scores and what the exercise was stay, for the user's progress.
+ *
+ * An exercise can be out of both tables for a moment (history cleared, and the
+ * exercise on the plate saved again), so its runs aren't cleared straight away: a prune
+ * marks them (feedback_orphaned_at), and a later one, at least `graceMs` after, clears
+ * them if the exercise is still gone. One that's come back is unmarked. Returns how many
+ * runs' feedback was cleared, and how many were newly marked.
  *
  * Raw SQL: the scores aren't related to history or library rows in the schema (an
  * exercise can be in either), so Prisma can't write the NOT EXISTS. A run is past the
  * limit when `limit` newer runs of its exercise exist; that's counted per run that still
  * has feedback, stopping at the limit. The runs with feedback come from their own partial
- * index (idx_practice_scores_with_feedback) and the count from the (user, exercise,
- * created) one, so the work follows the feedback kept, not the size of the table, which
- * keeps every run. Covered in test/scores.test.ts.
+ * index (idx_practice_scores_with_feedback), the marked ones from theirs
+ * (idx_practice_scores_orphaned), and the count from the (user, exercise, created) one,
+ * so the work follows the feedback kept, not the size of the table, which keeps every
+ * run. Covered in test/scores.test.ts.
  */
-export async function pruneFeedback(limit = FEEDBACK_PER_EXERCISE) {
+export async function pruneFeedback(limit = FEEDBACK_PER_EXERCISE, graceMs = ORPHAN_GRACE_MS) {
+  // The exercise is back: unmark.
+  await prisma.$executeRaw`
+    UPDATE practice_scores s
+    SET feedback_orphaned_at = NULL
+    WHERE s.feedback_orphaned_at IS NOT NULL
+      AND (
+        EXISTS (
+          SELECT 1 FROM history h WHERE h.user_id = s.user_id AND h.exercise_id = s.exercise_id
+        )
+        OR EXISTS (
+          SELECT 1 FROM library l WHERE l.user_id = s.user_id AND l.exercise_id = s.exercise_id
+        )
+      )`;
+  // Marked by an earlier prune, and still gone: clear.
   const orphans = await prisma.$executeRaw`
     UPDATE practice_scores s
     SET right_notes_feedback = NULL, rhythm_feedback = NULL,
-        intonation_feedback = NULL, tone_feedback = NULL
+        intonation_feedback = NULL, tone_feedback = NULL, feedback_orphaned_at = NULL
+    WHERE s.feedback_orphaned_at IS NOT NULL
+      AND s.feedback_orphaned_at <= now() - ${graceMs} * interval '1 millisecond'
+      AND NOT EXISTS (
+        SELECT 1 FROM history h WHERE h.user_id = s.user_id AND h.exercise_id = s.exercise_id
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM library l WHERE l.user_id = s.user_id AND l.exercise_id = s.exercise_id
+      )`;
+  // Newly gone: mark, for a later prune.
+  const marked = await prisma.$executeRaw`
+    UPDATE practice_scores s
+    SET feedback_orphaned_at = now()
     WHERE s.right_notes_feedback IS NOT NULL
+      AND s.feedback_orphaned_at IS NULL
       AND NOT EXISTS (
         SELECT 1 FROM history h WHERE h.user_id = s.user_id AND h.exercise_id = s.exercise_id
       )
@@ -115,7 +156,7 @@ export async function pruneFeedback(limit = FEEDBACK_PER_EXERCISE) {
   const excess = await prisma.$executeRaw`
     UPDATE practice_scores s
     SET right_notes_feedback = NULL, rhythm_feedback = NULL,
-        intonation_feedback = NULL, tone_feedback = NULL
+        intonation_feedback = NULL, tone_feedback = NULL, feedback_orphaned_at = NULL
     WHERE s.right_notes_feedback IS NOT NULL
       AND (
         SELECT count(*) FROM (
@@ -125,5 +166,5 @@ export async function pruneFeedback(limit = FEEDBACK_PER_EXERCISE) {
           LIMIT ${limit}
         ) newer
       ) >= ${limit}`;
-  return orphans + excess;
+  return { cleared: orphans + excess, marked };
 }

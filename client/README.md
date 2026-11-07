@@ -150,13 +150,20 @@ the take pauses, since the microphone is read on animation frames, which stop th
   from 0 to 100: right notes, rhythm, intonation, and steadiness & tone, weighted
   40/30/20/10 (`SCORE_PARTS`) into the overall score. Each part comes with feedback
   lines (`{ bar, beat, text, … }`) worded for the player: sharp, flat, wavered,
-  rushed, never cents. It also gives per-note cents and ghost notes for the staff.
+  rushed, never cents. It also gives per-note cents and ghost notes for the staff. A
+  repeated note (the same pitch straight after, not tied or slurred) held over from
+  the one before, with no attack of its own, scores nothing for rhythm and says so. A
+  held note's release is found over dropouts of up to 0.2 s that it picks up from again
+  before its end; after its end, sound that starts again is the next note.
 - **Transcribing:** `transcribe()` in `lib/transcribe.ts` splits what was heard into the
   notes played (pitch, start, end), and `toGhost()` writes each as a note value from how
   long it lasted at the tempo, snapped to a sixteenth. `wrongNotes()` picks the ones that
   aren't the note written where they sounded. A held note carries on through a little
   wavering or being out of tune, and through the microphone losing it for up to 0.2 s,
-  unless a written note starts in that silence (then it's a tongued repeat). Pitches
+  unless a written note starts in that silence (then it's a tongued repeat). A different
+  note has to last 0.07 s to start a new one, and a note 0.08 s to be kept, or at a fast
+  tempo 0.6 of a sixteenth if that's shorter (`forTempo()`), so sixteenths aren't lost,
+  but never under 0.03 s, so the metronome's click is still a blip. Pitches
   heard below the trumpet's range
   are subharmonics, taken back up to the note due (`heardPitch()` in `lib/hearing.ts`).
 - **On the staff, as it plays:** every 150 ms the player marks what's been heard so far:
@@ -164,7 +171,19 @@ the take pauses, since the microphone is read on animation frames, which stop th
   with stems, flags and dots, spelt for the key by `spellInKey()`, and each written note's
   intonation colour once it's over. While a take records, the staff shows only its live
   marks; the scored run's replace them when it ends. Ghosts are drawn over the staff on their own, like the
-  cursor, so they don't redraw it.
+  cursor, so they don't redraw it. The lines are still spaced, and the drawing sized, to
+  leave room for them (`ghostReach()` in `Staff`), so one far off the staff doesn't run
+  into the next line; the staff is redrawn only when the room they need changes. A
+  ghost's accidental takes in the notes written earlier in its bar, not just the key
+  signature (`spellInKey()`'s `earlier`, from `writtenInBarTo()`).
+  Each update works only on what's still open (`lib/liveScore.ts`), so it costs the same
+  late in a long run as early on. Transcription starts again from the start of the latest
+  note played that's definitely over (`restartPoint()`); the notes before it are kept. A
+  written note's results are worked out on every update until its whole stretch is heard
+  (to `heardUntil()`: its end, half a beat, and the delays the newest frame lags by), then
+  locked in. A take starting or resuming at `from` throws away what was kept from there
+  on (`rewindLive()`). The recorder keeps its frames in order, so nothing is sorted. The
+  score when the run ends is still worked out over every frame.
 - **The score card** is `music/ScoreCard` (mockup B): the overall score and weights in a
   side column, then a row per part. A wrong note's line shows its bar with the note
   played drawn over it, held for as long as it was. Closing it ("See it on the staff")
@@ -177,11 +196,22 @@ the take pauses, since the microphone is read on animation frames, which stop th
   are never deleted, for the user's progress: each keeps what its exercise was (type,
   key, time signature, range, difficulty), and the hourly prune only clears the
   feedback, of runs past an exercise's newest 20 and of exercises in neither history nor
-  the library. A user can save at most 10 runs a minute and 300 a day (`SCORE_LIMITS` in
+  the library. Those of an exercise gone are only marked at first (`feedback_orphaned_at`)
+  and cleared by a later prune, at least 30 minutes on, if it's still gone; one that's
+  back is unmarked. Clearing history on Generate keeps the exercise on the plate in the
+  same request (`DELETE /api/history` with `keep`, `clearHistory()`'s `keep`), saved as
+  the new No. 1, so it's never out of both tables. A user can save at most 10 runs a minute and 300 a day (`SCORE_LIMITS` in
   `server/src/queries/scores.ts`, counted in the database under a lock on the user's row).
   Past either, the save is turned down with a 429 naming the limit, and the player says
-  "Score not saved: too many runs" (`scoreLimitOf()`), still showing the run's card.
+  "Score not saved: too many runs" (`scoreLimitOf()`), still showing the run's card. A
+  save that fails, for that or any reason, is said in a notice and on the run's card
+  (`ScoreCard`'s `unsaved`, worded by `unsavedNotice()`), where it stays. `useLatestScore`
+  keeps what it loaded with the user it was for, so another account's feedback isn't
+  shown after a switch.
 - **Pausing** turns the microphone off; Resume opens it again and the take carries on.
+  Abandoning a take while the browser still asks for the microphone (switching to
+  Listen, Restart, leaving) calls the request off (`useRunRecorder`'s `close`): if it's
+  granted later the microphone is let go at once, and the take doesn't start.
 
 ## The library
 

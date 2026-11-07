@@ -197,6 +197,72 @@ describe("scoreRun", () => {
     ]);
   });
 
+  it("doesn't take a short dropout in a held note for letting it go", () => {
+    const timeline = buildTimeline("C5/w", "4/4");
+    // The microphone loses the note for 0.06 s, a few frames, halfway through.
+    const dropout = hear(4, { midi: 72, from: 0, to: 1.5 }, { midi: 72, from: 1.62, to: 3.9 });
+    expect(scoreRun(timeline, dropout, TIMING).parts.rhythm.notes).toEqual([]);
+
+    // Let go of for good, it's still heard.
+    const released = hear(4, { midi: 72, from: 0, to: 2.5 });
+    expect(scoreRun(timeline, released, TIMING).parts.rhythm.notes).toContainEqual({
+      bar: 1,
+      beat: 1,
+      text: "Let go of the whole note early.",
+    });
+  });
+
+  it("still hears a note let go early before a tongued repeat, at a fast tempo", () => {
+    // ♩ = 240: 0.7 of a beat early is 0.175 s, inside the dropout bridge, but the sound
+    // that starts again is the next note, not this one carrying on.
+    const fast = { beat: 1, secondsPerQuarter: 0.25 };
+    const timeline = buildTimeline("G4/h, G4/h", "4/4");
+    const run = scoreRun(
+      timeline,
+      hear(4, { midi: 67, from: 0, to: 1.3 }, { midi: 67, from: 2, to: 3.9 }),
+      fast,
+    );
+    expect(run.parts.rhythm.notes).toContainEqual({
+      bar: 1,
+      beat: 1,
+      text: "Let go of the half note early.",
+    });
+  });
+
+  it("says when a repeated note is held over instead of tongued again", () => {
+    const timeline = buildTimeline("G4/q, G4, C5/h", "4/4");
+    // One G4 held straight through both quarter notes.
+    const run = scoreRun(
+      timeline,
+      hear(4, { midi: 67, from: 0, to: 1.9 }, { midi: 72, from: 2, to: 3.8 }),
+      TIMING,
+    );
+
+    expect(run.parts.rhythm.score).toBeLessThan(100);
+    expect(run.parts.rhythm.notes).toContainEqual({
+      bar: 1,
+      beat: 2,
+      text: "Held the note before into this one: tongue the repeated note.",
+    });
+    // It's still the right note.
+    expect(run.parts.rightNotes.score).toBe(100);
+  });
+
+  it("doesn't for a repeat tongued apart, a tie, or a slur over the same note", () => {
+    const tongued = asWritten("G4/q, G4, C5/h");
+    expect(scoreRun(tongued.timeline, tongued.samples, TIMING).parts.rhythm).toEqual({
+      score: 100,
+      notes: [],
+    });
+    const held = hear(4, { midi: 67, from: 0, to: 1.9 }, { midi: 72, from: 2, to: 3.8 });
+    for (const notes of ["G4/q~, G4, C5/h", "(G4/q, G4), C5/h"]) {
+      const rhythm = scoreRun(buildTimeline(notes, "4/4"), held, TIMING).parts.rhythm;
+      expect(rhythm.notes.map((n) => n.text)).not.toContainEqual(
+        expect.stringMatching(/tongue the repeated note/),
+      );
+    }
+  });
+
   it("hears a note that wavers, and one scooped into", () => {
     const { timeline, samples } = asWritten("C5/w, G4/w", "4/4", (s, i) =>
       i === 0

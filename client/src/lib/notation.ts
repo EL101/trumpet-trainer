@@ -71,8 +71,17 @@ export type Spelling = {
  * How to write a pitch (a MIDI number) in a major key signature ("F", "Bb", "C"): as
  * the key's own note if it's in the scale, otherwise with sharps in sharp keys and flats
  * in flat ones (and in C).
+ *
+ * `earlier` is the notes written before it in its bar, in order, as spelt on the staff
+ * ("B4", "F#5"): one on the same line sets that line's accidental for the rest of the
+ * bar, so the note needs one only if it differs. (In F major after a B♮, a B♭ needs its
+ * flat.)
  */
-export function spellInKey(midi: number, keySig: string): Spelling {
+export function spellInKey(
+  midi: number,
+  keySig: string,
+  earlier: readonly string[] = [],
+): Spelling {
   const scale = Key.majorKey(keySig).scale;
   const flats = scale.some((pc) => pc.endsWith("b")) || scale.every((pc) => pc.length === 1);
   const pc =
@@ -82,10 +91,14 @@ export function spellInKey(midi: number, keySig: string): Spelling {
   // Cb5 is a B4, B#3 a C4: find the octave whose note this is.
   const guess = Math.floor(midi / 12) - 1;
   const octave = [guess - 1, guess, guess + 1].find((o) => Note.midi(`${pc}${o}`) === midi)!;
-  const inKey = Note.get(scale.find((p) => p[0] === letter)!).acc;
+  // What that line already means here: the key signature's, unless the bar changed it.
+  const sameLine = earlier
+    .map((name) => Note.get(name))
+    .findLast((n) => n.letter === letter && n.oct === octave);
+  const current = sameLine ? sameLine.acc : Note.get(scale.find((p) => p[0] === letter)!).acc;
   return {
     name: `${pc}${octave}`,
-    accidental: acc === inKey ? "" : acc === "" ? "n" : (acc[0] as "#" | "b"),
+    accidental: acc === current ? "" : acc === "" ? "n" : (acc[0] as "#" | "b"),
     line: ((octave - 4) * 7 + LETTERS.indexOf(letter)) / 2,
   };
 }

@@ -18,13 +18,14 @@ async function runOnce() {
     // Never let a prune failure take the process down; the next tick retries.
     console.error("History prune failed:", err);
   }
-  // After history: the feedback of exercises it has just let go (and that aren't in
-  // the library) goes with them. The scores themselves stay, for the user's progress.
+  // After history: the feedback of exercises it has let go (and that aren't in the
+  // library) goes with them, on a later run if they're still gone. The scores
+  // themselves stay, for the user's progress.
   try {
-    const cleared = await pruneFeedback();
-    if (cleared > 0) {
+    const { cleared, marked } = await pruneFeedback();
+    if (cleared > 0 || marked > 0) {
       console.log(
-        `Feedback prune: cleared ${cleared} score(s)' feedback, of exercises gone or past the newest ${FEEDBACK_PER_EXERCISE}`,
+        `Feedback prune: cleared ${cleared} score(s)' feedback, of exercises gone or past the newest ${FEEDBACK_PER_EXERCISE}; marked ${marked} whose exercise is gone, to clear next time if it still is`,
       );
     }
   } catch (err) {

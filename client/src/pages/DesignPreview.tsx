@@ -78,6 +78,18 @@ const PREVIEW_GHOSTS: GhostNote[] = [
   { start: 28, length: 2, midi: 59 },
 ];
 
+/**
+ * Ghosts that need room and context: in F major after a written B♮, a B♭ played later in
+ * the bar shows its flat; one far below the first line and one far above the second
+ * push the lines apart.
+ */
+const OUT_OF_RANGE_NOTES = "B4/q, A4, G4, F4, C5/h, D5";
+const OUT_OF_RANGE_GHOSTS: GhostNote[] = [
+  { start: 2, length: 1, midi: 70 },
+  { start: 3, length: 1, midi: 55 },
+  { start: 6, length: 2, midi: 93 },
+];
+
 const PREVIEW_SCORE: RunScore = {
   overall: 83,
   parts: {
@@ -131,7 +143,7 @@ export default function DesignPreview() {
   const [tempo, setTempo] = useState(96);
   const [clicksPerBeat, setClicksPerBeat] = useState(2);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [scoreCardOpen, setScoreCardOpen] = useState(false);
+  const [scoreCardOpen, setScoreCardOpen] = useState<"saved" | "unsaved" | null>(null);
 
   return (
     <Box bg="bg" color="fg" minHeight="100vh" px="56px" py="52px">
@@ -581,6 +593,21 @@ export default function DesignPreview() {
           </Box>
           <Box>
             <Text fontSize="12px" color="fg.muted" mb="xs">
+              Ghosts far off the staff get room between the lines, and take in accidentals written
+              earlier in the bar: after the B♮, the B♭ played on beat 3 shows its flat
+            </Text>
+            <Staff
+              notes={OUT_OF_RANGE_NOTES}
+              timeSig="4/4"
+              musicKey="F major"
+              measuresPerLine={1}
+              scale={0.8}
+              width={360}
+              ghosts={OUT_OF_RANGE_GHOSTS}
+            />
+          </Box>
+          <Box>
+            <Text fontSize="12px" color="fg.muted" mb="xs">
               PracticeButton opens the player on an exercise; its back link returns here. It waits
               for history to number a new exercise.
             </Text>
@@ -600,19 +627,27 @@ export default function DesignPreview() {
           A scored run (mockup B): the player opens it when a run in Play mode ends, and
           LastFeedbackButton opens the newest one from Generate and the library.
         </Text>
-        <Button onClick={() => setScoreCardOpen(true)}>Open the score card</Button>
+        <Flex gap="sm" wrap="wrap">
+          <Button onClick={() => setScoreCardOpen("saved")}>Open the score card</Button>
+          <Button onClick={() => setScoreCardOpen("unsaved")}>Open one that wasn't saved</Button>
+        </Flex>
         <ScoreCard
-          open={scoreCardOpen}
-          onOpenChange={setScoreCardOpen}
+          open={scoreCardOpen !== null}
+          onOpenChange={(open) => setScoreCardOpen(open ? "saved" : null)}
           exercise={SCORED_EXERCISE}
           score={PREVIEW_SCORE}
           tempo={92}
+          unsaved={
+            scoreCardOpen === "unsaved"
+              ? "Not saved: the limit is 10 runs a minute, so this one won't be under Last feedback."
+              : undefined
+          }
           actions={
             <>
-              <Button variant="ghost" onClick={() => setScoreCardOpen(false)}>
+              <Button variant="ghost" onClick={() => setScoreCardOpen(null)}>
                 See it on the staff
               </Button>
-              <Button onClick={() => setScoreCardOpen(false)}>
+              <Button onClick={() => setScoreCardOpen(null)}>
                 <RotateCcw />
                 Try again
               </Button>

@@ -22,7 +22,7 @@ import { roles } from "@/theme";
 import { getKeySig } from "@/utils/generateMusic";
 import type { Key } from "@/schema";
 import { parseMeasures, resolveMeasuresPerLine, spellInKey } from "@/lib/notation";
-import { buildTimeline, cursorAt, type Timeline } from "@/lib/timeline";
+import { barAt, buildTimeline, cursorAt, writtenInBarTo, type Timeline } from "@/lib/timeline";
 import type { GhostNote } from "@/lib/transcribe";
 
 export type StaffProps = Omit<BoxProps, "children" | "width" | "color"> & {
@@ -122,6 +122,18 @@ export function Staff({
   // so is drawn on its own rather than redrawing the staff.
   const [drawing, setDrawing] = useState<{ svg: SVGSVGElement; placed: Placed[] } | null>(null);
 
+  // How far the ghosts reach above and below each line, so the lines are spaced to fit
+  // them. Kept until it changes, so ghosts coming in during a run don't each redraw the
+  // staff: only one reaching further than before does.
+  const timeline = useMemo(() => buildTimeline(notes, timeSig), [notes, timeSig]);
+  const ghostKey = musicKey ? getKeySig(musicKey) : "C";
+  const reach = useMemo(
+    () => ghostReach(ghosts ?? [], timeline, perLine, ghostKey, lineCount),
+    [ghosts, timeline, perLine, ghostKey, lineCount],
+  );
+  const [ghostRoom, setGhostRoom] = useState(reach);
+  if (!sameReach(reach, ghostRoom)) setGhostRoom(reach);
+
   useEffect(() => {
     const host = ref.current;
     if (!host || !W) return;
@@ -134,7 +146,7 @@ export function Staff({
     ctx.setFillStyle(roles.fg.DEFAULT);
     ctx.setStrokeStyle(roles.fg.DEFAULT);
 
-    const { placed, underSlurs } = drawMeasures(ctx, {
+    const { placed, underSlurs, extent } = drawMeasures(ctx, {
       measures,
       perLine,
       lineHeight,
@@ -143,6 +155,7 @@ export function Staff({
       timeSig,
       barlines,
       showText,
+      ghostRoom,
       colorFor: (i, isRest) => {
         if (isRest) return roles.fg.DEFAULT;
         if (noteColor) return noteColor;
@@ -171,7 +184,7 @@ export function Staff({
       );
     }
     labelsDrawn.current = !!shownLabels;
-    setDrawnHeight(fitToContent(svg, W, height, scale));
+    setDrawnHeight(fitToContent(svg, W, height, scale, extent));
     setDrawing({ svg, placed });
     return () => {
       host.innerHTML = "";
@@ -190,16 +203,16 @@ export function Staff({
     shownLabels,
     noteColor,
     showText,
+    ghostRoom,
   ]);
 
   // Ghosts are drawn on their own too: while a run plays they come in as they're heard.
-  const timeline = useMemo(() => buildTimeline(notes, timeSig), [notes, timeSig]);
+  // The room they take was left when the staff was drawn (`ghostRoom`).
   useEffect(() => {
     if (!drawing || !ghosts?.length) return;
-    const keySig = musicKey ? getKeySig(musicKey) : "C";
-    const marks = drawGhosts(drawing.svg, drawing.placed, timeline, ghosts, keySig);
+    const marks = drawGhosts(drawing.svg, drawing.placed, timeline, ghosts, ghostKey);
     return () => marks.forEach((mark) => mark.remove());
-  }, [drawing, ghosts, timeline, musicKey]);
+  }, [drawing, ghosts, timeline, ghostKey]);
 
   useEffect(() => {
     if (!drawing || cursor == null) return;
@@ -230,15 +243,22 @@ export function Staff({
 }
 
 /**
- * Grows the SVG to take in anything drawn above or below its `height`, keeping the
- * staff where it was, and returns the new pixel height.
+ * Grows the SVG to take in anything drawn above or below its `height`, and anything to
+ * be drawn later within `extent` (ghost notes, in the drawing's own units), keeping the
+ * staff where it was. Returns the new pixel height.
  */
-function fitToContent(svg: SVGSVGElement, width: number, height: number, scale: number) {
+function fitToContent(
+  svg: SVGSVGElement,
+  width: number,
+  height: number,
+  scale: number,
+  extent: Reach,
+) {
   if (typeof svg.getBBox !== "function") return height; // jsdom
   const box = svg.getBBox();
   const pad = 2;
-  const top = Math.min(0, box.y - pad);
-  const bottom = Math.max(height / scale, box.y + box.height + pad);
+  const top = Math.min(0, box.y - pad, extent.top - pad);
+  const bottom = Math.max(height / scale, box.y + box.height + pad, extent.bottom + pad);
   const fitted = Math.ceil((bottom - top) * scale);
   if (fitted <= height) return height;
   svg.setAttribute("viewBox", `0 ${top} ${width / scale} ${fitted / scale}`);
@@ -294,9 +314,11 @@ function drawMeasures(
     timeSig: string;
     barlines: boolean;
     showText: boolean;
+    /** How far each line's ghost notes reach (see `ghostReach`), to leave room for. */
+    ghostRoom: (Reach | null)[];
     colorFor: (index: number, isRest: boolean) => string;
   },
-): { placed: Placed[]; underSlurs: UnderSlur[] } {
+): { placed: Placed[]; underSlurs: UnderSlur[]; extent: Reach } {
   const { measures, perLine, lineHeight, innerWidth, keySig, timeSig, barlines, colorFor } = opts;
   const [beats, beatValue] = timeSig.split("/").map(Number);
   // Beam by the meter's beat (e.g. 3+3 in 6/8); VexFlow otherwise pairs eighths in every meter.
@@ -379,10 +401,23 @@ function drawMeasures(
   // high ones.
   let y = 0;
   let prevBottom = 0;
+  // How far the ghosts to be drawn over the lines reach: the drawing is fitted to take
+  // them in as well as what's drawn now. (Infinite, so no ghosts take no room.)
+  const extent = { top: Infinity, bottom: -Infinity };
   lines.forEach((bars, line) => {
-    const { top, bottom } = lineExtent(bars, opts.showText, slurredLines.has(line));
+    const { top, bottom } = lineExtent(
+      bars,
+      opts.showText,
+      slurredLines.has(line),
+      opts.ghostRoom[line] ?? null,
+    );
     if (line > 0) y = Math.max(y + lineHeight, y + prevBottom - top + LINE_GAP);
     prevBottom = bottom;
+    const ghosts = opts.ghostRoom[line];
+    if (ghosts) {
+      extent.top = Math.min(extent.top, y + ghosts.top);
+      extent.bottom = Math.max(extent.bottom, y + ghosts.bottom);
+    }
 
     bars.forEach(({ stave, voice, beams }) => {
       stave.setY(y).setContext(ctx).draw();
@@ -396,7 +431,7 @@ function drawMeasures(
   });
   drawTies(ctx, placed);
   const underSlurs = drawSlurs(ctx, placed);
-  return { placed, underSlurs };
+  return { placed, underSlurs, extent };
 }
 
 /**
@@ -432,14 +467,17 @@ function beamByGroup(notes: StaveNote[], groups: ReturnType<typeof Beam.getDefau
   return beams;
 }
 
+/** How far marks reach above (`top`) and below (`bottom`), relative to a stave's y. */
+type Reach = { top: number; bottom: number };
+
 /**
  * How far a line's notes reach above and below the staff, relative to its stave's y:
- * note heads plus stems (a beam can stretch a stem a little past its usual length), and
- * the arc over them if the line has slurs.
+ * note heads plus stems (a beam can stretch a stem a little past its usual length), the
+ * arc over them if the line has slurs, and any ghost notes drawn over it (`ghosts`).
  */
-function lineExtent(bars: Bar[], showText: boolean, slurred: boolean) {
-  let top = STAFF_TOP;
-  let bottom = STAFF_BOTTOM;
+function lineExtent(bars: Bar[], showText: boolean, slurred: boolean, ghosts: Reach | null) {
+  let top = Math.min(STAFF_TOP, ghosts?.top ?? STAFF_TOP);
+  let bottom = Math.max(STAFF_BOTTOM, ghosts?.bottom ?? STAFF_BOTTOM);
   let lowest = STAFF_BOTTOM;
   const stem = Stem.HEIGHT + 6;
   for (const { voice } of bars) {
@@ -634,6 +672,44 @@ const GHOST_STEM = 35;
 const ACCIDENTAL_GLYPHS = { "#": "♯", b: "♭", n: "♮" } as const;
 
 /**
+ * How far each line's ghosts reach above and below its staff (in `lineExtent`'s units,
+ * drawn as `drawGhosts` draws them: head, and stem up or down), so the lines are spaced
+ * to fit them. Null for a line with none.
+ */
+function ghostReach(
+  ghosts: readonly GhostNote[],
+  timeline: Timeline,
+  perLine: number,
+  keySig: string,
+  lineCount: number,
+): (Reach | null)[] {
+  const reach: (Reach | null)[] = Array.from({ length: lineCount }, () => null);
+  for (const ghost of ghosts) {
+    const line = Math.floor(barAt(timeline, Math.min(ghost.start, timeline.end)) / perLine);
+    if (line >= lineCount) continue;
+    const staffLine = spellInKey(ghost.midi, keySig).line;
+    // As `lineExtent`: VexFlow's line 5 is the top line, at STAFF_TOP.
+    const head = STAFF_TOP + 50 - staffLine * 10;
+    const stem = ghost.length < 4 ? GHOST_STEM : 0;
+    const up = staffLine < 3;
+    const top = head - GHOST_HEAD.ry - 2 - (up ? stem : 0);
+    const bottom = head + GHOST_HEAD.ry + 2 + (up ? 0 : stem);
+    const r = reach[line];
+    reach[line] = r
+      ? { top: Math.min(r.top, top), bottom: Math.max(r.bottom, bottom) }
+      : { top, bottom };
+  }
+  return reach;
+}
+
+function sameReach(a: (Reach | null)[], b: (Reach | null)[]) {
+  return (
+    a.length === b.length &&
+    a.every((r, i) => (r && b[i] ? r.top === b[i].top && r.bottom === b[i].bottom : r === b[i]))
+  );
+}
+
+/**
  * Draws each note played that wasn't the one written (`ghosts`) in red, where it was
  * played and as long as it was held: its head (open for a half or whole note), stem,
  * flags and dot, spelt for the key with an accidental if the key signature needs one,
@@ -650,8 +726,10 @@ function drawGhosts(
   if (!placed.length) return [];
   const color = roles.intonation.bad;
   return ghosts.map((ghost) => {
-    const { line, accidental } = spellInKey(ghost.midi, keySig);
     const at = Math.min(ghost.start, timeline.end);
+    // The accidental it needs where it's drawn: after the bar's earlier notes, not just
+    // by the key signature.
+    const { line, accidental } = spellInKey(ghost.midi, keySig, writtenInBarTo(timeline, at));
     const { x: along, placed: p } = xAt(placed, cursorAt(timeline, at));
     let x = along;
     const head = p.note.getNoteHeadEndX() - p.note.getNoteHeadBeginX();

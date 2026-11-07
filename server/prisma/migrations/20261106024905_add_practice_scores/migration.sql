@@ -5,7 +5,8 @@
 -- Scores outlive their exercises, so a user's progress doesn't change when history is
 -- pruned or an exercise is deleted: each keeps what its exercise was (copied from the
 -- history or library row when it's saved), and the hourly prune only clears the four
--- feedback columns, together.
+-- feedback columns, together. A run whose exercise is gone is first marked
+-- (feedback_orphaned_at), and its feedback cleared on a later prune if it's still gone.
 
 -- CreateTable
 CREATE TABLE "practice_scores" (
@@ -27,6 +28,7 @@ CREATE TABLE "practice_scores" (
     "rhythm_feedback" JSONB,
     "intonation_feedback" JSONB,
     "tone_feedback" JSONB,
+    "feedback_orphaned_at" TIMESTAMPTZ(6),
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "practice_scores_pkey" PRIMARY KEY ("id"),
@@ -43,6 +45,10 @@ CREATE TABLE "practice_scores" (
         ("right_notes_feedback" IS NULL) = ("rhythm_feedback" IS NULL)
         AND ("right_notes_feedback" IS NULL) = ("intonation_feedback" IS NULL)
         AND ("right_notes_feedback" IS NULL) = ("tone_feedback" IS NULL)
+    ),
+    -- Marked as orphaned only while there's feedback to clear.
+    CONSTRAINT "practice_scores_orphaned_with_feedback" CHECK (
+        "feedback_orphaned_at" IS NULL OR "right_notes_feedback" IS NOT NULL
     )
 );
 
@@ -61,6 +67,12 @@ CREATE INDEX "idx_practice_scores_user_created" ON "practice_scores"("user_id", 
 -- prune's search for feedback to clear, which would otherwise read the whole table.
 -- CreateIndex
 CREATE INDEX "idx_practice_scores_with_feedback" ON "practice_scores"("user_id", "exercise_id", "created_at" DESC) WHERE ("right_notes_feedback" IS NOT NULL);
+
+-- Only the runs marked as orphaned (their exercise in neither history nor the library,
+-- waiting for a later prune to clear their feedback), which are few: the prune's search
+-- for them, to clear or unmark.
+-- CreateIndex
+CREATE INDEX "idx_practice_scores_orphaned" ON "practice_scores"("feedback_orphaned_at") WHERE ("feedback_orphaned_at" IS NOT NULL);
 
 -- AddForeignKey
 ALTER TABLE "practice_scores" ADD CONSTRAINT "practice_scores_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;

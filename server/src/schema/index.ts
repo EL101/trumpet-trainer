@@ -1,6 +1,8 @@
 export {
   ExerciseInputSchema,
   HistoryInputSchema,
+  ClearHistorySchema,
+  type ClearHistory,
   EXERCISE_TABLES,
   type ExerciseInput,
   type HistoryInput,

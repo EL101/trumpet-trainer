@@ -149,6 +149,17 @@ describe("spellInKey", () => {
     expect(spellInKey(66, "C")).toEqual({ name: "Gb4", accidental: "b", line: 2 });
   });
 
+  it("takes in the accidentals written earlier in the bar, on the same line only", () => {
+    // In F major, after a B♮ the line is natural: a B♭ needs its flat, a B♮ nothing.
+    expect(spellInKey(70, "F", ["B4"])).toMatchObject({ name: "Bb4", accidental: "b" });
+    expect(spellInKey(71, "F", ["B4"])).toMatchObject({ name: "B4", accidental: "" });
+    // The latest one counts; another octave's doesn't.
+    expect(spellInKey(70, "F", ["B4", "Bb4"])).toMatchObject({ accidental: "" });
+    expect(spellInKey(70, "F", ["B5"])).toMatchObject({ accidental: "" });
+    // In C, after an F♯ an F needs its natural.
+    expect(spellInKey(65, "C", ["F#4"])).toMatchObject({ name: "F4", accidental: "n" });
+  });
+
   it("finds the octave of a note spelt across one", () => {
     expect(spellInKey(71, "Gb")).toEqual({ name: "Cb5", accidental: "", line: 3.5 });
     expect(spellInKey(60, "C#")).toEqual({ name: "B#3", accidental: "", line: -0.5 });

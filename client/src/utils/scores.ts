@@ -46,6 +46,38 @@ export function scoreLimitOf(error: unknown): ScoreLimit | null {
   return { max: limit.max, per: limit.per };
 }
 
+/**
+ * What to tell the player when a run couldn't be saved (`error`, from `saveScore`): a
+ * notice's title and description, and a line for the score card, which stays there
+ * (the run won't be under Last feedback).
+ */
+export function unsavedNotice(error: unknown): {
+  title: string;
+  description: string;
+  card: string;
+} {
+  const limit = scoreLimitOf(error);
+  if (limit?.per === "minute") {
+    return {
+      title: "Score not saved: too many runs",
+      description: `Only ${limit.max} runs a minute can be saved. Take a breath, then play again to save the next one.`,
+      card: `Not saved: the limit is ${limit.max} runs a minute, so this one won't be under Last feedback.`,
+    };
+  }
+  if (limit) {
+    return {
+      title: "Score not saved: too many runs",
+      description: `You've reached the limit of ${limit.max} saved runs a day. This one is shown here, but it won't be under Last feedback.`,
+      card: `Not saved: the limit is ${limit.max} runs a day, so this one won't be under Last feedback.`,
+    };
+  }
+  return {
+    title: "Couldn't save your score",
+    description: "It's shown here, but it won't be under Last feedback later.",
+    card: "Not saved (check your connection), so this run won't be under Last feedback.",
+  };
+}
+
 /** Saves a scored run. Resolves to it as saved, or null without a signed-in user; throws if it couldn't be. */
 export async function saveScore(
   exerciseId: string,

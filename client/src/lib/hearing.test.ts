@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { heardPitch, isVoiced, writtenPitch } from "./hearing";
+import { firstFrom, heardPitch, isVoiced, writtenPitch } from "./hearing";
 import { CONCERT_OFFSET } from "./tuning";
 
 /** The concert frequency of a written MIDI pitch. */
@@ -51,5 +51,15 @@ describe("isVoiced", () => {
   it("hears a clarity and a level exactly at the limits", () => {
     expect(isVoiced({ ...loud, clarity: 0.8 })).toBe(true);
     expect(isVoiced({ ...loud, level: 0.003 })).toBe(true);
+  });
+});
+
+describe("firstFrom", () => {
+  it("finds the first sample at or after a place, or the end if there's none", () => {
+    const samples = [0, 0.5, 0.5, 1].map((at) => ({ at, hz: 0, clarity: 0, level: 0 }));
+    expect(firstFrom(samples, 0.5)).toBe(1);
+    expect(firstFrom(samples, 0.6)).toBe(3);
+    expect(firstFrom(samples, -1)).toBe(0);
+    expect(firstFrom(samples, 2)).toBe(4);
   });
 });

@@ -53,3 +53,18 @@ export function heardPitch(hz: number, expected: number): number | null {
 export function isVoiced(s: PitchSample) {
   return s.hz > 0 && s.clarity >= MIN_CLARITY && s.level >= MIN_LEVEL;
 }
+
+/**
+ * The index of the first sample at or after `at`, by binary search: `samples` must be in
+ * order of `at`. `samples.length` if none is.
+ */
+export function firstFrom(samples: readonly PitchSample[], at: number) {
+  let lo = 0;
+  let hi = samples.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (samples[mid].at < at) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}

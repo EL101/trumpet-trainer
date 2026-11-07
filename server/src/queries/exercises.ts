@@ -1,5 +1,5 @@
 import { prisma } from "../db.js";
-import type { ExerciseInput, ExerciseTable, HistoryInput } from "../schema/index.js";
+import type { ClearHistory, ExerciseInput, ExerciseTable, HistoryInput } from "../schema/index.js";
 import { retryOnConflict } from "./conflicts.js";
 
 /** History rows kept per user. The library has no limit. */
@@ -97,12 +97,19 @@ export async function deleteLibraryEntry(userId: string, exerciseId: string) {
   return count > 0;
 }
 
-export async function deleteExercises(table: ExerciseTable, userId: string) {
-  const { count } =
-    table === "history"
-      ? await prisma.history.deleteMany({ where: { userId } })
-      : await prisma.library.deleteMany({ where: { userId } });
-  return count;
+/**
+ * Clear the user's history, keeping `keep` (the exercise on the plate) as the new No. 1,
+ * in one transaction: nothing ever sees its exercise in neither history nor the library
+ * (the feedback prune would take its scores' feedback for orphaned). Returns the kept
+ * row, or null with nothing to keep.
+ */
+export function clearHistory(userId: string, keep: ClearHistory["keep"]) {
+  return prisma.$transaction(async (tx) => {
+    await tx.history.deleteMany({ where: { userId } });
+    if (!keep) return null;
+    // Nothing else is left to number from, so it's No. 1.
+    return tx.history.create({ data: { userId, generationNum: 1, ...keep } });
+  });
 }
 
 /** Excess rows fetched and deleted per round trip while pruning one user. */

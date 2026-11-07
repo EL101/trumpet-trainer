@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PitchSample } from "./hearing";
 import { buildTimeline } from "./timeline";
-import { toGhost, transcribe, wrongNotes } from "./transcribe";
+import { forTempo, restartPoint, toGhost, transcribe, wrongNotes } from "./transcribe";
 import { CONCERT_OFFSET } from "./tuning";
 
 /** Frames a quarter note: 60 a second at ♩ = 120. */
@@ -152,5 +152,84 @@ describe("wrongNotes", () => {
       SPQ,
     );
     expect(wrongNotes(played, timeline)).toEqual([{ start: 2.5, length: 1, midi: 67 }]);
+  });
+});
+
+describe("restartPoint", () => {
+  const timeline = buildTimeline("C5/q, D5, (E5, F5)", "4/4");
+  const sounds = [
+    { midi: 72, from: 0, to: 0.9 },
+    { midi: 74, from: 1, to: 1.9 },
+    { midi: 76, from: 2, to: 3 }, // slurred into the F5, no gap
+    { midi: 77, from: 3, to: 3.5 },
+  ];
+
+  it("is the note before the last while the last may carry on, then the last after a silence", () => {
+    const samples = hear(4, ...sounds);
+    const played = transcribe(samples, timeline, SPQ);
+    // Just after the F5 stops, it could still carry on: the E5 before it is over.
+    expect(restartPoint(played, 3.6, SPQ)).toBe(2);
+    // More than 0.2 s (0.4 quarters) of silence after it: the F5 is over too.
+    expect(restartPoint(played, 3.95, SPQ)).toBe(3);
+    expect(restartPoint([], 4, SPQ)).toBe(-1);
+  });
+
+  it("is where transcription can start again, giving the same notes from there", () => {
+    const samples = hear(4, ...sounds);
+    const played = transcribe(samples, timeline, SPQ);
+    const at = restartPoint(played, 3.6, SPQ);
+    expect(transcribe(samples, timeline, SPQ, played[at].start)).toEqual(played.slice(at));
+  });
+});
+
+describe("forTempo", () => {
+  it("keeps a length as it is at slow tempos, a share of a sixteenth at fast ones, over a floor", () => {
+    // ♩ = 60: a sixteenth is 0.25 s, so the length itself is shorter.
+    expect(forTempo(0.08, 1)).toBe(0.08);
+    // ♩ = 208: 0.6 of a 0.072 s sixteenth.
+    expect(forTempo(0.08, 60 / 208)).toBeCloseTo(0.0433, 3);
+    // However fast, never under 0.03 s: a click is still a blip.
+    expect(forTempo(0.08, 0.1)).toBe(0.03);
+  });
+});
+
+describe("transcribe at a fast tempo", () => {
+  const SPQ_208 = 60 / 208;
+
+  it("keeps sixteenths, a wrong one among them", () => {
+    const timeline = buildTimeline("C5/16, D5, E5, F5, G5/q, A5/h", "4/4");
+    // Each sixteenth sounds 0.22 of a quarter: 0.063 s, under the 0.08 s kept at slow tempos.
+    const played = transcribe(
+      hear(
+        4,
+        { midi: 72, from: 0, to: 0.22 },
+        { midi: 75, from: 0.25, to: 0.47 }, // E♭5 for D5
+        { midi: 76, from: 0.5, to: 0.72 },
+        { midi: 77, from: 0.75, to: 0.97 },
+        { midi: 79, from: 1, to: 1.9 },
+        { midi: 81, from: 2, to: 3.9 },
+      ),
+      timeline,
+      SPQ_208,
+    );
+    expect(played.map((p) => p.midi)).toEqual([72, 75, 76, 77, 79, 81]);
+    expect(wrongNotes(played, timeline).map((g) => g.midi)).toEqual([75]);
+  });
+
+  it("still drops a blip as short as the metronome's click", () => {
+    const timeline = buildTimeline("C5/w", "4/4");
+    // 0.02 s of G5 through the held C5, and 0.02 s of sound on its own after it.
+    const blip = 0.02 / SPQ_208;
+    const played = transcribe(
+      hear(
+        6,
+        { midi: 72, from: 0, to: 3.9 },
+        { midi: 79, from: 1, to: 1 + blip },
+        { midi: 79, from: 5, to: 5 + blip },
+      ),
+      timeline,
+      SPQ_208,
+    );
+    expect(played.map((p) => p.midi)).toEqual([72]);
   });
 });

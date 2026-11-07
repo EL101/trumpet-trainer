@@ -1,5 +1,5 @@
 import { Box, Dialog, Flex, Grid, Heading, Portal, Text } from "@chakra-ui/react";
-import { X } from "lucide-react";
+import { CircleAlert, X } from "lucide-react";
 import { Fragment, useMemo, type ReactNode } from "react";
 import { IconButton, Kicker } from "@/components/primitives";
 import { EXERCISE_TYPE_LABELS, KEYLESS } from "@/lib/generatorOptions";
@@ -24,6 +24,11 @@ type ScoreCardProps = {
   tempo: number;
   /** When it was played (ISO); omit for a run just played. */
   playedAt?: string;
+  /**
+   * Why a run just played wasn't saved, if it wasn't: said on the card, where it stays,
+   * as the run won't be under Last feedback.
+   */
+  unsaved?: string;
   /** The buttons along the bottom. The close button in the corner is always there. */
   actions: ReactNode;
 };
@@ -40,6 +45,7 @@ export function ScoreCard({
   score,
   tempo,
   playedAt,
+  unsaved,
   actions,
 }: ScoreCardProps) {
   const pulse = useMemo(() => pulseOf(exercise.timeSig), [exercise.timeSig]);
@@ -122,6 +128,16 @@ export function ScoreCard({
                     </Text>
                   </Flex>
                 </Flex>
+
+                {/* An alert, so a save that fails while the card is open is announced. */}
+                {unsaved ? (
+                  <Flex role="alert" gap="xs" align="flex-start" color="fg.error">
+                    <Box as="span" flex="none" pt="2px" aria-hidden>
+                      <CircleAlert size={14} />
+                    </Box>
+                    <Text textStyle="meta">{unsaved}</Text>
+                  </Flex>
+                ) : null}
 
                 <Grid as="dl" templateColumns="minmax(0, 1fr) auto" rowGap="xs" m={0}>
                   {SCORE_PARTS.map(({ part, label, weight }) => (

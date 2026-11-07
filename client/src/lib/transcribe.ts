@@ -1,4 +1,4 @@
-import { heardPitch, isVoiced, type PitchSample } from "./hearing";
+import { firstFrom, heardPitch, isVoiced, type PitchSample } from "./hearing";
 import { soundingNotes, type SoundingNote, type Timeline } from "./timeline";
 
 /** A note as played: what the microphone heard, split into notes. */
@@ -31,17 +31,33 @@ const CHANGE_SECONDS = 0.07;
  */
 const HOLD_SEMITONES = 0.75;
 /** Drop-outs this short, in seconds, are always bridged: the microphone missing a frame or two. */
-const DROPOUT_SECONDS = 0.04;
+export const DROPOUT_SECONDS = 0.04;
 /**
  * A silence up to this long, in seconds, with the same note either side is the
  * microphone losing it (a breath of noise, a dip in level), so the note carries on,
  * unless a written note starts there: then it's a tongued repeat, and a new note.
  */
-const BRIDGE_SECONDS = 0.2;
+export const BRIDGE_SECONDS = 0.2;
 /** How far, in seconds, a written note can start either side of a silence and still be what it's for. */
 const ONSET_SLACK_SECONDS = 0.1;
 /** Notes shorter than this, in seconds, are dropped: a crack or a stray sound. */
 const SHORTEST_SECONDS = 0.08;
+/**
+ * At a fast tempo a sixteenth can be shorter than CHANGE_SECONDS or SHORTEST_SECONDS, and
+ * would be lost: there, each is this share of a sixteenth instead (see `forTempo`).
+ */
+const SIXTEENTH_SHARE = 0.6;
+/** However fast the tempo, a sound shorter than this, in seconds, is a blip: the metronome's click. */
+const BLIP_SECONDS = 0.03;
+
+/**
+ * A length in `seconds` that a note has to last, shortened at a fast tempo to a share
+ * of a sixteenth so the shortest notes written still count: never longer than `seconds`
+ * (slow tempos are as they were), and never shorter than BLIP_SECONDS.
+ */
+export function forTempo(seconds: number, secondsPerQuarter: number) {
+  return Math.min(seconds, Math.max(BLIP_SECONDS, 0.25 * secondsPerQuarter * SIXTEENTH_SHARE));
+}
 
 /**
  * Splits what the microphone heard into the notes played, in order. A note goes on
@@ -49,16 +65,22 @@ const SHORTEST_SECONDS = 0.08;
  * doesn't start again for a written note), and ends at a new pitch that lasts or at a
  * silence. `samples` must be in order of `at`; the last note may still be sounding.
  * Pitches heard as a fraction of the note due (see `heardPitch`) are taken up to it.
+ *
+ * `from` starts it partway, at a sample: from a `restartPoint`, it gives the same notes
+ * from there on as transcribing every sample would.
  */
 export function transcribe(
   samples: readonly PitchSample[],
   timeline: Timeline,
   secondsPerQuarter: number,
+  from = 0,
 ): PlayedNote[] {
   const sounding = soundingNotes(timeline);
   const due = dueNote(sounding);
   const quarters = (seconds: number) => seconds / secondsPerQuarter;
   const slack = quarters(ONSET_SLACK_SECONDS);
+  const shortest = quarters(forTempo(SHORTEST_SECONDS, secondsPerQuarter));
+  const change = quarters(forTempo(CHANGE_SECONDS, secondsPerQuarter));
   const notes: PlayedNote[] = [];
   // The note being played: `last` is where its pitch was last heard, `heard` where
   // anything was (a blip of another note keeps it going, but doesn't lengthen it).
@@ -67,14 +89,15 @@ export function transcribe(
   let pending: { midi: number; start: number; last: number } | null = null;
 
   const close = () => {
-    if (current && current.last - current.start >= quarters(SHORTEST_SECONDS)) {
+    if (current && current.last - current.start >= shortest) {
       notes.push({ start: current.start, end: current.last, midi: current.midi });
     }
     current = null;
     pending = null;
   };
 
-  for (const s of samples) {
+  for (let i = firstFrom(samples, from); i < samples.length; i++) {
+    const s = samples[i];
     const pitch = isVoiced(s) ? heardPitch(s.hz, due(s.at)) : null;
     if (pitch === null) continue;
     if (current) {
@@ -98,7 +121,7 @@ export function transcribe(
     const midi = Math.round(pitch);
     if (!pending || pending.midi !== midi) pending = { midi, start: s.at, last: s.at };
     else pending.last = s.at;
-    if (pending.last - pending.start >= quarters(CHANGE_SECONDS)) {
+    if (pending.last - pending.start >= change) {
       const next = { ...pending, heard: s.at };
       current.last = Math.min(current.last, pending.start);
       close();
@@ -107,6 +130,27 @@ export function transcribe(
   }
   close();
   return notes;
+}
+
+/**
+ * Which of `notes` (as `transcribe` gave them) is the latest that's definitely over, as
+ * an index; -1 if none is yet. A note with another after it is over, and nothing heard
+ * later changes it. The last one is over once more than BRIDGE_SECONDS of silence has
+ * followed it, up to `heardTo` (the newest frame heard), as anything after that starts
+ * a new note.
+ *
+ * Transcription can start again from that note's start (`transcribe`'s `from`): it's
+ * transcribed again, along with what follows, and the notes before it are final.
+ */
+export function restartPoint(
+  notes: readonly PlayedNote[],
+  heardTo: number,
+  secondsPerQuarter: number,
+) {
+  const last = notes.length - 1;
+  if (last < 0) return -1;
+  if (heardTo - notes[last].end > BRIDGE_SECONDS / secondsPerQuarter) return last;
+  return last - 1;
 }
 
 /** A played note written as a ghost: its start snapped to a sixteenth, its length to a note value. */

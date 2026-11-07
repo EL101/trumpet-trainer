@@ -1,6 +1,14 @@
 import { formatPitch } from "./format";
-import { heardPitch, isVoiced, type PitchSample } from "./hearing";
-import { toGhost, transcribe, wrongNotes, type GhostNote, type PlayedNote } from "./transcribe";
+import { firstFrom, heardPitch, isVoiced, type PitchSample } from "./hearing";
+import {
+  BRIDGE_SECONDS,
+  DROPOUT_SECONDS,
+  toGhost,
+  transcribe,
+  wrongNotes,
+  type GhostNote,
+  type PlayedNote,
+} from "./transcribe";
 import { spellInKey } from "./notation";
 import { soundingNotes, type SoundingNote, type Timeline } from "./timeline";
 
@@ -122,6 +130,11 @@ type Heard = {
   onset: number | null;
   /** How far before its end a held note was let go, in beats; null if not held or unclear. */
   shortBy: number | null;
+  /**
+   * A repeated note (the same pitch straight after the note before, not slurred into it)
+   * that was never started: no attack, the sound carrying on through its start.
+   */
+  heldOver: boolean;
   /** Spread of the pitch through the note's middle, in cents. */
   spread: number;
   /** The attack came from below (-1) or above (1) the note; 0 if it didn't scoop. */
@@ -141,14 +154,17 @@ export function scoreRun(
   samples: readonly PitchSample[],
   { keySig = "C", ...time }: Timing & { keySig?: string },
 ): ScoredRun {
-  const heard = soundingNotes(timeline).map((note) => hear(note, samples, timeline, time));
+  const heard = soundingNotes(timeline).map((note, k, all) =>
+    hear(note, samples, timeline, time, all[k - 1]),
+  );
   const cents: (number | null)[] = timeline.notes.map(() => null);
   for (const h of heard) for (const i of h.note.indices) cents[i] = h.cents;
   const transcribed = transcribe(samples, timeline, time.secondsPerQuarter);
 
   const played = heard.filter((h) => !h.missed);
   const right = played.filter((h) => h.right);
-  const timed = played.filter((h) => h.onset !== null);
+  // The notes whose start can be judged: one that came in, or a repeat held over.
+  const timed = played.filter((h) => h.onset !== null || h.heldOver);
   const name = (midi: number) => formatPitch(spellInKey(midi, keySig).name);
 
   const scores: Record<ScorePart, number> = {
@@ -171,12 +187,35 @@ export function scoreRun(
   };
 }
 
-/** How one note sounded, from the samples around it. */
+/**
+ * Where what's heard for a written note ends (`hear` reads nothing later): half a beat
+ * past the note, where a held note's release is looked for. Once frames from there on
+ * are in, the note's results can't change.
+ */
+export function heardUntil(note: SoundingNote, beat: number) {
+  return note.start + note.length + beat / 2;
+}
+
+/**
+ * How far off the written pitch one note was, in cents, as `scoreRun` gives it per note:
+ * null if it wasn't heard, or wasn't the right note. Reads only the samples around it.
+ */
+export function noteCents(
+  note: SoundingNote,
+  samples: readonly PitchSample[],
+  timeline: Timeline,
+  time: Timing,
+) {
+  return hear(note, samples, timeline, time).cents;
+}
+
+/** How one note sounded, from the samples around it (`before`: the note played before it). */
 function hear(
   note: SoundingNote,
   samples: readonly PitchSample[],
   timeline: Timeline,
   time: Timing,
+  before?: SoundingNote,
 ): Heard {
   const { beat } = time;
   const end = note.start + note.length;
@@ -206,6 +245,7 @@ function hear(
       cents: null,
       onset: null,
       shortBy: null,
+      heldOver: false,
       spread: 0,
       scoop: 0,
       sounding: 0,
@@ -254,17 +294,38 @@ function hear(
   }
   const onsetAt = onset === null ? null : samples[onset].at;
 
-  // Where a held note was let go: the end of its sound after the onset, over gaps of a
-  // frame or two.
+  // A repeated note needs an attack of its own. With none in reach, and the sound
+  // running straight through its start from the note before (the same pitch, right up
+  // against it, not slurred into it), it was held over rather than played again.
+  const repeat =
+    before !== undefined &&
+    before.midi === note.midi &&
+    !before.legato &&
+    Math.abs(before.start + before.length - note.start) < 1e-9;
+  const atStart = firstFrom(samples, note.start);
+  const heldOver =
+    onset === null &&
+    repeat &&
+    atStart > 0 &&
+    atStart < samples.length &&
+    near(atStart - 1) &&
+    near(atStart);
+
+  // Where a held note was let go: the end of its sound after the onset. A dropout of up
+  // to BRIDGE_SECONDS that the note picks up from again before its end is the microphone
+  // losing it, not a release. Past its end, only a sound that never stopped (over a
+  // frame or two missed) carries it on: one that starts again there is the next note, a
+  // tongued repeat, and the note was let go before it.
   let shortBy: number | null = null;
   if (onset !== null && note.length >= HELD * beat) {
+    const bridge = BRIDGE_SECONDS / time.secondsPerQuarter;
+    const dropout = DROPOUT_SECONDS / time.secondsPerQuarter;
     let lastAt = samples[onset].at;
-    let gap = 0;
-    for (let i = onset; i < samples.length && samples[i].at < end + beat / 2 && gap <= 2; i++) {
-      if (near(i)) {
-        lastAt = samples[i].at;
-        gap = 0;
-      } else gap++;
+    const until = heardUntil(note, beat);
+    for (let i = onset + 1; i < samples.length && samples[i].at < until; i++) {
+      if (!near(i)) continue;
+      if (samples[i].at - lastAt > (samples[i].at < end ? bridge : dropout)) break;
+      lastAt = samples[i].at;
     }
     shortBy = Math.max(0, (end - lastAt) / beat);
   }
@@ -289,6 +350,7 @@ function hear(
     cents: right ? Math.round((settled - note.midi) * 100) : null,
     onset: onsetAt === null ? null : (onsetAt - note.start) / beat,
     shortBy,
+    heldOver,
     spread,
     scoop,
     sounding,
@@ -310,6 +372,8 @@ function playedLength(h: Heard, transcribed: PlayedNote[]): { playedLength?: num
 }
 
 function rhythmScore(h: Heard) {
+  // Never started: nothing came in on time.
+  if (h.heldOver) return 0;
   const onset = ramp(Math.abs(h.onset!), ON_TIME, LOST);
   if (h.shortBy === null) return onset;
   return 0.75 * onset + 0.25 * ramp(h.shortBy, RELEASE_SLACK, 1);
@@ -371,12 +435,21 @@ function rhythmNotes(timed: Heard[]): ScoreNote[] {
     run = [];
   };
   for (const h of timed) {
-    const w = h.onset! < -OFF_BEAT ? -1 : h.onset! > OFF_BEAT ? 1 : 0;
+    const w = h.heldOver ? 0 : h.onset! < -OFF_BEAT ? -1 : h.onset! > OFF_BEAT ? 1 : 0;
     if (w !== way) flush();
     way = w;
     if (w) run.push(h);
   }
   flush();
+
+  for (const h of timed) {
+    if (!h.heldOver) continue;
+    notes.push({
+      bar: h.bar,
+      beat: h.beat,
+      text: "Held the note before into this one: tongue the repeated note.",
+    });
+  }
 
   for (const h of timed) {
     if (h.shortBy === null || h.shortBy <= RELEASE_SLACK + 0.15) continue;
@@ -475,18 +548,6 @@ function ramp(value: number, full: number, none: number) {
 function percent(scores: number[]) {
   if (!scores.length) return 0;
   return Math.round((100 * scores.reduce((a, b) => a + b, 0)) / scores.length);
-}
-
-/** The first index at or after `at`, by binary search (samples are in order). */
-function firstFrom(samples: readonly PitchSample[], at: number) {
-  let lo = 0;
-  let hi = samples.length;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (samples[mid].at < at) lo = mid + 1;
-    else hi = mid;
-  }
-  return lo;
 }
 
 function indicesBetween(samples: readonly PitchSample[], from: number, to: number) {

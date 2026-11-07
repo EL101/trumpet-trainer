@@ -64,6 +64,7 @@ import {
   type PracticedState,
   type PracticeOrigin,
 } from "@/lib/practice";
+import { newLiveScore, rewindLive, updateLive } from "@/lib/liveScore";
 import { scoreRun, type ScoredRun } from "@/lib/scoring";
 import type { GhostNote } from "@/lib/transcribe";
 import { barAt, buildTimeline, cursorAt } from "@/lib/timeline";
@@ -72,7 +73,7 @@ import { getKeySig } from "@/utils/generateMusic";
 import { getHistoryEntry } from "@/utils/history";
 import { getLibraryEntry } from "@/utils/library";
 import { lipSlurFingerings } from "@/utils/lipSlurs";
-import { saveScore, scoreLimitOf } from "@/utils/scores";
+import { saveScore, scoreLimitOf, unsavedNotice } from "@/utils/scores";
 import type { MusicInfo } from "@/schema";
 
 /** The tools drawer opening and closing, timed and eased like the sidebar's entrance. */
@@ -224,7 +225,7 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
   const [storedMode, setMode] = usePersistedState<Mode>("practiceMode", "play");
   const scoring = storedMode !== "listen";
   // The run just scored, marked on the staff until the next one starts.
-  const [run, setRun] = useState<(ScoredRun & { tempo: number }) | null>(null);
+  const [run, setRun] = useState<(ScoredRun & { tempo: number; unsaved?: string }) | null>(null);
   const latest = useLatestScore(exercise.exerciseId);
   // The score card, open on the run just played or on the last one saved.
   const [card, setCard] = useState<{ open: boolean; showing: "run" | "saved" }>({
@@ -299,35 +300,34 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
   // What's been heard so far in a scored run, marked on the staff as it comes in: the
   // wrong notes as ghosts, and each note's intonation once it's over.
   const [live, setLive] = useState<{ ghosts: GhostNote[]; cents: (number | null)[] } | null>(null);
+  // What the live marks keep between updates, so each works only on what's still open
+  // (see lib/liveScore.ts). A take from the top rewinds it to nothing.
+  const liveScore = useRef(newLiveScore());
   const liveInputs = useRef({ positionHeardAt, tempo });
   useEffect(() => {
     liveInputs.current = { positionHeardAt, tempo };
   });
   useEffect(() => {
     if (!recording) return;
+    // A take starting or resuming at `startsAt`: what was kept from there on goes, as
+    // the recorder throws away what it heard there too.
+    rewindLive(liveScore.current, startsAt, timeline, pulse.quarters);
     const timer = setInterval(() => {
       const now = liveInputs.current.positionHeardAt(ctx.currentTime);
       if (now === null) return;
-      const samples = heard();
       const timing = {
         beat: pulse.quarters,
         secondsPerQuarter: 60 / (liveInputs.current.tempo * pulse.quarters),
       };
-      // One pass over what's heard gives both the ghosts and the intonation.
-      const scored = scoreRun(timeline, samples, timing);
-      // Only the notes that are over: one still sounding (or to come) isn't judged yet.
-      const cents = scored.cents.map((c, i) => {
-        const note = timeline.notes[i];
-        return note.start + note.length <= now ? c : null;
-      });
-      setLive((last) => ({
-        ghosts: scored.ghosts,
-        // The same colours as last time keep the staff from being drawn again.
-        cents: last && last.cents.every((c, i) => c === cents[i]) ? last.cents : cents,
-      }));
+      // Only the notes that are over are judged; one still sounding (or to come) isn't.
+      const marks = updateLive(liveScore.current, heard(), timeline, timing, now);
+      // The same marks as last time keep the staff from being drawn again.
+      setLive((last) =>
+        last && last.ghosts === marks.ghosts && last.cents === marks.cents ? last : marks,
+      );
     }, LIVE_MS);
     return () => clearInterval(timer);
-  }, [recording, heard, ctx, timeline, pulse]);
+  }, [recording, startsAt, heard, ctx, timeline, pulse]);
 
   /** Scores what the microphone heard, shows it, and saves it. */
   const finishRun = () => {
@@ -345,29 +345,18 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
       });
       return;
     }
-    setRun({ ...scored, tempo });
+    const played = { ...scored, tempo };
+    setRun(played);
     openCard("run");
     saveScore(exercise.exerciseId, tempo, scored, user)
       .then((saved) => saved && latest.setScore(saved))
       .catch((error) => {
-        const limit = scoreLimitOf(error);
-        if (limit) {
-          notify({
-            tone: "error",
-            title: "Score not saved: too many runs",
-            description:
-              limit.per === "minute"
-                ? `Only ${limit.max} runs a minute can be saved. Take a breath, then play again to save the next one.`
-                : `You've reached the limit of ${limit.max} saved runs a day. This one is shown here, but it won't be under Last feedback.`,
-          });
-          return;
-        }
-        console.error("save score error:", error);
-        notify({
-          tone: "error",
-          title: "Couldn't save your score",
-          description: "It's shown here, but it won't be under Last feedback later.",
-        });
+        if (!scoreLimitOf(error)) console.error("save score error:", error);
+        const { title, description, card } = unsavedNotice(error);
+        notify({ tone: "error", title, description });
+        // Said on its card too, which stays: the notice goes after a few seconds. Only
+        // this run's, if another hasn't been played since.
+        setRun((shown) => (shown === played ? { ...played, unsaved: card } : shown));
       });
   };
 
@@ -622,6 +611,7 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
           score={shown}
           tempo={shown.tempo}
           playedAt={card.showing === "saved" ? latest.score?.createdAt : undefined}
+          unsaved={card.showing === "run" ? run?.unsaved : undefined}
           actions={
             card.showing === "run" ? (
               <>

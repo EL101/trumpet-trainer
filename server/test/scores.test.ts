@@ -4,7 +4,7 @@ import request from "supertest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/db.js";
 import { Prisma } from "../src/generated/prisma/client.js";
-import { pruneFeedback } from "../src/queries/scores.js";
+import { FEEDBACK_PER_EXERCISE, pruneFeedback } from "../src/queries/scores.js";
 import { googleClaims, tokenFor } from "./firebaseMock.js";
 import { createUser, newUid } from "./helpers.js";
 
@@ -266,7 +266,9 @@ describe("GET /api/scores/latest/:exerciseId", () => {
     expect((await latest(uid, exerciseId)).body).toMatchObject({ overall: 0 });
 
     await prisma.history.deleteMany({ where: { userId: uid } });
-    await pruneFeedback();
+    // Marked by one prune, cleared by the next.
+    await pruneFeedback(FEEDBACK_PER_EXERCISE, 0);
+    await pruneFeedback(FEEDBACK_PER_EXERCISE, 0);
     expect((await latest(uid, exerciseId)).status).toBe(404);
   });
 });
@@ -285,8 +287,20 @@ async function scoresOf(userId: string, exerciseId: string) {
   });
 }
 
+/** Prunes as a later run would, the grace for orphaned feedback over. */
+const pruneLater = () => pruneFeedback(FEEDBACK_PER_EXERCISE, 0);
+
+/** Whether each of the user's runs of an exercise is marked as orphaned. */
+async function marksOf(userId: string, exerciseId: string) {
+  const rows = await prisma.practiceScore.findMany({
+    where: { userId, exerciseId },
+    orderBy: { createdAt: "asc" },
+  });
+  return rows.map((r) => r.feedbackOrphanedAt !== null);
+}
+
 describe("pruneFeedback", () => {
-  it("clears the feedback of exercises in neither history nor the library, keeping the scores", async () => {
+  it("marks the runs of exercises in neither history nor the library, and clears them on a later run", async () => {
     const uid = newUid();
     const kept = await userWithExercise(uid, "history");
     const gone = randomUUID();
@@ -296,15 +310,53 @@ describe("pruneFeedback", () => {
     const saved = await userWithExercise(saver, "library");
     await addScores(saver, saved, 0);
 
-    expect(await pruneFeedback()).toBe(2);
+    // The first run only marks them: the exercise may be on its way back.
+    expect(await pruneLater()).toEqual({ cleared: 0, marked: 2 });
+    expect(await scoresOf(uid, gone)).toEqual([
+      { overall: 0, feedback: true },
+      { overall: 1, feedback: true },
+    ]);
+    expect(await marksOf(uid, gone)).toEqual([true, true]);
+
+    // A later one clears them, keeping the scores.
+    expect(await pruneLater()).toEqual({ cleared: 2, marked: 0 });
     expect(await scoresOf(uid, gone)).toEqual([
       { overall: 0, feedback: false },
       { overall: 1, feedback: false },
     ]);
+    expect(await marksOf(uid, gone)).toEqual([false, false]);
     const gonePart = await prisma.practiceScore.findFirstOrThrow({ where: { exerciseId: gone } });
     expect(gonePart).toMatchObject({ ...exerciseInfo, tempo: 92, rhythmScore: 68 });
     expect(await scoresOf(uid, kept)).toEqual([{ overall: 0, feedback: true }]);
     expect(await scoresOf(saver, saved)).toEqual([{ overall: 0, feedback: true }]);
+  });
+
+  it("takes the mark off a run whose exercise is back by the next run", async () => {
+    const uid = newUid();
+    const exerciseId = await userWithExercise(uid);
+    await addScores(uid, exerciseId, 0);
+    const row = await prisma.history.findFirstOrThrow({ where: { userId: uid } });
+    await prisma.history.deleteMany({ where: { userId: uid } });
+
+    expect(await pruneLater()).toEqual({ cleared: 0, marked: 1 });
+    // History cleared, and the exercise saved again.
+    await prisma.history.create({ data: { ...row, id: undefined } });
+
+    expect(await pruneLater()).toEqual({ cleared: 0, marked: 0 });
+    expect(await scoresOf(uid, exerciseId)).toEqual([{ overall: 0, feedback: true }]);
+    expect(await marksOf(uid, exerciseId)).toEqual([false]);
+  });
+
+  it("waits out the grace before clearing a marked run", async () => {
+    const uid = newUid();
+    await createUser(uid);
+    const gone = randomUUID();
+    await addScores(uid, gone, 0);
+
+    expect(await pruneFeedback()).toEqual({ cleared: 0, marked: 1 });
+    // Straight after, as two servers' prunes could be: not yet.
+    expect(await pruneFeedback()).toEqual({ cleared: 0, marked: 0 });
+    expect(await scoresOf(uid, gone)).toEqual([{ overall: 0, feedback: true }]);
   });
 
   it("keeps feedback only where the same user has the exercise", async () => {
@@ -314,7 +366,8 @@ describe("pruneFeedback", () => {
     await createUser(other);
     await addScores(other, exerciseId, 0);
 
-    expect(await pruneFeedback()).toBe(1);
+    await pruneLater();
+    expect(await pruneLater()).toEqual({ cleared: 1, marked: 0 });
     expect(await scoresOf(other, exerciseId)).toEqual([{ overall: 0, feedback: false }]);
   });
 
@@ -326,7 +379,7 @@ describe("pruneFeedback", () => {
     await addScores(uid, first, 0, 1, 2, 3);
     await addScores(uid, second, 0, 1);
 
-    expect(await pruneFeedback(2)).toBe(2);
+    expect(await pruneFeedback(2)).toEqual({ cleared: 2, marked: 0 });
     // The rows added at 0 and 1 minutes lose their feedback; all four keep their scores.
     expect(await scoresOf(uid, first)).toEqual([
       { overall: 0, feedback: false },
@@ -342,7 +395,28 @@ describe("pruneFeedback", () => {
     await createUser(uid);
     await addScores(uid, randomUUID(), 0);
 
-    expect(await pruneFeedback()).toBe(1);
-    expect(await pruneFeedback()).toBe(0);
+    await pruneLater();
+    expect(await pruneLater()).toEqual({ cleared: 1, marked: 0 });
+    expect(await pruneLater()).toEqual({ cleared: 0, marked: 0 });
+  });
+
+  it("keeps the feedback of the exercise kept through a history clear", async () => {
+    const uid = newUid();
+    const exerciseId = await userWithExercise(uid);
+    await addScores(uid, exerciseId, 0);
+    const {
+      userId: _,
+      id: __,
+      generationNum: ___,
+      createdAt: ____,
+      ...keep
+    } = await prisma.history.findFirstOrThrow({ where: { userId: uid } });
+
+    const res = await request(app).delete("/api/history").set(bearer(uid)).send({ keep });
+    expect(res.status).toBe(200);
+    await pruneLater();
+    await pruneLater();
+
+    expect(await scoresOf(uid, exerciseId)).toEqual([{ overall: 0, feedback: true }]);
   });
 });
