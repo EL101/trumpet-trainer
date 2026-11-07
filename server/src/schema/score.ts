@@ -21,8 +21,12 @@ export const ScoreNoteSchema = z.object({
   /** Written pitch as a MIDI number: the note on the page, and the one played. */
   written: z.number().int().min(0).max(127).optional(),
   played: z.number().int().min(0).max(127).optional(),
-  /** How long the wrong note was played, as a note value in quarter notes (0.25–4). */
-  playedLength: z.number().min(0.25).max(4).optional(),
+  /**
+   * How long the wrong note was played, in quarter notes: a note value (0.25–4), or held
+   * past a whole note, whole beats (a long tone's tied last note runs to 6 or more).
+   * Capped as loosely as `bar`, since a note can be held for most of the exercise.
+   */
+  playedLength: z.number().min(0.25).max(10_000).optional(),
 });
 
 const Feedback = z.array(ScoreNoteSchema).max(50);

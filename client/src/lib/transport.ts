@@ -28,13 +28,20 @@ export function followMusic(t: Transport, timeline: Timeline, now: number): Tran
 }
 
 /**
- * Pause at `now`: the cursor goes back to the start of its bar, where Resume picks up.
+ * Pause at `now`: Resume picks up at the start of its bar. The cursor stays where it
+ * stopped, unless `toBar`: then it goes back to that bar's start too (a scored take, which
+ * records the bar afresh from there).
  * Paused in the count-in nothing has played, so it waits where it would have started.
  */
-export function pauseAt(t: Transport, timeline: Timeline, now: number): Transport {
+export function pauseAt(
+  t: Transport,
+  timeline: Timeline,
+  now: number,
+  { toBar = false }: { toBar?: boolean } = {},
+): Transport {
   if (now < t.from) return { ...t, status: "paused", position: t.from };
   const barStart = barAt(timeline, now) * timeline.bar;
-  return { status: "paused", position: barStart, from: barStart };
+  return { status: "paused", position: toBar ? barStart : now, from: barStart };
 }
 
 /**

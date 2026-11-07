@@ -1,5 +1,5 @@
 import type { User } from "firebase/auth";
-import type { RunScore, ScoreNote, ScorePart } from "@/lib/scoring";
+import { SCORE_PARTS, type RunScore, type ScoreNote, type ScorePart } from "@/lib/scoring";
 import { ApiError, authedFetch } from "./api";
 
 /** A scored run as the server keeps it: its scores, the tempo, and when it was played. */
@@ -20,7 +20,7 @@ type ScoreRow = {
   [P in ScorePart as `${P}Feedback`]: ScoreNote[];
 };
 
-const PARTS: readonly ScorePart[] = ["rightNotes", "rhythm", "intonation", "tone"];
+const PARTS = SCORE_PARTS.map(({ part }) => part);
 
 function fromRow(row: ScoreRow): SavedScore {
   const parts = Object.fromEntries(

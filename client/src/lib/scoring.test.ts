@@ -118,6 +118,29 @@ describe("scoreRun", () => {
     expect(run.cents[6]).toBeNull();
   });
 
+  it("gives a wrong note held past a whole note its length in whole beats", () => {
+    // A long tone's last note, tied across bars, played a tone high the whole way.
+    const timeline = buildTimeline("C4/h., C4/h.~, C4/h.", "3/4");
+    const samples = hear(
+      timeline.end,
+      { midi: 60, from: 0, to: 2.7 },
+      { midi: 62, from: 3, to: 8.7 },
+    );
+    const run = scoreRun(timeline, samples, { beat: 1, secondsPerQuarter: 0.5 });
+
+    // Longer than any one note value: the server keeps it as sent (no 4-quarter cap).
+    expect(run.parts.rightNotes.notes).toMatchObject([{ played: 62, playedLength: 6 }]);
+  });
+
+  it("says why intonation scores nothing when no note played was right", () => {
+    // Every note a tone high.
+    const { timeline, samples } = asWritten(SCALE, "4/4", (s) => ({ ...s, midi: s.midi + 2 }));
+    const { intonation } = scoreRun(timeline, samples, TIMING).parts;
+
+    expect(intonation.score).toBe(0);
+    expect(intonation.notes).toEqual([{ text: "No right notes to judge the tuning of." }]);
+  });
+
   it("says when a note wasn't heard, without a ghost", () => {
     const { timeline } = asWritten(SCALE);
     const sounds = timeline.notes

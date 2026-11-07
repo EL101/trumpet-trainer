@@ -510,7 +510,8 @@ export default function DesignPreview() {
 
       <Section title="Notices">
         <Text color="fg.muted" mb="md">
-          Shown in the bottom-right corner by <code>notify()</code>. Errors stay until closed.
+          Shown in the bottom-right corner by <code>notify()</code>. Each stays 5 seconds, errors
+          included; hovering over one holds it.
         </Text>
         <Flex gap="sm" wrap="wrap">
           <Button

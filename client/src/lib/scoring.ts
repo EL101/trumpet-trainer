@@ -29,7 +29,10 @@ export type ScoreNote = {
   /** For a wrong note: written pitch as a MIDI number, on the page and as played. */
   written?: number;
   played?: number;
-  /** For a wrong note: how long it was played, as a note value in quarter notes. */
+  /**
+   * For a wrong note: how long it was played, in quarter notes, as `toGhost` writes it (a
+   * note value, or past a whole note, whole beats).
+   */
   playedLength?: number;
 };
 
@@ -180,7 +183,7 @@ export function scoreRun(
     parts: {
       rightNotes: { score: scores.rightNotes, notes: rightNoteNotes(heard, transcribed, name) },
       rhythm: { score: scores.rhythm, notes: rhythmNotes(timed) },
-      intonation: { score: scores.intonation, notes: intonationNotes(right) },
+      intonation: { score: scores.intonation, notes: intonationNotes(right, played.length > 0) },
       tone: { score: scores.tone, notes: toneNotes(played) },
     },
     cents,
@@ -463,7 +466,10 @@ function rhythmNotes(timed: Heard[]): ScoreNote[] {
   return capped(sortByPlace(notes), (n) => `And ${n} more like this.`);
 }
 
-function intonationNotes(right: Heard[]): ScoreNote[] {
+/** `anyPlayed`: whether any note was heard, right or wrong. */
+function intonationNotes(right: Heard[], anyPlayed: boolean): ScoreNote[] {
+  // Notes were played but none was right: the 0 needs saying why.
+  if (!right.length && anyPlayed) return [{ text: "No right notes to judge the tuning of." }];
   const notes: ScoreNote[] = [];
   const mean = right.length ? right.reduce((sum, h) => sum + h.cents!, 0) / right.length : 0;
   const tendency =

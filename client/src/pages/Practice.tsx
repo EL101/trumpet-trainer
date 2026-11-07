@@ -224,7 +224,9 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
   const subdivision = subdivisionFor(pulse, clicksPerBeat);
   const [toolsOpen, setToolsOpen] = usePersistedState("practiceToolsOpen", true);
   const [showFingerings] = usePersistedState("showFingerings", true);
-  const [storedMode, setMode] = usePersistedState<Mode>("practiceMode", "play");
+  // Listen to start with: it's what the player did before Play mode, and it needs no
+  // microphone.
+  const [storedMode, setMode] = usePersistedState<Mode>("practiceMode", "listen");
   const scoring = storedMode !== "listen";
   // The run just scored, marked on the staff until the next one starts.
   const [run, setRun] = useState<(ScoredRun & { tempo: number; unsaved?: string }) | null>(null);
@@ -270,9 +272,10 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
   const { heard } = recorder;
 
   // Paused, the microphone goes off (and the browser's microphone light with it): Resume
-  // opens it again, and what the take has heard so far is kept.
+  // opens it again, and what the take has heard so far is kept. A scored take's cursor
+  // goes back to the start of the bar, which Resume records afresh; in Listen it stays put.
   const pauseHere = () => {
-    pause();
+    pause({ toBar: scoring });
     recorder.close();
   };
 

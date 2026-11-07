@@ -132,6 +132,20 @@ describe("POST /api/scores", () => {
     expect(await prisma.practiceScore.count()).toBe(0);
   });
 
+  it("saves a wrong note held past a whole note, in whole beats", async () => {
+    const uid = newUid();
+    const exerciseId = await userWithExercise(uid);
+    const [wrong] = scoreBody(exerciseId).rightNotesFeedback;
+
+    const res = await post(uid, {
+      ...scoreBody(exerciseId),
+      rightNotesFeedback: [{ ...wrong, playedLength: 6 }],
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.rightNotesFeedback[0].playedLength).toBe(6);
+  });
+
   it.each([
     ["a score over 100", { overall: 101 }],
     ["a score that isn't whole", { rhythmScore: 72.5 }],
