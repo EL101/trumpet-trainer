@@ -115,7 +115,7 @@ from history:
   player shows it without a request.
 - **In a new tab, after a reload or from a bookmark,** it loads the exercise with
   `GET /api/history/:exerciseId`, then `GET /api/library/:exerciseId` if history has let
-  it go (pruned past the newest 100, or cleared). An id neither has goes back to the
+  it go (pruned past the newest 300, or cleared). An id neither has goes back to the
   page that opened the player (Generate if the address doesn't name one) with an
   "Exercise not found" notice. Deleted history leaves no trace, so the notice can't tell
   a cleared exercise from a wrong link, and says it could be either. A load that fails
@@ -251,9 +251,9 @@ with margins rather than a row gap, so the gap under a panel opens with it. The 
 back links (and the browser's Back button) return with the practised exercise's panel
 open again, loading chunks until it's among them. The filter and search are kept per tab. Exercises get into the library
 from Generate's "Save to library". The panel's "Remove from library" asks first, and
-looks for the exercise in the history Generate lists (`listHistory()`, its newest 100)
+looks for the exercise in the history Generate lists (`listHistory()`, its newest 300)
 to say whether it can be saved again from there. Anywhere else, including a row past
-the newest 100 that the hourly prune hasn't deleted yet, or a lookup that failed, it
+the newest 300 that the hourly prune hasn't deleted yet, or a lookup that failed, it
 says it **can't** be. Choosing a card moves focus to its panel's heading, and each card's
 `aria-label` (`cardLabel()`) gives its key, length and date, so two cards with the same
 number can be told apart.
