@@ -26,7 +26,13 @@ import {
 import { Link, useLocation } from "react-router-dom";
 import { AuthUserContext } from "@/auth/AuthUserContext";
 import { AppShell, PageHeader } from "@/components/layout";
-import { ExerciseMeta, PitchText, PracticeButton, Staff } from "@/components/music";
+import {
+  ExerciseMeta,
+  LastFeedbackButton,
+  PitchText,
+  PracticeButton,
+  Staff,
+} from "@/components/music";
 import {
   Button,
   Card,
@@ -821,7 +827,15 @@ function ExercisePanel({
                   </Box>
                 ))}
               </Grid>
-              <PracticeButton exercise={entry} originLabel="Library" label="Practice" fullWidth />
+              <Flex gap="sm" wrap="wrap">
+                <PracticeButton
+                  exercise={entry}
+                  originLabel="Library"
+                  label="Practice"
+                  flex="1 1 auto"
+                />
+                <LastFeedbackButton exercise={entry} flex="1 1 auto" />
+              </Flex>
               {onRemoved && <RemoveFromLibrary entry={entry} title={title} onRemoved={onRemoved} />}
             </Flex>
           </Grid>

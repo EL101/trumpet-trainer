@@ -53,7 +53,7 @@ type Run = {
  * if it's on. Positions are in quarter notes from the top of the exercise.
  */
 export class Playback {
-  private readonly ctx: AudioContext;
+  readonly ctx: AudioContext;
   private readonly timeline: Timeline;
   private readonly pulse: Pulse;
   private readonly sounding: SoundingNote[];
@@ -143,9 +143,17 @@ export class Playback {
 
   /** Where the music is as it's heard (allowing for the speakers' latency); null if stopped. */
   position(): number | null {
+    return this.positionHeardAt(this.ctx.currentTime);
+  }
+
+  /**
+   * Where the music was as it was heard at `time` on the audio clock: what someone
+   * playing along was playing then. Null if stopped.
+   */
+  positionHeardAt(time: number): number | null {
     const run = this.run;
     if (!run) return null;
-    const heard = this.ctx.currentTime - (this.ctx.outputLatency || 0);
+    const heard = time - (this.ctx.outputLatency || 0);
     return Math.max(run.start, this.positionAt(run, heard));
   }
 

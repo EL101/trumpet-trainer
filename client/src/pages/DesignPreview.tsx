@@ -10,6 +10,7 @@ import {
   PitchReadout,
   PitchText,
   PracticeButton,
+  ScoreCard,
   ScoreFigure,
   Staff,
   SubdivisionControl,
@@ -40,6 +41,8 @@ import {
   Textarea,
 } from "@/components/primitives";
 import { MAX_TEMPO, MIN_TEMPO, pulseOf } from "@/lib/meter";
+import type { RunScore } from "@/lib/scoring";
+import type { GhostNote } from "@/lib/transcribe";
 import type { MusicInfo } from "@/schema";
 
 /** Dev-only gallery of the design-system building blocks (route: /design). */
@@ -56,6 +59,80 @@ const PREVIEW_EXERCISE: MusicInfo = {
   generationNum: 1,
 };
 
+/** A scale in F, and a run of it for the score card: two wrong notes, rushed, a wobble. */
+const SCORED_EXERCISE: MusicInfo = {
+  ...PREVIEW_EXERCISE,
+  exerciseType: "SCALES",
+  notes:
+    "F4/q, G4, A4, Bb4, C5, D5, E5, F5, F5, E5, D5, C5, Bb4, A4, G4/h, A4/q, C5, F5, C5, C5, A4, F4, A4, G4, Bb4, D5, E5, F4/w",
+  musicKey: "F major",
+  generationNum: 43,
+};
+
+/** What was played instead, where and for how long, in quarter notes from the top. */
+const PREVIEW_GHOSTS: GhostNote[] = [
+  { start: 9, length: 0.5, midi: 72 },
+  { start: 6.5, length: 0.25, midi: 81 },
+  { start: 20, length: 1, midi: 76 },
+  { start: 26, length: 1.5, midi: 83 },
+  { start: 28, length: 2, midi: 59 },
+];
+
+/**
+ * Ghosts that need room and context: in F major after a written B♮, a B♭ played later in
+ * the bar shows its flat; one far below the first line and one far above the second
+ * push the lines apart.
+ */
+const OUT_OF_RANGE_NOTES = "B4/q, A4, G4, F4, C5/h, D5";
+const OUT_OF_RANGE_GHOSTS: GhostNote[] = [
+  { start: 2, length: 1, midi: 70 },
+  { start: 3, length: 1, midi: 55 },
+  { start: 6, length: 2, midi: 93 },
+];
+
+const PREVIEW_SCORE: RunScore = {
+  overall: 83,
+  parts: {
+    rightNotes: {
+      score: 88,
+      notes: [
+        {
+          bar: 3,
+          beat: 2,
+          index: 9,
+          written: 76,
+          played: 72,
+          playedLength: 0.5,
+          text: "Played C5 instead of E5, too low.",
+        },
+        {
+          bar: 6,
+          beat: 1,
+          index: 19,
+          written: 72,
+          played: 76,
+          text: "Played E5 instead of C5, too high.",
+        },
+      ],
+    },
+    rhythm: {
+      score: 68,
+      notes: [
+        { bar: 2, endBar: 3, text: "Rushed, coming in early." },
+        { bar: 4, beat: 3, text: "Let go of the half note early." },
+      ],
+    },
+    intonation: { score: 94, notes: [] },
+    tone: {
+      score: 84,
+      notes: [
+        { bar: 5, beat: 1, text: "Scooped up into the note." },
+        { bar: 8, beat: 1, text: "The note wavered." },
+      ],
+    },
+  },
+};
+
 export default function DesignPreview() {
   const [zone, setZone] = useState<"5" | "10" | "15">("5");
   const [type, setType] = useState<"long" | "scales" | "slurs" | "random">("random");
@@ -66,6 +143,7 @@ export default function DesignPreview() {
   const [tempo, setTempo] = useState(96);
   const [clicksPerBeat, setClicksPerBeat] = useState(2);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [scoreCardOpen, setScoreCardOpen] = useState<"saved" | "unsaved" | null>(null);
 
   return (
     <Box bg="bg" color="fg" minHeight="100vh" px="56px" py="52px">
@@ -333,6 +411,13 @@ export default function DesignPreview() {
             onChange={setClicksPerBeat}
           />
           <TempoControl pulse={pulseOf("4/4")} tempo={tempo} onChange={setTempo} />
+          <TempoControl
+            pulse={pulseOf("4/4")}
+            tempo={tempo}
+            onChange={setTempo}
+            locked
+            lockedNote="The tempo is set for this take. Restart to change it."
+          />
         </Flex>
         <Flex gap="2xl" mt="xl" wrap="wrap">
           <SectionHeading number={1} title="Instrument" description="Transposition and tuning" />
@@ -492,6 +577,37 @@ export default function DesignPreview() {
           </Box>
           <Box>
             <Text fontSize="12px" color="fg.muted" mb="xs">
+              A scored run: notes coloured by intonation, and red ghost notes where another note was
+              played (`ghosts`), where and as long as it sounded: an eighth, a sixteenth, a quarter,
+              a dotted quarter and a half, with ledger lines and accidentals
+            </Text>
+            <Staff
+              notes={SCORED_EXERCISE.notes}
+              timeSig="4/4"
+              musicKey="F major"
+              measuresPerLine={4}
+              scale={0.8}
+              cents={[4, -3, 7, 2, 12, -6, 18, 6, 9, null, -2, 3, 0, 5, -8, 14, 2, 6, -4, null]}
+              ghosts={PREVIEW_GHOSTS}
+            />
+          </Box>
+          <Box>
+            <Text fontSize="12px" color="fg.muted" mb="xs">
+              Ghosts far off the staff get room between the lines, and take in accidentals written
+              earlier in the bar: after the B♮, the B♭ played on beat 3 shows its flat
+            </Text>
+            <Staff
+              notes={OUT_OF_RANGE_NOTES}
+              timeSig="4/4"
+              musicKey="F major"
+              measuresPerLine={1}
+              scale={0.8}
+              width={360}
+              ghosts={OUT_OF_RANGE_GHOSTS}
+            />
+          </Box>
+          <Box>
+            <Text fontSize="12px" color="fg.muted" mb="xs">
               PracticeButton opens the player on an exercise; its back link returns here. It waits
               for history to number a new exercise.
             </Text>
@@ -504,6 +620,40 @@ export default function DesignPreview() {
             </Flex>
           </Box>
         </Flex>
+      </Section>
+
+      <Section title="Score card">
+        <Text textStyle="meta" color="fg.muted" mb="sm">
+          A scored run (mockup B): the player opens it when a run in Play mode ends, and
+          LastFeedbackButton opens the newest one from Generate and the library.
+        </Text>
+        <Flex gap="sm" wrap="wrap">
+          <Button onClick={() => setScoreCardOpen("saved")}>Open the score card</Button>
+          <Button onClick={() => setScoreCardOpen("unsaved")}>Open one that wasn't saved</Button>
+        </Flex>
+        <ScoreCard
+          open={scoreCardOpen !== null}
+          onOpenChange={(open) => setScoreCardOpen(open ? "saved" : null)}
+          exercise={SCORED_EXERCISE}
+          score={PREVIEW_SCORE}
+          tempo={92}
+          unsaved={
+            scoreCardOpen === "unsaved"
+              ? "Not saved: the limit is 10 runs a minute, so this one won't be under Last feedback."
+              : undefined
+          }
+          actions={
+            <>
+              <Button variant="ghost" onClick={() => setScoreCardOpen(null)}>
+                See it on the staff
+              </Button>
+              <Button onClick={() => setScoreCardOpen(null)}>
+                <RotateCcw />
+                Try again
+              </Button>
+            </>
+          }
+        />
       </Section>
 
       <Section title="Sidebar">

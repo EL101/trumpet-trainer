@@ -28,9 +28,13 @@ export const MAX_TEMPO = 208;
 /** Where the player and the metronome start. */
 export const DEFAULT_TEMPO = 80;
 
-/** A stored tempo kept within the limits; one that isn't a number is the default. */
+/**
+ * A stored tempo kept within the limits; one that isn't a finite number is the default.
+ * (Not converted first: `true` would be 1, and "Infinity" the fastest tempo.)
+ */
 export function clampTempo(tempo: unknown) {
-  return Math.min(MAX_TEMPO, Math.max(MIN_TEMPO, Number(tempo) || DEFAULT_TEMPO));
+  if (typeof tempo !== "number" || !Number.isFinite(tempo)) return DEFAULT_TEMPO;
+  return Math.min(MAX_TEMPO, Math.max(MIN_TEMPO, tempo));
 }
 
 /**

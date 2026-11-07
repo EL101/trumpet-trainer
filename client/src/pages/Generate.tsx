@@ -18,7 +18,13 @@ import { AuthUserContext } from "@/auth/AuthUserContext";
 import { useEtudes } from "@/etudes/useEtudes";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { AppShell, PageHeader } from "@/components/layout";
-import { ExerciseMeta, PitchText, PracticeButton, Staff } from "@/components/music";
+import {
+  ExerciseMeta,
+  LastFeedbackButton,
+  PitchText,
+  PracticeButton,
+  Staff,
+} from "@/components/music";
 import {
   Button,
   ChoiceGrid,
@@ -330,13 +336,19 @@ export function Generate() {
     setIntro(false);
     const plate = generated;
     enqueue(async () => {
-      if (!(await clearHistory(user, setHistory)) || !plate) return;
-      // An exercise generated during the clear has its own save queued after this.
-      if (plateNow.current?.id !== plate.id) return;
-      // The exercise on the plate stays: saved again, it's the server's new No. 1.
-      const kept = { ...plate, generationNum: 0 };
-      setGenerated((current) => (current?.id === plate.id ? kept : current));
-      await save(kept);
+      // The exercise on the plate stays, as the server's new No. 1, kept in the same
+      // request. (One generated meanwhile has its own save queued after this.)
+      const keep = plate && plateNow.current?.id === plate.id ? plate : undefined;
+      const { cleared, kept } = await clearHistory(user, setHistory, keep);
+      if (!cleared || !keep) return;
+      if (kept) {
+        setGenerated((current) => (current?.id === keep.id ? kept : current));
+        return;
+      }
+      // A server built before `keep` cleared everything: save it again.
+      const unsaved = { ...keep, generationNum: 0 };
+      setGenerated((current) => (current?.id === keep.id ? unsaved : current));
+      await save(unsaved);
     });
   };
 
@@ -558,6 +570,7 @@ function CurrentExercise({
 
         <Flex gap="sm" wrap="wrap">
           <PracticeButton exercise={exercise} originLabel="Generate" />
+          <LastFeedbackButton exercise={exercise} />
           <SaveToLibraryButton exercise={exercise} saved={saved} onSaved={onSaved} />
           {exercise?.exerciseType === "LIP_SLURS" && (
             <Button variant="ghost" onClick={onToggleFingerings}>

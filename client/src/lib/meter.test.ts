@@ -73,7 +73,8 @@ describe("clampTempo", () => {
   });
 
   it("falls back to the default for a stored value that isn't a number", () => {
-    expect([undefined, null, "fast", NaN].map(clampTempo)).toEqual(Array(4).fill(DEFAULT_TEMPO));
+    const stored = [undefined, null, "fast", NaN, true, "Infinity", "120", Infinity, -Infinity, {}];
+    expect(stored.map(clampTempo)).toEqual(Array(stored.length).fill(DEFAULT_TEMPO));
   });
 });
 

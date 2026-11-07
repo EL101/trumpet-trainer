@@ -21,7 +21,9 @@ import { prefersReducedMotion } from "@/lib/motion";
 import { roles } from "@/theme";
 import { getKeySig } from "@/utils/generateMusic";
 import type { Key } from "@/schema";
-import { parseMeasures, resolveMeasuresPerLine } from "@/lib/notation";
+import { parseMeasures, resolveMeasuresPerLine, spellInKey } from "@/lib/notation";
+import { barAt, buildTimeline, cursorAt, writtenInBarTo, type Timeline } from "@/lib/timeline";
+import type { GhostNote } from "@/lib/transcribe";
 
 export type StaffProps = Omit<BoxProps, "children" | "width" | "color"> & {
   /** App note format, e.g. "G4/8, A4, B4/q, C5/h". */
@@ -37,6 +39,11 @@ export type StaffProps = Omit<BoxProps, "children" | "width" | "color"> & {
   measuresPerLine?: number;
   /** Cents deviation per note (rests included in the count); colours each note. */
   cents?: readonly (number | null)[];
+  /**
+   * Notes played that weren't the ones written, drawn in red where they were played,
+   * with their note values. Positions are in quarter notes from the top.
+   */
+  ghosts?: readonly GhostNote[];
   /** Fractional note index for the playback cursor. */
   cursor?: number;
   /** Makes the notes clickable: called with the index (rests counted) of the note clicked. */
@@ -66,6 +73,7 @@ export function Staff({
   scale = 1,
   measuresPerLine,
   cents,
+  ghosts,
   cursor,
   onNoteClick,
   annotate,
@@ -114,6 +122,18 @@ export function Staff({
   // so is drawn on its own rather than redrawing the staff.
   const [drawing, setDrawing] = useState<{ svg: SVGSVGElement; placed: Placed[] } | null>(null);
 
+  // How far the ghosts reach above and below each line, so the lines are spaced to fit
+  // them. Kept until it changes, so ghosts coming in during a run don't each redraw the
+  // staff: only one reaching further than before does.
+  const timeline = useMemo(() => buildTimeline(notes, timeSig), [notes, timeSig]);
+  const ghostKey = musicKey ? getKeySig(musicKey) : "C";
+  const reach = useMemo(
+    () => ghostReach(ghosts ?? [], timeline, perLine, ghostKey, lineCount),
+    [ghosts, timeline, perLine, ghostKey, lineCount],
+  );
+  const [ghostRoom, setGhostRoom] = useState(reach);
+  if (!sameReach(reach, ghostRoom)) setGhostRoom(reach);
+
   useEffect(() => {
     const host = ref.current;
     if (!host || !W) return;
@@ -126,7 +146,7 @@ export function Staff({
     ctx.setFillStyle(roles.fg.DEFAULT);
     ctx.setStrokeStyle(roles.fg.DEFAULT);
 
-    const { placed, underSlurs } = drawMeasures(ctx, {
+    const { placed, underSlurs, extent } = drawMeasures(ctx, {
       measures,
       perLine,
       lineHeight,
@@ -135,6 +155,7 @@ export function Staff({
       timeSig,
       barlines,
       showText,
+      ghostRoom,
       colorFor: (i, isRest) => {
         if (isRest) return roles.fg.DEFAULT;
         if (noteColor) return noteColor;
@@ -163,7 +184,7 @@ export function Staff({
       );
     }
     labelsDrawn.current = !!shownLabels;
-    setDrawnHeight(fitToContent(svg, W, height, scale));
+    setDrawnHeight(fitToContent(svg, W, height, scale, extent));
     setDrawing({ svg, placed });
     return () => {
       host.innerHTML = "";
@@ -182,7 +203,16 @@ export function Staff({
     shownLabels,
     noteColor,
     showText,
+    ghostRoom,
   ]);
+
+  // Ghosts are drawn on their own too: while a run plays they come in as they're heard.
+  // The room they take was left when the staff was drawn (`ghostRoom`).
+  useEffect(() => {
+    if (!drawing || !ghosts?.length) return;
+    const marks = drawGhosts(drawing.svg, drawing.placed, timeline, ghosts, ghostKey);
+    return () => marks.forEach((mark) => mark.remove());
+  }, [drawing, ghosts, timeline, ghostKey]);
 
   useEffect(() => {
     if (!drawing || cursor == null) return;
@@ -213,15 +243,22 @@ export function Staff({
 }
 
 /**
- * Grows the SVG to take in anything drawn above or below its `height`, keeping the
- * staff where it was, and returns the new pixel height.
+ * Grows the SVG to take in anything drawn above or below its `height`, and anything to
+ * be drawn later within `extent` (ghost notes, in the drawing's own units), keeping the
+ * staff where it was. Returns the new pixel height.
  */
-function fitToContent(svg: SVGSVGElement, width: number, height: number, scale: number) {
+function fitToContent(
+  svg: SVGSVGElement,
+  width: number,
+  height: number,
+  scale: number,
+  extent: Reach,
+) {
   if (typeof svg.getBBox !== "function") return height; // jsdom
   const box = svg.getBBox();
   const pad = 2;
-  const top = Math.min(0, box.y - pad);
-  const bottom = Math.max(height / scale, box.y + box.height + pad);
+  const top = Math.min(0, box.y - pad, extent.top - pad);
+  const bottom = Math.max(height / scale, box.y + box.height + pad, extent.bottom + pad);
   const fitted = Math.ceil((bottom - top) * scale);
   if (fitted <= height) return height;
   svg.setAttribute("viewBox", `0 ${top} ${width / scale} ${fitted / scale}`);
@@ -277,9 +314,11 @@ function drawMeasures(
     timeSig: string;
     barlines: boolean;
     showText: boolean;
+    /** How far each line's ghost notes reach (see `ghostReach`), to leave room for. */
+    ghostRoom: (Reach | null)[];
     colorFor: (index: number, isRest: boolean) => string;
   },
-): { placed: Placed[]; underSlurs: UnderSlur[] } {
+): { placed: Placed[]; underSlurs: UnderSlur[]; extent: Reach } {
   const { measures, perLine, lineHeight, innerWidth, keySig, timeSig, barlines, colorFor } = opts;
   const [beats, beatValue] = timeSig.split("/").map(Number);
   // Beam by the meter's beat (e.g. 3+3 in 6/8); VexFlow otherwise pairs eighths in every meter.
@@ -362,10 +401,23 @@ function drawMeasures(
   // high ones.
   let y = 0;
   let prevBottom = 0;
+  // How far the ghosts to be drawn over the lines reach: the drawing is fitted to take
+  // them in as well as what's drawn now. (Infinite, so no ghosts take no room.)
+  const extent = { top: Infinity, bottom: -Infinity };
   lines.forEach((bars, line) => {
-    const { top, bottom } = lineExtent(bars, opts.showText, slurredLines.has(line));
+    const { top, bottom } = lineExtent(
+      bars,
+      opts.showText,
+      slurredLines.has(line),
+      opts.ghostRoom[line] ?? null,
+    );
     if (line > 0) y = Math.max(y + lineHeight, y + prevBottom - top + LINE_GAP);
     prevBottom = bottom;
+    const ghosts = opts.ghostRoom[line];
+    if (ghosts) {
+      extent.top = Math.min(extent.top, y + ghosts.top);
+      extent.bottom = Math.max(extent.bottom, y + ghosts.bottom);
+    }
 
     bars.forEach(({ stave, voice, beams }) => {
       stave.setY(y).setContext(ctx).draw();
@@ -379,7 +431,7 @@ function drawMeasures(
   });
   drawTies(ctx, placed);
   const underSlurs = drawSlurs(ctx, placed);
-  return { placed, underSlurs };
+  return { placed, underSlurs, extent };
 }
 
 /**
@@ -415,14 +467,17 @@ function beamByGroup(notes: StaveNote[], groups: ReturnType<typeof Beam.getDefau
   return beams;
 }
 
+/** How far marks reach above (`top`) and below (`bottom`), relative to a stave's y. */
+type Reach = { top: number; bottom: number };
+
 /**
  * How far a line's notes reach above and below the staff, relative to its stave's y:
- * note heads plus stems (a beam can stretch a stem a little past its usual length), and
- * the arc over them if the line has slurs.
+ * note heads plus stems (a beam can stretch a stem a little past its usual length), the
+ * arc over them if the line has slurs, and any ghost notes drawn over it (`ghosts`).
  */
-function lineExtent(bars: Bar[], showText: boolean, slurred: boolean) {
-  let top = STAFF_TOP;
-  let bottom = STAFF_BOTTOM;
+function lineExtent(bars: Bar[], showText: boolean, slurred: boolean, ghosts: Reach | null) {
+  let top = Math.min(STAFF_TOP, ghosts?.top ?? STAFF_TOP);
+  let bottom = Math.max(STAFF_BOTTOM, ghosts?.bottom ?? STAFF_BOTTOM);
   let lowest = STAFF_BOTTOM;
   const stem = Stem.HEIGHT + 6;
   for (const { voice } of bars) {
@@ -611,15 +666,155 @@ function noteCenterX(n: StaveNote) {
   return (n.getNoteHeadBeginX() + n.getNoteHeadEndX()) / 2;
 }
 
+/** A ghost note's head and stem, in staff units, like VexFlow's. */
+const GHOST_HEAD = { rx: 6.3, ry: 4.6, tilt: -20 };
+const GHOST_STEM = 35;
+const ACCIDENTAL_GLYPHS = { "#": "♯", b: "♭", n: "♮" } as const;
+
+/**
+ * How far each line's ghosts reach above and below its staff (in `lineExtent`'s units,
+ * drawn as `drawGhosts` draws them: head, and stem up or down), so the lines are spaced
+ * to fit them. Null for a line with none.
+ */
+function ghostReach(
+  ghosts: readonly GhostNote[],
+  timeline: Timeline,
+  perLine: number,
+  keySig: string,
+  lineCount: number,
+): (Reach | null)[] {
+  const reach: (Reach | null)[] = Array.from({ length: lineCount }, () => null);
+  for (const ghost of ghosts) {
+    const line = Math.floor(barAt(timeline, Math.min(ghost.start, timeline.end)) / perLine);
+    if (line >= lineCount) continue;
+    const staffLine = spellInKey(ghost.midi, keySig).line;
+    // As `lineExtent`: VexFlow's line 5 is the top line, at STAFF_TOP.
+    const head = STAFF_TOP + 50 - staffLine * 10;
+    const stem = ghost.length < 4 ? GHOST_STEM : 0;
+    const up = staffLine < 3;
+    const top = head - GHOST_HEAD.ry - 2 - (up ? stem : 0);
+    const bottom = head + GHOST_HEAD.ry + 2 + (up ? 0 : stem);
+    const r = reach[line];
+    reach[line] = r
+      ? { top: Math.min(r.top, top), bottom: Math.max(r.bottom, bottom) }
+      : { top, bottom };
+  }
+  return reach;
+}
+
+function sameReach(a: (Reach | null)[], b: (Reach | null)[]) {
+  return (
+    a.length === b.length &&
+    a.every((r, i) => (r && b[i] ? r.top === b[i].top && r.bottom === b[i].bottom : r === b[i]))
+  );
+}
+
+/**
+ * Draws each note played that wasn't the one written (`ghosts`) in red, where it was
+ * played and as long as it was held: its head (open for a half or whole note), stem,
+ * flags and dot, spelt for the key with an accidental if the key signature needs one,
+ * and ledger lines off the staff. A ghost that starts with a written note sits beside it,
+ * as a second would. Returns what it drew, for removal.
+ */
+function drawGhosts(
+  svg: SVGSVGElement,
+  placed: Placed[],
+  timeline: Timeline,
+  ghosts: readonly GhostNote[],
+  keySig: string,
+) {
+  if (!placed.length) return [];
+  const color = roles.intonation.bad;
+  return ghosts.map((ghost) => {
+    const at = Math.min(ghost.start, timeline.end);
+    // The accidental it needs where it's drawn: after the bar's earlier notes, not just
+    // by the key signature.
+    const { line, accidental } = spellInKey(ghost.midi, keySig, writtenInBarTo(timeline, at));
+    const { x: along, placed: p } = xAt(placed, cursorAt(timeline, at));
+    let x = along;
+    const head = p.note.getNoteHeadEndX() - p.note.getNoteHeadBeginX();
+    // One played with a written note sits beside it, so neither hides the other.
+    if (!p.rest && Math.abs(noteCenterX(p.note) - x) < head) x = noteCenterX(p.note) + head * 1.1;
+    const y = p.stave.getYForNote(line);
+    const group = svgEl("g", {
+      "data-ghost": ghost.midi,
+      "data-length": ghost.length,
+      opacity: 0.8,
+    });
+    const stroke = (attrs: Record<string, string | number>, width = 1) =>
+      group.appendChild(svgEl("line", { ...attrs, "stroke-width": width }, { stroke: color }));
+
+    // Ledger lines from the staff out to the ghost: below the bottom line, above the top.
+    for (let l = 0; l >= Math.ceil(line); l--) {
+      const ly = p.stave.getYForNote(l);
+      stroke({ x1: x - 9, x2: x + 9, y1: ly, y2: ly });
+    }
+    for (let l = 6; l <= Math.floor(line); l++) {
+      const ly = p.stave.getYForNote(l);
+      stroke({ x1: x - 9, x2: x + 9, y1: ly, y2: ly });
+    }
+    if (accidental) {
+      const t = svgEl(
+        "text",
+        { x: x - GHOST_HEAD.rx - 3, y: y + 4.5, "text-anchor": "end", "font-size": 14 },
+        { fill: color },
+      );
+      t.textContent = ACCIDENTAL_GLYPHS[accidental];
+      group.appendChild(t);
+    }
+
+    const open = ghost.length >= 2;
+    group.appendChild(
+      svgEl(
+        "ellipse",
+        {
+          cx: x,
+          cy: y,
+          rx: open ? GHOST_HEAD.rx - 0.8 : GHOST_HEAD.rx,
+          ry: open ? GHOST_HEAD.ry - 0.8 : GHOST_HEAD.ry,
+          transform: `rotate(${GHOST_HEAD.tilt} ${x} ${y})`,
+          "stroke-width": open ? 1.6 : 0,
+        },
+        { fill: open ? "none" : color, stroke: color },
+      ),
+    );
+
+    // A stem for all but a whole note: up from the lower half of the staff, else down,
+    // with a flag for an eighth and two for a sixteenth.
+    if (ghost.length < 4) {
+      const up = line < 3;
+      const sx = up ? x + GHOST_HEAD.rx - 0.6 : x - GHOST_HEAD.rx + 0.6;
+      const tip = up ? y - GHOST_STEM : y + GHOST_STEM;
+      stroke({ x1: sx, x2: sx, y1: y, y2: tip }, 1.3);
+      const flags = ghost.length <= 0.25 ? 2 : ghost.length < 1 ? 1 : 0;
+      for (let f = 0; f < flags; f++) {
+        const fy = up ? tip + f * 7 : tip - f * 7;
+        const d = up ? `M ${sx} ${fy} c 0 6 10 8 8 18` : `M ${sx} ${fy} c 0 -6 10 -8 8 -18`;
+        group.appendChild(
+          svgEl("path", { d, "stroke-width": 1.6, fill: "none" }, { stroke: color }),
+        );
+      }
+    }
+    if ([3, 1.5, 0.75].includes(ghost.length)) {
+      // In the space above, if the head sits on a line.
+      const dy = Number.isInteger(line) ? -5 : 0;
+      group.appendChild(
+        svgEl("circle", { cx: x + GHOST_HEAD.rx + 5, cy: y + dy, r: 1.7 }, { fill: color }),
+      );
+    }
+    svg.appendChild(group);
+    return group;
+  });
+}
+
 const CURSOR_BAND = 28;
 
 /**
- * Draws the cursor band and rule behind the notes; returns them for removal. Through a
- * note the cursor glides towards the next one, or for a line's last note, towards the
- * line's end.
+ * Where a fractional note index (`cursorAt`) falls across the staff, and the note it's
+ * in. Through a note it glides towards the next one, or for a line's last note, towards
+ * the line's end.
  */
-function drawCursor(svg: SVGSVGElement, placed: Placed[], cursor: number) {
-  if (!placed.length) return [];
+function xAt(placed: Placed[], cursor: number) {
   const i0 = Math.max(0, Math.min(placed.length - 1, Math.floor(cursor)));
   const q0 = placed[i0];
   const q1 = placed[i0 + 1];
@@ -628,7 +823,13 @@ function drawCursor(svg: SVGSVGElement, placed: Placed[], cursor: number) {
     q1 && q1.stave.getY() === q0.stave.getY()
       ? noteCenterX(q1.note)
       : Math.max(from, q0.stave.getNoteEndX() - CURSOR_BAND / 2);
-  const x = from + (to - from) * Math.min(1, Math.max(0, cursor - i0));
+  return { x: from + (to - from) * Math.min(1, Math.max(0, cursor - i0)), placed: q0 };
+}
+
+/** Draws the cursor band and rule behind the notes (at `xAt`); returns them for removal. */
+function drawCursor(svg: SVGSVGElement, placed: Placed[], cursor: number) {
+  if (!placed.length) return [];
+  const { x, placed: q0 } = xAt(placed, cursor);
   const top = q0.stave.getYForLine(0) - 20;
   const bottom = q0.stave.getYForLine(4) + 20;
 

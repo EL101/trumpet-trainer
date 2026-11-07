@@ -1,13 +1,8 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/requireAuth.js";
-import { HistoryInputSchema } from "../schema/index.js";
-import {
-  deleteExercises,
-  findExercise,
-  insertHistory,
-  listExercises,
-} from "../queries/exercises.js";
+import { ClearHistorySchema, HistoryInputSchema } from "../schema/index.js";
+import { clearHistory, findExercise, insertHistory, listExercises } from "../queries/exercises.js";
 
 const router = Router();
 
@@ -56,8 +51,15 @@ router.post("/", requireAuth, async (req: Request, res: Response) => {
 });
 
 router.delete("/", requireAuth, async (req: Request, res: Response) => {
+  // No body (clients built before `keep`) clears everything.
+  const parsed = ClearHistorySchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error });
+  }
+
   try {
-    await deleteExercises("history", req.user!.uid);
+    const kept = await clearHistory(req.user!.uid, parsed.data.keep);
+    if (kept) return res.json(kept);
     res.status(204).end();
   } catch (err) {
     console.error("Failed to clear history:", err);

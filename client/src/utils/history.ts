@@ -85,18 +85,36 @@ export async function insertToHistory(
   }
 }
 
-/** Delete the user's history. Resolves to whether it was cleared. */
+/**
+ * Delete the user's history, keeping `keep` (the exercise on the plate) as the new No. 1
+ * in the same request, so there's no moment it's in neither history nor the library (the
+ * server's prune would take its feedback for orphaned).
+ *
+ * Resolves to whether it was cleared, and the kept exercise with its new number. `kept`
+ * is null with nothing to keep, or from a server built before `keep`, which clears
+ * everything: then it's for the caller to save it again.
+ */
 export async function clearHistory(
   user: User | undefined | null,
   setHistory: Dispatch<SetStateAction<Record<number, MusicInfo>>>,
-) {
+  keep?: MusicInfo,
+): Promise<{ cleared: boolean; kept: MusicInfo | null }> {
   try {
-    const res = await authedFetch("/api/history", user, { method: "DELETE" });
-    if (!res) return false;
-    setHistory({});
-    return true;
+    const res = await authedFetch("/api/history", user, {
+      method: "DELETE",
+      ...(keep ? { body: JSON.stringify({ keep: toHistoryInput(keep) }) } : {}),
+    });
+    if (!res) return { cleared: false, kept: null };
+    if (!keep || res.status === 204) {
+      setHistory({});
+      return { cleared: true, kept: null };
+    }
+    const row: MusicInfo = await res.json();
+    const kept = { ...keep, generationNum: row.generationNum };
+    setHistory({ [kept.generationNum]: kept });
+    return { cleared: true, kept };
   } catch (error) {
     console.error("clear history error:", error);
-    return false;
+    return { cleared: false, kept: null };
   }
 }
