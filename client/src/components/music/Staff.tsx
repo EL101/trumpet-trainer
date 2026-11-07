@@ -21,7 +21,9 @@ import { prefersReducedMotion } from "@/lib/motion";
 import { roles } from "@/theme";
 import { getKeySig } from "@/utils/generateMusic";
 import type { Key } from "@/schema";
-import { parseMeasures, resolveMeasuresPerLine } from "@/lib/notation";
+import { parseMeasures, resolveMeasuresPerLine, spellInKey } from "@/lib/notation";
+import { barAt, buildTimeline, cursorAt, type Timeline } from "@/lib/timeline";
+import { ghostPieces, silences, type PlayedMark, type RestMark } from "@/lib/transcribe";
 
 export type StaffProps = Omit<BoxProps, "children" | "width" | "color"> & {
   /** App note format, e.g. "G4/8, A4, B4/q, C5/h". */
@@ -37,9 +39,23 @@ export type StaffProps = Omit<BoxProps, "children" | "width" | "color"> & {
   measuresPerLine?: number;
   /** Cents deviation per note (rests included in the count); colours each note. */
   cents?: readonly (number | null)[];
+  /**
+   * The notes played, drawn on a cue-size staff under each line, where they were played
+   * and with their note values: coloured by intonation if right, red if wrong. Positions
+   * are in quarter notes from the top. Given (even empty), the played staff is drawn.
+   */
+  played?: readonly PlayedMark[];
+  /**
+   * Where silence after what's been played is known to, in quarter notes: the silences
+   * before it are drawn as rests on the played staff. Omit for no rests (an excerpt).
+   */
+  playedTo?: number;
   /** Fractional note index for the playback cursor. */
   cursor?: number;
-  /** Makes the notes clickable: called with the index (rests counted) of the note clicked. */
+  /**
+   * Makes the notes clickable: called with the index (rests counted) of the note clicked,
+   * and while the pointer is dragged on along the staff, with each note it passes.
+   */
   onNoteClick?: (index: number) => void;
   /** Print each note's cents value beneath it. */
   annotate?: boolean;
@@ -66,6 +82,8 @@ export function Staff({
   scale = 1,
   measuresPerLine,
   cents,
+  played,
+  playedTo,
   cursor,
   onNoteClick,
   annotate,
@@ -75,6 +93,8 @@ export function Staff({
   ...rest
 }: StaffProps) {
   const ref = useRef<HTMLDivElement>(null);
+  // The note a drag is on, while the pointer's held down on the staff.
+  const dragging = useRef<number | null>(null);
   const measuredWidth = useElementWidth(ref, width == null);
   const W = width ?? measuredWidth;
 
@@ -112,7 +132,23 @@ export function Staff({
   const [drawnHeight, setDrawnHeight] = useState(height);
   // The notes as last drawn, for the cursor, which moves every frame during playback and
   // so is drawn on its own rather than redrawing the staff.
-  const [drawing, setDrawing] = useState<{ svg: SVGSVGElement; placed: Placed[] } | null>(null);
+  const [drawing, setDrawing] = useState<{
+    svg: SVGSVGElement;
+    placed: Placed[];
+    cues: Cue[];
+  } | null>(null);
+
+  // How far the played notes reach above and below each line's played staff, so the
+  // lines are spaced to fit them. Kept until it changes, so notes coming in during a run
+  // don't each redraw the staff: only one reaching further than before does.
+  const timeline = useMemo(() => buildTimeline(notes, timeSig), [notes, timeSig]);
+  const playedKey = musicKey ? getKeySig(musicKey) : "C";
+  const reach = useMemo(
+    () => (played ? playedReach(played, timeline, perLine, playedKey, lineCount) : null),
+    [played, timeline, perLine, playedKey, lineCount],
+  );
+  const [playedRoom, setPlayedRoom] = useState(reach);
+  if (!sameReach(reach, playedRoom)) setPlayedRoom(reach);
 
   useEffect(() => {
     const host = ref.current;
@@ -126,7 +162,7 @@ export function Staff({
     ctx.setFillStyle(roles.fg.DEFAULT);
     ctx.setStrokeStyle(roles.fg.DEFAULT);
 
-    const { placed, underSlurs } = drawMeasures(ctx, {
+    const { placed, underSlurs, extent, cues, barXs } = drawMeasures(ctx, {
       measures,
       perLine,
       lineHeight,
@@ -135,6 +171,7 @@ export function Staff({
       timeSig,
       barlines,
       showText,
+      playedRoom,
       colorFor: (i, isRest) => {
         if (isRest) return roles.fg.DEFAULT;
         if (noteColor) return noteColor;
@@ -147,6 +184,7 @@ export function Staff({
     if (!svg) return;
     svg.style.display = "block";
     svg.style.overflow = "visible";
+    drawCues(svg, cues, barXs);
     if (showText) {
       const riseIn = !!shownLabels && !labelsDrawn.current && !prefersReducedMotion();
       drawLabels(
@@ -163,8 +201,8 @@ export function Staff({
       );
     }
     labelsDrawn.current = !!shownLabels;
-    setDrawnHeight(fitToContent(svg, W, height, scale));
-    setDrawing({ svg, placed });
+    setDrawnHeight(fitToContent(svg, W, height, scale, extent));
+    setDrawing({ svg, placed, cues });
     return () => {
       host.innerHTML = "";
     };
@@ -182,11 +220,35 @@ export function Staff({
     shownLabels,
     noteColor,
     showText,
+    playedRoom,
   ]);
+
+  // The played notes are drawn on their own too: while a run plays they come in as
+  // they're heard. The room they take was left when the staff was drawn (`playedRoom`).
+  useEffect(() => {
+    if (!drawing || !played?.length) return;
+    const marks = drawPlayed(
+      drawing.svg,
+      drawing.placed,
+      drawing.cues,
+      timeline,
+      played,
+      playedKey,
+    );
+    return () => marks.forEach((mark) => mark.remove());
+  }, [drawing, played, timeline, playedKey]);
+
+  // And the silences between them, as rests.
+  useEffect(() => {
+    if (!drawing || !played || playedTo == null) return;
+    const rests = silences(played, timeline, playedTo);
+    const marks = drawRests(drawing.svg, drawing.placed, drawing.cues, timeline, rests);
+    return () => marks.forEach((mark) => mark.remove());
+  }, [drawing, played, playedTo, timeline]);
 
   useEffect(() => {
     if (!drawing || cursor == null) return;
-    const marks = drawCursor(drawing.svg, drawing.placed, cursor);
+    const marks = drawCursor(drawing.svg, drawing.placed, drawing.cues, cursor);
     return () => marks.forEach((mark) => mark.remove());
   }, [drawing, cursor]);
 
@@ -200,28 +262,57 @@ export function Staff({
       transitionTimingFunction="ease-out"
       _motionReduce={{ transition: "none" }}
       cursor={onNoteClick ? "pointer" : undefined}
-      onClick={
+      _active={onNoteClick ? { cursor: "grabbing" } : undefined}
+      // Clicking moves to the note clicked, and dragging carries on to each note passed.
+      // Sideways drags are the staff's; up and down still scroll the page on touch.
+      userSelect={onNoteClick ? "none" : undefined}
+      touchAction={onNoteClick ? "pan-y" : undefined}
+      onPointerDown={
         onNoteClick &&
         ((e) => {
-          const index = drawing && noteAt(drawing.svg, drawing.placed, e.clientX, e.clientY);
-          if (index != null) onNoteClick(index);
+          if (e.button !== 0 || !drawing) return;
+          const index = noteAt(drawing.svg, drawing.placed, e.clientX, e.clientY);
+          if (index == null) return;
+          e.currentTarget.setPointerCapture(e.pointerId);
+          dragging.current = index;
+          onNoteClick(index);
         })
       }
+      onPointerMove={
+        onNoteClick &&
+        ((e) => {
+          if (dragging.current == null || !drawing) return;
+          const index = noteAt(drawing.svg, drawing.placed, e.clientX, e.clientY);
+          if (index == null || index === dragging.current) return;
+          dragging.current = index;
+          onNoteClick(index);
+        })
+      }
+      onLostPointerCapture={() => {
+        dragging.current = null;
+      }}
       {...rest}
     />
   );
 }
 
 /**
- * Grows the SVG to take in anything drawn above or below its `height`, keeping the
- * staff where it was, and returns the new pixel height.
+ * Grows the SVG to take in anything drawn above or below its `height`, and anything to
+ * be drawn later within `extent` (played notes, in the drawing's own units), keeping the
+ * staff where it was. Returns the new pixel height.
  */
-function fitToContent(svg: SVGSVGElement, width: number, height: number, scale: number) {
+function fitToContent(
+  svg: SVGSVGElement,
+  width: number,
+  height: number,
+  scale: number,
+  extent: Reach,
+) {
   if (typeof svg.getBBox !== "function") return height; // jsdom
   const box = svg.getBBox();
   const pad = 2;
-  const top = Math.min(0, box.y - pad);
-  const bottom = Math.max(height / scale, box.y + box.height + pad);
+  const top = Math.min(0, box.y - pad, extent.top - pad);
+  const bottom = Math.max(height / scale, box.y + box.height + pad, extent.bottom + pad);
   const fitted = Math.ceil((bottom - top) * scale);
   if (fitted <= height) return height;
   svg.setAttribute("viewBox", `0 ${top} ${width / scale} ${fitted / scale}`);
@@ -246,6 +337,8 @@ function useElementWidth(ref: React.RefObject<HTMLElement | null>, enabled: bool
 type Placed = {
   note: StaveNote;
   stave: Stave;
+  /** Which line of music it's on, from 0. */
+  line: number;
   color: string;
   rest: boolean;
   tied: boolean;
@@ -265,6 +358,8 @@ const LINE_GAP = 12;
 const LABEL_ROOM = 42;
 /** Room a slur's arc takes above a line's highest note (see `drawSlurs`). */
 const SLUR_ROOM = 24;
+/** Room a tie's arc can take above a line's highest note (see `drawTies`). */
+const TIE_ROOM = 14;
 
 function drawMeasures(
   ctx: RenderContext,
@@ -277,9 +372,21 @@ function drawMeasures(
     timeSig: string;
     barlines: boolean;
     showText: boolean;
+    /**
+     * How far each line's played notes reach round its played staff (see `playedReach`),
+     * to leave room for; null for no played staff.
+     */
+    playedRoom: Reach[] | null;
     colorFor: (index: number, isRest: boolean) => string;
   },
-): { placed: Placed[]; underSlurs: UnderSlur[] } {
+): {
+  placed: Placed[];
+  underSlurs: UnderSlur[];
+  extent: Reach;
+  /** Each line's played staff, if there is one, and the barlines within it. */
+  cues: Cue[];
+  barXs: number[][];
+} {
   const { measures, perLine, lineHeight, innerWidth, keySig, timeSig, barlines, colorFor } = opts;
   const [beats, beatValue] = timeSig.split("/").map(Number);
   // Beam by the meter's beat (e.g. 3+3 in 6/8); VexFlow otherwise pairs eighths in every meter.
@@ -288,6 +395,7 @@ function drawMeasures(
   const placed: Placed[] = [];
   const lines: Bar[][] = [];
   const slurredLines = new Set<number>();
+  const tiedLines = new Set<number>();
   let index = 0;
 
   // Build every line first (at y = 0) so each one's reach above and below the staff is
@@ -296,6 +404,10 @@ function drawMeasures(
     const bars = measures.slice(start, start + perLine);
     const isLastLine = start + perLine >= measures.length;
     if (bars.flat().some((p) => p.slurStart || p.slurEnd)) slurredLines.add(line);
+    // A tie can come in from the line before, too.
+    if (bars.flat().some((p) => p.tied) || measures[start - 1]?.at(-1)?.tied) {
+      tiedLines.add(line);
+    }
 
     // Measure how much room the clef / key / time take so bars get equal note space.
     const probe = new Stave(0, 0, 300, staveOpts).addClef("treble");
@@ -351,7 +463,7 @@ function drawMeasures(
           n.setLedgerLineStyle(style);
           n.getModifiers().forEach((m) => m.setStyle(style));
           const { rest, tied, slurStart, slurEnd } = bar[k];
-          placed.push({ note: n, stave, color, rest, tied, slurStart, slurEnd });
+          placed.push({ note: n, stave, line, color, rest, tied, slurStart, slurEnd });
         });
         return { stave, voice, beams };
       }),
@@ -362,10 +474,33 @@ function drawMeasures(
   // high ones.
   let y = 0;
   let prevBottom = 0;
+  // How far the played notes to be drawn reach: the drawing is fitted to take them in
+  // as well as what's drawn now. (Infinite, so no played staff takes no room.)
+  const extent = { top: Infinity, bottom: -Infinity };
+  const cues: Cue[] = [];
+  const barXs: number[][] = [];
   lines.forEach((bars, line) => {
-    const { top, bottom } = lineExtent(bars, opts.showText, slurredLines.has(line));
-    if (line > 0) y = Math.max(y + lineHeight, y + prevBottom - top + LINE_GAP);
+    const written = lineExtent(bars, opts.showText, slurredLines.has(line), tiedLines.has(line));
+    const room = opts.playedRoom?.[line];
+    // The played staff sits under the written one's lowest marks, and its own highest.
+    const cueTop = room ? written.bottom + CUE_GAP - room.top : 0;
+    const top = written.top;
+    const bottom = room ? cueTop + room.bottom : written.bottom;
+    const gap = opts.playedRoom ? AFTER_CUE_GAP : LINE_GAP;
+    if (line > 0) y = Math.max(y + lineHeight, y + prevBottom - top + gap);
     prevBottom = bottom;
+    if (room) {
+      const first = bars[0].stave;
+      const last = bars[bars.length - 1].stave;
+      cues.push({
+        y: y + cueTop,
+        x0: first.getNoteStartX() - 10,
+        x1: last.getX() + last.getWidth(),
+      });
+      barXs.push(bars.slice(1).map((b) => b.stave.getX()));
+      extent.top = Math.min(extent.top, y + cueTop + room.top);
+      extent.bottom = Math.max(extent.bottom, y + cueTop + room.bottom);
+    }
 
     bars.forEach(({ stave, voice, beams }) => {
       stave.setY(y).setContext(ctx).draw();
@@ -379,7 +514,7 @@ function drawMeasures(
   });
   drawTies(ctx, placed);
   const underSlurs = drawSlurs(ctx, placed);
-  return { placed, underSlurs };
+  return { placed, underSlurs, extent, cues, barXs };
 }
 
 /**
@@ -415,12 +550,15 @@ function beamByGroup(notes: StaveNote[], groups: ReturnType<typeof Beam.getDefau
   return beams;
 }
 
+/** How far marks reach above (`top`) and below (`bottom`), relative to a stave's y. */
+type Reach = { top: number; bottom: number };
+
 /**
  * How far a line's notes reach above and below the staff, relative to its stave's y:
- * note heads plus stems (a beam can stretch a stem a little past its usual length), and
- * the arc over them if the line has slurs.
+ * note heads plus stems (a beam can stretch a stem a little past its usual length), the
+ * arc over them if the line has slurs or ties.
  */
-function lineExtent(bars: Bar[], showText: boolean, slurred: boolean) {
+function lineExtent(bars: Bar[], showText: boolean, slurred: boolean, tied: boolean) {
   let top = STAFF_TOP;
   let bottom = STAFF_BOTTOM;
   let lowest = STAFF_BOTTOM;
@@ -438,6 +576,7 @@ function lineExtent(bars: Bar[], showText: boolean, slurred: boolean) {
   }
   if (showText) bottom = Math.max(bottom, lowest + LABEL_ROOM);
   if (slurred) top -= SLUR_ROOM;
+  else if (tied) top -= TIE_ROOM;
   return { top, bottom };
 }
 
@@ -611,15 +750,335 @@ function noteCenterX(n: StaveNote) {
   return (n.getNoteHeadBeginX() + n.getNoteHeadEndX()) / 2;
 }
 
+/** A played note's head and stem, in staff units, like VexFlow's (before `CUE`). */
+const GHOST_HEAD = { rx: 6.3, ry: 4.6, tilt: -20 };
+const GHOST_STEM = 35;
+/** A tie between played notes: its gap from the heads, and how high it arcs at most. */
+const GHOST_TIE = { gap: 2, rise: 7 };
+const ACCIDENTAL_GLYPHS = { "#": "♯", b: "♭", n: "♮" } as const;
+/** The played staff's size against the written one: cue size. */
+const CUE = 0.7;
+/** One space of the played staff; its lines run from its top (0) to 4 spaces down. */
+const CUE_SPACE = 10 * CUE;
+const CUE_HEIGHT = 4 * CUE_SPACE;
+/** Clearance between the lowest mark of a line's written staff and its played staff's highest. */
+const CUE_GAP = 8;
+/**
+ * More clearance after a played staff than between lines without one, so each sits
+ * nearer the music it's under than the line after it.
+ */
+const AFTER_CUE_GAP = 30;
+
+/** Where a line's played staff is: its top line's y, and from where to where it runs. */
+type Cue = { y: number; x0: number; x1: number };
+
+/** How a played note is coloured: by its intonation if right, red if wrong, faint if still sounding. */
+function playedColor(mark: PlayedMark) {
+  if (mark.status === "wrong") return roles.intonation.bad;
+  if (mark.status === "sounding") return roles.fg.subtle;
+  return mark.cents != null ? centsColor(mark.cents) : roles.fg.DEFAULT;
+}
+
+/**
+ * How far each line's played notes reach above and below its played staff's top line
+ * (drawn as `drawPlayed` draws them: head, stem up or down, and the ties between a
+ * note's pieces), taking in the staff itself, so the lines are spaced to fit them.
+ */
+function playedReach(
+  played: readonly PlayedMark[],
+  timeline: Timeline,
+  perLine: number,
+  keySig: string,
+  lineCount: number,
+): Reach[] {
+  const reach: Reach[] = Array.from({ length: lineCount }, () => ({
+    top: 0,
+    bottom: CUE_HEIGHT,
+  }));
+  for (const mark of played) {
+    const staffLine = spellInKey(mark.midi, keySig).line;
+    const head = (5 - staffLine) * CUE_SPACE;
+    const up = staffLine < 3;
+    const pieces = ghostPieces(mark, timeline);
+    // Ties arc on the side away from the stems.
+    const tie = pieces.length > 1 ? (GHOST_HEAD.ry + GHOST_TIE.gap + GHOST_TIE.rise) * CUE : 0;
+    const edge = (GHOST_HEAD.ry + 2) * CUE;
+    for (const piece of pieces) {
+      const line = Math.floor(barAt(timeline, Math.min(piece.start, timeline.end)) / perLine);
+      if (line >= lineCount) continue;
+      const stem = piece.length < 4 ? GHOST_STEM * CUE : 0;
+      const r = reach[line];
+      r.top = Math.min(r.top, head - edge - (up ? stem : 0), head - (up ? 0 : tie));
+      r.bottom = Math.max(r.bottom, head + edge + (up ? 0 : stem), head + (up ? tie : 0));
+    }
+  }
+  return reach;
+}
+
+function sameReach(a: Reach[] | null, b: Reach[] | null) {
+  if (!a || !b) return a === b;
+  return a.length === b.length && a.every((r, i) => r.top === b[i].top && r.bottom === b[i].bottom);
+}
+
+/** Draws each line's played staff: its lines and barlines, and what it is, at its left. */
+function drawCues(svg: SVGSVGElement, cues: Cue[], barXs: number[][]) {
+  cues.forEach((cue, line) => {
+    const group = svgEl("g", { "data-played-staff": "" });
+    for (let l = 0; l < 5; l++) {
+      const y = cue.y + l * CUE_SPACE;
+      group.appendChild(
+        svgEl(
+          "line",
+          { x1: cue.x0, x2: cue.x1, y1: y, y2: y, "stroke-width": 0.8 },
+          { stroke: roles.border.muted },
+        ),
+      );
+    }
+    for (const x of [cue.x0, ...barXs[line], cue.x1]) {
+      group.appendChild(
+        svgEl(
+          "line",
+          { x1: x, x2: x, y1: cue.y, y2: cue.y + CUE_HEIGHT, "stroke-width": 0.8 },
+          { stroke: roles.border.strong },
+        ),
+      );
+    }
+    const label = svgEl(
+      "text",
+      {
+        x: cue.x0 - 6,
+        y: cue.y + CUE_HEIGHT / 2 + 3,
+        "text-anchor": "end",
+      },
+      // In `style`, as page styles outrank the size given as an attribute.
+      {
+        fill: roles.fg.muted,
+        "font-family": "var(--chakra-fonts-body)",
+        "font-size": "7px",
+        "letter-spacing": "0.6px",
+      },
+    );
+    label.textContent = "PLAYED";
+    group.appendChild(label);
+    svg.appendChild(group);
+    // Said where it fits, before the staff: the first line's clef and time signature
+    // leave room, a later line's clef alone may not.
+    // (Not measured in jsdom, which has no layout.)
+    const width = (label as SVGTextElement).getComputedTextLength?.() ?? 0;
+    if (width > cue.x0 - 8) label.remove();
+  });
+}
+
+/**
+ * Draws each note played (`played`) on its line's played staff, at cue size, where it
+ * was played and as long as it was held: as notes tied across barlines (see
+ * `ghostPieces`), each with its head (open for a half or whole note), stem, flags and
+ * dot, and ledger lines off the staff, coloured by `playedColor`. Spelt for the key,
+ * with an accidental on its first note where the key signature, or a note played earlier
+ * in the bar, needs one. Returns what it drew, for removal.
+ */
+function drawPlayed(
+  svg: SVGSVGElement,
+  placed: Placed[],
+  cues: Cue[],
+  timeline: Timeline,
+  played: readonly PlayedMark[],
+  keySig: string,
+) {
+  if (!placed.length || !cues.length) return [];
+  // The notes played so far in each bar, as spelt: what sets each line's accidental.
+  const inBar = new Map<number, string[]>();
+  return played.map((mark) => {
+    const color = playedColor(mark);
+    const start = Math.min(mark.start, timeline.end);
+    const bar = barAt(timeline, start);
+    const earlier = inBar.get(bar) ?? [];
+    const { line, accidental, name } = spellInKey(mark.midi, keySig, earlier);
+    inBar.set(bar, [...earlier, name]);
+    const up = line < 3;
+    const group = svgEl("g", {
+      "data-played": mark.midi,
+      "data-status": mark.status,
+      "data-length": mark.length,
+    });
+
+    const heads = ghostPieces(mark, timeline).map((piece, i) => {
+      const at = Math.min(piece.start, timeline.end);
+      const { x, placed: p } = xAt(placed, cursorAt(timeline, at));
+      const cue = cues[p.line];
+      const y = cue.y + (5 - line) * CUE_SPACE;
+      // Drawn at full size round (0, 0), then scaled down to the played staff's size.
+      const note = svgEl("g", { transform: `translate(${x} ${y}) scale(${CUE})` });
+      const stroke = (attrs: Record<string, string | number>, width = 1) =>
+        note.appendChild(svgEl("line", { ...attrs, "stroke-width": width }, { stroke: color }));
+
+      // Ledger lines from the staff out to the note: below the bottom line, above the top.
+      for (let l = 0; l >= Math.ceil(line); l--) {
+        const ly = (line - l) * 10;
+        stroke({ x1: -9, x2: 9, y1: ly, y2: ly });
+      }
+      for (let l = 6; l <= Math.floor(line); l++) {
+        const ly = (line - l) * 10;
+        stroke({ x1: -9, x2: 9, y1: ly, y2: ly });
+      }
+      if (accidental && i === 0) {
+        const t = svgEl(
+          "text",
+          { x: -GHOST_HEAD.rx - 3, y: 4.5, "text-anchor": "end", "font-size": 14 },
+          { fill: color },
+        );
+        t.textContent = ACCIDENTAL_GLYPHS[accidental];
+        note.appendChild(t);
+      }
+
+      const open = piece.length >= 2;
+      note.appendChild(
+        svgEl(
+          "ellipse",
+          {
+            cx: 0,
+            cy: 0,
+            rx: open ? GHOST_HEAD.rx - 0.8 : GHOST_HEAD.rx,
+            ry: open ? GHOST_HEAD.ry - 0.8 : GHOST_HEAD.ry,
+            transform: `rotate(${GHOST_HEAD.tilt})`,
+            "stroke-width": open ? 1.6 : 0,
+          },
+          { fill: open ? "none" : color, stroke: color },
+        ),
+      );
+
+      // A stem for all but a whole note: up from the lower half of the staff, else down,
+      // with a flag for an eighth and two for a sixteenth.
+      if (piece.length < 4) {
+        const sx = up ? GHOST_HEAD.rx - 0.6 : -GHOST_HEAD.rx + 0.6;
+        const tip = up ? -GHOST_STEM : GHOST_STEM;
+        stroke({ x1: sx, x2: sx, y1: 0, y2: tip }, 1.3);
+        const flags = piece.length <= 0.25 ? 2 : piece.length < 1 ? 1 : 0;
+        for (let f = 0; f < flags; f++) {
+          const fy = up ? tip + f * 7 : tip - f * 7;
+          const d = up ? `M ${sx} ${fy} c 0 6 10 8 8 18` : `M ${sx} ${fy} c 0 -6 10 -8 8 -18`;
+          note.appendChild(
+            svgEl("path", { d, "stroke-width": 1.6, fill: "none" }, { stroke: color }),
+          );
+        }
+      }
+      if ([3, 1.5, 0.75].includes(piece.length)) {
+        // In the space above, if the head sits on a line.
+        const dy = Number.isInteger(line) ? -5 : 0;
+        note.appendChild(
+          svgEl("circle", { cx: GHOST_HEAD.rx + 5, cy: dy, r: 1.7 }, { fill: color }),
+        );
+      }
+      group.appendChild(note);
+      return { x, y, cue };
+    });
+
+    // A tie from each note to the next, away from the stems. Across a line break, it
+    // runs off the end of the one line and in from the start of the next.
+    const tie = (x1: number, x2: number, y: number) => {
+      const side = up ? 1 : -1;
+      const y0 = y + side * (GHOST_HEAD.ry + GHOST_TIE.gap) * CUE;
+      const rise = side * Math.min(GHOST_TIE.rise * CUE, 2 + (x2 - x1) * 0.1);
+      const d =
+        `M ${x1} ${y0} C ${x1 + (x2 - x1) / 4} ${y0 + rise} ` +
+        `${x2 - (x2 - x1) / 4} ${y0 + rise} ${x2} ${y0}`;
+      group.appendChild(
+        svgEl("path", { d, "stroke-width": 1.1, fill: "none", "data-tie": "" }, { stroke: color }),
+      );
+    };
+    const halfHead = GHOST_HEAD.rx * 0.6 * CUE;
+    heads.slice(1).forEach((to, i) => {
+      const from = heads[i];
+      if (from.cue === to.cue) {
+        tie(from.x + halfHead, to.x - halfHead, from.y);
+        return;
+      }
+      tie(from.x + halfHead, from.cue.x1, from.y);
+      tie(to.cue.x0 + 2, to.x - halfHead, to.y);
+    });
+
+    svg.appendChild(group);
+    return group;
+  });
+}
+
+/**
+ * Each rest's shape at full size, round the middle line (y 0), before `CUE`: a whole
+ * bar's rest hangs from the line above, a half rest sits on the middle line.
+ */
+const REST_SHAPES: Record<number, { block?: number; path?: string; dots?: [number, number][] }> = {
+  4: { block: -10 },
+  2: { block: -5 },
+  1: { path: "M -2 -13 L 4 -5 L -1 1 L 4 7 Q -3 4 0 13" },
+  0.5: { path: "M -3 -2.5 Q 1 -1 4.5 -5 L -0.5 10", dots: [[-2.5, -4]] },
+  0.25: {
+    path: "M -2 -4.5 Q 2 -3 5 -8 L -1.5 12 M -4.5 2.5 Q -1 4 2.2 0",
+    dots: [
+      [-1.5, -6],
+      [-4, 1],
+    ],
+  },
+};
+
+/**
+ * Draws the silences in what was played (`rests`, from `silences`) on the played staff,
+ * faint: each where it falls, and a whole bar's rest in the middle of its bar. Returns
+ * what it drew, for removal.
+ */
+function drawRests(
+  svg: SVGSVGElement,
+  placed: Placed[],
+  cues: Cue[],
+  timeline: Timeline,
+  rests: readonly RestMark[],
+) {
+  if (!placed.length || !cues.length) return [];
+  const color = roles.fg.subtle;
+  return rests.map((rest) => {
+    const { x: along, placed: p } = xAt(placed, cursorAt(timeline, rest.start));
+    const x = rest.wholeBar ? (p.stave.getNoteStartX() + p.stave.getNoteEndX()) / 2 : along;
+    const y = cues[p.line].y + 2 * CUE_SPACE;
+    const shape = REST_SHAPES[rest.wholeBar ? 4 : rest.length];
+    const group = svgEl("g", {
+      transform: `translate(${x} ${y}) scale(${CUE})`,
+      "data-rest": rest.wholeBar ? "bar" : rest.length,
+    });
+    if (shape.block !== undefined) {
+      group.appendChild(
+        svgEl("rect", { x: -6, y: shape.block, width: 12, height: 5 }, { fill: color }),
+      );
+    }
+    if (shape.path) {
+      group.appendChild(
+        svgEl(
+          "path",
+          {
+            d: shape.path,
+            fill: "none",
+            "stroke-width": rest.length === 1 ? 2.4 : 1.4,
+            "stroke-linecap": "round",
+            "stroke-linejoin": "round",
+          },
+          { stroke: color },
+        ),
+      );
+    }
+    for (const [cx, cy] of shape.dots ?? []) {
+      group.appendChild(svgEl("circle", { cx, cy, r: 2.4 }, { fill: color }));
+    }
+    svg.appendChild(group);
+    return group;
+  });
+}
+
 const CURSOR_BAND = 28;
 
 /**
- * Draws the cursor band and rule behind the notes; returns them for removal. Through a
- * note the cursor glides towards the next one, or for a line's last note, towards the
- * line's end.
+ * Where a fractional note index (`cursorAt`) falls across the staff, and the note it's
+ * in. Through a note it glides towards the next one, or for a line's last note, towards
+ * the line's end.
  */
-function drawCursor(svg: SVGSVGElement, placed: Placed[], cursor: number) {
-  if (!placed.length) return [];
+function xAt(placed: Placed[], cursor: number) {
   const i0 = Math.max(0, Math.min(placed.length - 1, Math.floor(cursor)));
   const q0 = placed[i0];
   const q1 = placed[i0 + 1];
@@ -628,9 +1087,19 @@ function drawCursor(svg: SVGSVGElement, placed: Placed[], cursor: number) {
     q1 && q1.stave.getY() === q0.stave.getY()
       ? noteCenterX(q1.note)
       : Math.max(from, q0.stave.getNoteEndX() - CURSOR_BAND / 2);
-  const x = from + (to - from) * Math.min(1, Math.max(0, cursor - i0));
+  return { x: from + (to - from) * Math.min(1, Math.max(0, cursor - i0)), placed: q0 };
+}
+
+/**
+ * Draws the cursor band and rule behind the notes (at `xAt`), down through the played
+ * staff if there is one; returns them for removal.
+ */
+function drawCursor(svg: SVGSVGElement, placed: Placed[], cues: Cue[], cursor: number) {
+  if (!placed.length) return [];
+  const { x, placed: q0 } = xAt(placed, cursor);
   const top = q0.stave.getYForLine(0) - 20;
-  const bottom = q0.stave.getYForLine(4) + 20;
+  const cue = cues[q0.line];
+  const bottom = cue ? cue.y + CUE_HEIGHT + 12 : q0.stave.getYForLine(4) + 20;
 
   const band = svgEl(
     "rect",

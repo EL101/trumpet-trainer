@@ -3,15 +3,22 @@ import { Slider, Stepper } from "@/components/primitives";
 import { MAX_TEMPO, MIN_TEMPO, type Pulse } from "@/lib/meter";
 import { TempoMark } from "./TempoMark";
 
-/** The tempo as a stepper for fine steps and a slider for big ones. */
+/**
+ * The tempo as a stepper for fine steps and a slider for big ones. `locked` turns both
+ * off, with `lockedNote` under them to say why.
+ */
 export function TempoControl({
   pulse,
   tempo,
   onChange,
+  locked = false,
+  lockedNote,
 }: {
   pulse: Pulse;
   tempo: number;
   onChange: (tempo: number) => void;
+  locked?: boolean;
+  lockedNote?: string;
 }) {
   return (
     // One group for screen readers, so the two controls are "fine" and "slider" within it.
@@ -26,6 +33,7 @@ export function TempoControl({
         min={MIN_TEMPO}
         max={MAX_TEMPO}
         format={(v) => <TempoMark pulse={pulse} bpm={v} />}
+        disabled={locked}
         aria-label="Tempo, fine"
       />
       <Slider
@@ -34,9 +42,15 @@ export function TempoControl({
         min={MIN_TEMPO}
         max={MAX_TEMPO}
         width="160px"
+        disabled={locked}
         aria-label="Tempo, slider"
         aria-valuetext={`${tempo} beats per minute`}
       />
+      {locked && lockedNote && (
+        <Text flexBasis="100%" textAlign="center" textStyle="meta" color="fg.muted">
+          {lockedNote}
+        </Text>
+      )}
     </Flex>
   );
 }

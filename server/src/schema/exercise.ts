@@ -33,6 +33,19 @@ export const HistoryInputSchema = ExerciseInputSchema.extend({
 
 export type HistoryInput = z.infer<typeof HistoryInputSchema>;
 
+/**
+ * DELETE /api/history. `keep` is the exercise to keep (the one on the plate): saved again
+ * as the new No. 1 in the same request, so there's no moment it's in neither history nor
+ * the library. Clients built before it existed send no body, and clear everything.
+ */
+export const ClearHistorySchema = z.object({
+  keep: HistoryInputSchema.omit({ generationNum: true })
+    .extend({ exerciseId: z.uuid() })
+    .optional(),
+});
+
+export type ClearHistory = z.infer<typeof ClearHistorySchema>;
+
 /** Tables that hold exercise rows. Used to build table-scoped queries. */
 export const EXERCISE_TABLES = ["history", "library"] as const;
 export type ExerciseTable = (typeof EXERCISE_TABLES)[number];

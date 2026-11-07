@@ -1,7 +1,7 @@
 import { Note } from "tonal";
 import { DURATION_TO_BEATS } from "@/utils/splitNotes";
 import { barQuarters, pulseOf } from "./meter";
-import { parseMeasures, type ParsedNote } from "./notation";
+import { parseMeasures, pitchName, type ParsedNote } from "./notation";
 
 /** One note or rest of an exercise, placed in time. Positions and lengths are in quarter notes. */
 export type TimedNote = {
@@ -9,6 +9,8 @@ export type TimedNote = {
   length: number;
   /** Written pitch as a MIDI number; null for a rest. */
   midi: number | null;
+  /** Written pitch as spelt on the staff, e.g. "Bb4"; null for a rest. */
+  name: string | null;
   /** Tied to the next note, so the two sound as one. */
   tied: boolean;
   /** Slurred into the next note, so it isn't tongued apart from it. */
@@ -32,8 +34,12 @@ export type SoundingNote = {
   length: number;
   /** Written pitch as a MIDI number. */
   midi: number;
+  /** Written pitch as spelt on the staff, e.g. "Bb4". */
+  name: string;
   /** Slurred into the next note. */
   legato: boolean;
+  /** The timeline notes it's made of (more than one when tied), as indices into `notes`. */
+  indices: number[];
 };
 
 /** No notes and no end: what the metronome plays on its own, counted in `timeSig`. */
@@ -55,6 +61,7 @@ export function buildTimeline(notes: string, timeSig: string): Timeline {
       start,
       length,
       midi: note.rest ? null : midiOf(note),
+      name: note.rest ? null : pitchName(note),
       tied: note.tied,
       slurred: inSlur && !note.slurEnd,
     });
@@ -98,24 +105,31 @@ export function soundingNotes({ notes }: Timeline): SoundingNote[] {
   const sounding: SoundingNote[] = [];
   // The last note, while it's tied into the next.
   let held: SoundingNote | null = null;
-  for (const note of notes) {
-    if (note.midi === null) {
+  notes.forEach((note, index) => {
+    if (note.midi === null || note.name === null) {
       held = null;
-      continue;
+      return;
     }
     if (held && held.midi === note.midi) {
       held.length += note.length;
       held.legato = note.slurred;
+      held.indices.push(index);
     } else {
-      held = { start: note.start, length: note.length, midi: note.midi, legato: note.slurred };
+      held = {
+        start: note.start,
+        length: note.length,
+        midi: note.midi,
+        name: note.name,
+        legato: note.slurred,
+        indices: [index],
+      };
       sounding.push(held);
     }
     if (!note.tied) held = null;
-  }
+  });
   return sounding;
 }
 
 function midiOf(note: ParsedNote) {
-  const [name, octave] = note.key.split("/");
-  return Note.midi(`${name}${octave}`);
+  return Note.midi(pitchName(note));
 }

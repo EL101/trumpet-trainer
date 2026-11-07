@@ -14,4 +14,4 @@ export { Stat } from "./Stat";
 export { SectionHeading } from "./SectionHeading";
 export { Bookplate } from "./Bookplate";
 export { Toaster } from "./Toaster";
-export { notify, toaster, type Notice, type NoticeLink } from "./notify";
+export { BRIEF_NOTICE_MS, notify, toaster, type Notice, type NoticeLink } from "./notify";

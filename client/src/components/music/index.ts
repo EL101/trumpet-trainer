@@ -10,3 +10,5 @@ export { NoteValue, TempoMark } from "./TempoMark";
 export { Tuner } from "./Tuner";
 export { BeatDots, SubdivisionControl } from "./Beats";
 export { TempoControl } from "./TempoControl";
+export { ScoreCard } from "./ScoreCard";
+export { LastFeedbackButton } from "./LastFeedbackButton";

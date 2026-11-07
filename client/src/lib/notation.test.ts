@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { parseMeasures, parseNote, resolveMeasuresPerLine } from "./notation";
+import {
+  barExcerpt,
+  parseMeasures,
+  parseNote,
+  pitchName,
+  resolveMeasuresPerLine,
+  spellInKey,
+} from "./notation";
 
 describe("parseNote", () => {
   it("parses pitch, duration, dots and rests", () => {
@@ -125,5 +132,56 @@ describe("resolveMeasuresPerLine", () => {
     expect(resolveMeasuresPerLine(-3, 8)).toBe(8);
     expect(resolveMeasuresPerLine(0.5, 8)).toBe(8);
     expect(resolveMeasuresPerLine(Number.NaN, 0)).toBe(1);
+  });
+});
+
+describe("spellInKey", () => {
+  it("writes the key's own notes without an accidental", () => {
+    expect(spellInKey(70, "F")).toEqual({ name: "Bb4", accidental: "", line: 3 });
+    expect(spellInKey(78, "D")).toEqual({ name: "F#5", accidental: "", line: 5 });
+  });
+
+  it("marks a note outside the key, spelt the way the key leans", () => {
+    expect(spellInKey(71, "F")).toEqual({ name: "B4", accidental: "n", line: 3 });
+    expect(spellInKey(68, "Bb")).toEqual({ name: "Ab4", accidental: "b", line: 2.5 });
+    expect(spellInKey(61, "Eb")).toEqual({ name: "Db4", accidental: "b", line: 0.5 });
+    expect(spellInKey(61, "G")).toEqual({ name: "C#4", accidental: "#", line: 0 });
+    expect(spellInKey(66, "C")).toEqual({ name: "Gb4", accidental: "b", line: 2 });
+  });
+
+  it("takes in the accidentals written earlier in the bar, on the same line only", () => {
+    // In F major, after a B♮ the line is natural: a B♭ needs its flat, a B♮ nothing.
+    expect(spellInKey(70, "F", ["B4"])).toMatchObject({ name: "Bb4", accidental: "b" });
+    expect(spellInKey(71, "F", ["B4"])).toMatchObject({ name: "B4", accidental: "" });
+    // The latest one counts; another octave's doesn't.
+    expect(spellInKey(70, "F", ["B4", "Bb4"])).toMatchObject({ accidental: "" });
+    expect(spellInKey(70, "F", ["B5"])).toMatchObject({ accidental: "" });
+    // In C, after an F♯ an F needs its natural.
+    expect(spellInKey(65, "C", ["F#4"])).toMatchObject({ name: "F4", accidental: "n" });
+  });
+
+  it("finds the octave of a note spelt across one", () => {
+    expect(spellInKey(71, "Gb")).toEqual({ name: "Cb5", accidental: "", line: 3.5 });
+    expect(spellInKey(60, "C#")).toEqual({ name: "B#3", accidental: "", line: -0.5 });
+  });
+});
+
+describe("pitchName", () => {
+  it("writes VexFlow's key as the app does, accidentals and all", () => {
+    expect(pitchName(parseNote("Bb4/q", "q"))).toBe("Bb4");
+    expect(pitchName(parseNote("C#5/8", "q"))).toBe("C#5");
+    expect(pitchName(parseNote("G3/h/r", "q"))).toBe("G3");
+  });
+});
+
+describe("barExcerpt", () => {
+  it("writes one bar out on its own, with where it starts", () => {
+    const notes = "C4/q, D4, E4/h, (F4/8, G4~), G4/q., B4/q/r";
+    expect(barExcerpt(notes, "4/4", 1)).toEqual({
+      // The staff pads the bar out with a rest.
+      notes: "F4/8, G4/8, G4/q., B4/q/r, B4/8/r",
+      first: 3,
+    });
+    expect(barExcerpt(notes, "4/4", 0).notes).toBe("C4/q, D4/q, E4/h");
   });
 });

@@ -218,6 +218,39 @@ describe("POST /api/history numbering", () => {
     expect((await save(uid)).body.generationNum).toBe(1);
   });
 
+  it("keeps the exercise on the plate through a clear, as the new No. 1, in one request", async () => {
+    const uid = newUid();
+    await save(uid);
+    await save(uid);
+    const { generationNum: _, ...keep } = { ...exerciseBody(), exerciseId: randomUUID() };
+
+    const res = await request(app).delete("/api/history").set(bearer(uid)).send({ keep });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ exerciseId: keep.exerciseId, generationNum: 1 });
+    expect(await historyGenerations(uid)).toEqual([1]);
+    expect((await save(uid)).body.generationNum).toBe(2);
+  });
+
+  it("clears everything for a client that sends nothing to keep", async () => {
+    const uid = newUid();
+    await save(uid);
+
+    expect((await request(app).delete("/api/history").set(bearer(uid))).status).toBe(204);
+    expect(await historyGenerations(uid)).toEqual([]);
+  });
+
+  it("turns down an exercise to keep without its id, clearing nothing", async () => {
+    const uid = newUid();
+    await save(uid);
+    const { generationNum: _, ...keep } = exerciseBody();
+
+    const res = await request(app).delete("/api/history").set(bearer(uid)).send({ keep });
+
+    expect(res.status).toBe(400);
+    expect(await historyGenerations(uid)).toEqual([1]);
+  });
+
   it("carries on past a number an older client sent", async () => {
     const uid = newUid();
     await save(uid, exerciseBody(7));

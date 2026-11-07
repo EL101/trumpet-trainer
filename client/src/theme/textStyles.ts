@@ -65,7 +65,14 @@ export const textStyles = defineTextStyles({
       lineHeight: 1.3,
     },
   },
+  /**
+   * A heading a size up from `heading.sm`, for the label leading a row (the parts on
+   * the score card).
+   */
+  subheading: { value: { ...heading, fontSize: "18px", fontWeight: 600, lineHeight: 1.25 } },
   body: { value: { fontSize: "15px", lineHeight: 1.55 } },
+  /** Body text a size down, for short lines in a list (the score card's feedback). */
+  small: { value: { fontSize: "14px", lineHeight: 1.5 } },
   meta: { value: { fontSize: "12px", lineHeight: 1.4 } },
   caption: { value: { fontSize: "11px", lineHeight: 1.35 } },
   /** Large tabular numerals for stats and scores. */

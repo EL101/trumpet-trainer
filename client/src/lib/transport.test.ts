@@ -63,6 +63,15 @@ describe("pauseAt", () => {
     expect(pauseAt(playing, timeline, 5.6)).toEqual({ status: "paused", position: 5.6, from: 4 });
   });
 
+  it("moves the cursor back to the top of its bar when asked, as a scored take does", () => {
+    const playing: Transport = { status: "playing", position: 5.5, from: 0 };
+    expect(pauseAt(playing, timeline, 5.6, { toBar: true })).toEqual({
+      status: "paused",
+      position: 4,
+      from: 4,
+    });
+  });
+
   it("resumes from a barline it's paused right on", () => {
     const playing: Transport = { status: "playing", position: 4, from: 0 };
     // A rounding error short of the barline still counts as on it.
