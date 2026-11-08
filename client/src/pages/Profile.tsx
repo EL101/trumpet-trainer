@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useBlocker, type Blocker } from "react-router-dom";
 import { Box, Dialog, Flex, Grid, Heading, Portal, Spinner, Text } from "@chakra-ui/react";
 import { RotateCcw, Trash2, Check } from "lucide-react";
 import { AppShell } from "@/components/layout";
 import { PitchText, Staff } from "@/components/music";
 import {
+  ActivityGrid,
   Bookplate,
   Button,
   Kicker,
@@ -12,6 +13,7 @@ import {
   RangeAxis,
   RangeSlider,
   SectionHeading,
+  SegmentedControl,
   Stat,
 } from "@/components/primitives";
 import AvatarUpload from "@/components/AvatarUpload";
@@ -20,6 +22,7 @@ import SignOut from "@/components/SignOut";
 import { useAuth } from "@/auth/useAuth";
 import { auth } from "@/firebase";
 import { usePersistedState } from "@/hooks/usePersistedState";
+import { calendarYear, formatDay, localToday, pastYear, type ActivityCell } from "@/lib/activity";
 import { formatLongDate, formatPitch } from "@/lib/format";
 import { RANGE_LABELS } from "@/lib/generatorOptions";
 import {
@@ -36,9 +39,9 @@ import {
   type SettableRange,
 } from "@/lib/noteRanges";
 import { useProfile } from "@/profile/useProfile";
-import type { ProfileStats } from "@/schema";
+import type { ActivityDay, ProfileStats } from "@/schema";
 import { useSettings } from "@/settings/useSettings";
-import { fetchStats } from "@/utils/profile";
+import { fetchActivity, fetchStats } from "@/utils/profile";
 import { resetScores } from "@/utils/scores";
 
 /** Notes labelled under the range sliders: the horn's ends and each C between. */
@@ -59,6 +62,7 @@ export default function Profile() {
   const { user } = useAuth();
   const { profile, loading } = useProfile();
   const stats = useStats();
+  const activity = useActivity();
 
   if (!user || loading) {
     return (
@@ -128,9 +132,14 @@ export default function Profile() {
         </Grid>
       </Bookplate>
 
+      <Activity {...activity} />
+
       <Settings
         played={stats.value?.exercisesPlayed}
-        onReset={() => stats.update((s) => ({ ...s, exercisesPlayed: 0 }))}
+        onReset={() => {
+          stats.update((s) => ({ ...s, exercisesPlayed: 0 }));
+          activity.clear();
+        }}
       />
     </AppShell>
   );
@@ -154,6 +163,121 @@ function useStats() {
   const update = (change: (stats: ProfileStats) => ProfileStats) =>
     setValue((prev) => (prev ? change(prev) : prev));
   return { value, update };
+}
+
+/** "past" for the last 53 weeks, or a calendar year. */
+type ActivitySpan = "past" | `${number}`;
+
+/**
+ * The activity grid's days for the span chosen (the past year to begin with), and the
+ * years there's anything in to choose from. `days` is null until the first load.
+ */
+function useActivity() {
+  const { user } = useAuth();
+  const [span, setSpan] = useState<ActivitySpan>("past");
+  const [days, setDays] = useState<ActivityDay[] | null>(null);
+  const [years, setYears] = useState<number[]>([]);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchActivity(user, span === "past" ? undefined : Number(span), controller.signal)
+      .then((activity) => {
+        if (controller.signal.aborted || !activity) return;
+        setFailed(false);
+        setDays(activity.days);
+        setYears(activity.years);
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        console.error("fetch activity error:", error);
+        setFailed(true);
+      });
+    return () => controller.abort();
+  }, [user, span]);
+  const clear = () => {
+    setDays((prev) => (prev ? [] : prev));
+    setYears([]);
+    setSpan("past");
+  };
+  return { span, setSpan, days, years, failed, clear };
+}
+
+const playedOn = ({ count, date }: ActivityCell) =>
+  `${count === 0 ? "Nothing" : `${count} exercise${count === 1 ? "" : "s"}`} played on ${formatDay(date)}`;
+
+/**
+ * How much the user has played each day, as a grid of days (mockup 4c's, laid out
+ * like GitHub's), the more exercises the darker: the past year, or a calendar year
+ * chosen beside the heading.
+ */
+function Activity({
+  span,
+  setSpan,
+  days,
+  years,
+  failed,
+}: Omit<ReturnType<typeof useActivity>, "clear">) {
+  const counts = useMemo(() => new Map(days?.map((day) => [day.date, day.played])), [days]);
+  const today = localToday();
+  const [start, end] = span === "past" ? pastYear(today) : calendarYear(Number(span));
+  const when = span === "past" ? "the past year" : span;
+  const practised = days?.length ?? 0;
+  const summary = failed
+    ? "Couldn't load your activity."
+    : practised === 0
+      ? ""
+      : `Practised on ${practised} day${practised === 1 ? "" : "s"} in ${when}`;
+  const options = [
+    { value: "past" as const, label: "Past year" },
+    ...years.map((year) => ({ value: `${year}` as const, label: `${year}` })),
+  ];
+
+  return (
+    <Flex
+      as="section"
+      aria-labelledby="activity"
+      direction="column"
+      gap="md"
+      pt="lg"
+      borderTopWidth="1px"
+      borderColor="border"
+    >
+      <Flex align="flex-end" justify="space-between" gap="md" wrap="wrap">
+        <SectionHeading
+          id="activity"
+          as="h2"
+          number={1}
+          title="Activity"
+          description="Exercises played each day"
+        />
+        <Flex align="center" gap="md" wrap="wrap">
+          <Text
+            textStyle="meta"
+            color={failed ? "fg.error" : "fg.muted"}
+            role={failed ? "alert" : undefined}
+          >
+            {summary}
+          </Text>
+          {years.length > 0 && (
+            <SegmentedControl
+              aria-label="Show activity for"
+              value={span}
+              onChange={setSpan}
+              options={options}
+            />
+          )}
+        </Flex>
+      </Flex>
+      <ActivityGrid
+        counts={counts}
+        start={start}
+        end={end}
+        today={today}
+        describe={playedOn}
+        aria-label={`Exercises played each day in ${when}. ${summary}`}
+      />
+    </Flex>
+  );
 }
 
 /**
@@ -239,7 +363,7 @@ function Settings({ played, onReset }: { played?: number; onReset: () => void })
             <SectionHeading
               id="note-ranges"
               as="h2"
-              number={1}
+              number={2}
               title="Note ranges"
               description="What Low, Medium and High cover when you generate, in written pitch. Ranges can overlap; each spans at least an octave."
               maxWidth="460px"
@@ -287,7 +411,7 @@ function Settings({ played, onReset }: { played?: number; onReset: () => void })
           borderColor="border"
           borderTopWidth={{ base: "1px", lg: 0 }}
         >
-          <SectionHeading id="data" as="h2" number={2} title="Data" description="Can't be undone" />
+          <SectionHeading id="data" as="h2" number={3} title="Data" description="Can't be undone" />
           <Text textStyle="small" color="fg.muted">
             Deletes every practice score and sets exercises played back to 0. Your library, history
             and note ranges stay.

@@ -44,3 +44,40 @@ export type ProfileStats = {
    */
   exercisesPlayed: number;
 };
+
+/**
+ * Query of GET /api/profile/activity: the IANA time zone whose days the activity is
+ * counted in (the browser's), UTC if none is given, and the calendar year to show, or
+ * none for the past year. Only zone names: an offset such as "+05:00" means the
+ * opposite to Postgres (POSIX signs), so it's turned down.
+ */
+export const ActivityQuerySchema = z.object({
+  tz: z
+    .string()
+    .regex(/^[A-Za-z][A-Za-z0-9_+-]*(\/[A-Za-z0-9_+-]+)*$/)
+    .refine((tz) => {
+      try {
+        new Intl.DateTimeFormat("en", { timeZone: tz });
+        return true;
+      } catch {
+        return false;
+      }
+    })
+    .default("UTC"),
+  year: z.coerce.number().int().min(2000).max(9999).optional(),
+});
+
+/** One day of GET /api/profile/activity: its date and how many exercises were played. */
+export type ActivityDay = {
+  /** The day in the user's time zone, as YYYY-MM-DD. */
+  date: string;
+  /** Different exercises with a scored run that day. */
+  played: number;
+};
+
+/**
+ * Shape returned by GET /api/profile/activity: the days with anything played, oldest
+ * first, in the year asked for or else the last `ACTIVITY_DAYS`, and every year the
+ * user has played in, newest first (for choosing one).
+ */
+export type Activity = { days: ActivityDay[]; years: number[] };

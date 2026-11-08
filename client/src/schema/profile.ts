@@ -27,3 +27,17 @@ export type Settings = {
   /** What Low, Medium and High cover, as MIDI numbers (see `lib/noteRanges`). */
   noteRanges: NoteRanges;
 };
+
+/** One day of GET /api/profile/activity. Mirrors server/src/schema/profile.ts. */
+export type ActivityDay = {
+  /** The day in the user's time zone, as YYYY-MM-DD. */
+  date: string;
+  /** Different exercises with a scored run that day. */
+  played: number;
+};
+
+/**
+ * Shape returned by GET /api/profile/activity: the days with anything played in the
+ * year asked for (or the past year), and the years the user played in, newest first.
+ */
+export type Activity = { days: ActivityDay[]; years: number[] };

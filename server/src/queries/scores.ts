@@ -94,6 +94,49 @@ export async function countPlayedExercises(userId: string) {
   return played.length;
 }
 
+/** How far back the activity grid goes: 53 weeks, a year with the week it ends in. */
+export const ACTIVITY_DAYS = 53 * 7;
+
+/**
+ * How many different exercises the user played each day, counted in `timeZone` (an
+ * IANA name, checked by ActivityQuerySchema): only days with any, oldest first. The
+ * days are those of `year` there, or with no year the last `ACTIVITY_DAYS`.
+ *
+ * Raw SQL: Prisma can't group by the day a timestamp falls on in a time zone. The
+ * year's bounds are turned into instants, so the (user, created) index finds the
+ * runs. Covered in test/activity.test.ts.
+ */
+export function playedPerDay(userId: string, timeZone: string, year?: number) {
+  const since =
+    year === undefined
+      ? Prisma.sql`now() - ${ACTIVITY_DAYS} * interval '1 day'`
+      : Prisma.sql`make_date(${year}::int, 1, 1)::timestamp AT TIME ZONE ${timeZone}`;
+  const until =
+    year === undefined
+      ? Prisma.sql`'infinity'::timestamptz`
+      : Prisma.sql`make_date(${year}::int + 1, 1, 1)::timestamp AT TIME ZONE ${timeZone}`;
+  return prisma.$queryRaw<{ date: string; played: number }[]>`
+    SELECT to_char(created_at AT TIME ZONE ${timeZone}, 'YYYY-MM-DD') AS date,
+           count(DISTINCT exercise_id)::int AS played
+    FROM practice_scores
+    WHERE user_id = ${userId} AND created_at >= ${since} AND created_at < ${until}
+    GROUP BY 1
+    ORDER BY 1`;
+}
+
+/**
+ * The years, in `timeZone`, the user played anything in: newest first. Raw SQL for
+ * the time zone, as above; covered in test/activity.test.ts.
+ */
+export async function playedYears(userId: string, timeZone: string) {
+  const rows = await prisma.$queryRaw<{ year: number }[]>`
+    SELECT DISTINCT extract(year FROM created_at AT TIME ZONE ${timeZone})::int AS year
+    FROM practice_scores
+    WHERE user_id = ${userId}
+    ORDER BY 1 DESC`;
+  return rows.map((row) => row.year);
+}
+
 /**
  * Delete every scored run the user has, feedback and all: their practice data. Their
  * exercises, history and settings stay. Returns how many runs went.

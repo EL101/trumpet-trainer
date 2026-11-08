@@ -1,5 +1,5 @@
 import type { User } from "firebase/auth";
-import type { Profile, ProfileStats } from "@/schema";
+import type { Activity, Profile, ProfileStats } from "@/schema";
 import { authedFetch } from "./api";
 
 export async function fetchProfile(user: User | undefined | null, signal?: AbortSignal) {
@@ -58,8 +58,23 @@ export async function countExercises(user: User | undefined | null) {
   return { history, library };
 }
 
-/** How many exercises the user has generated, and how many scored runs they've saved. */
+/** How many exercises the user has generated, and how many different ones they've played. */
 export async function fetchStats(user: User | undefined | null, signal?: AbortSignal) {
   const res = await authedFetch("/api/profile/stats", user, { signal });
   return res ? ((await res.json()) as ProfileStats) : null;
+}
+
+/**
+ * How many different exercises the user played each day of `year`, or with no year
+ * the past year, counted in the browser's time zone; and the years they played in.
+ */
+export async function fetchActivity(
+  user: User | undefined | null,
+  year?: number,
+  signal?: AbortSignal,
+) {
+  const query = new URLSearchParams({ tz: Intl.DateTimeFormat().resolvedOptions().timeZone });
+  if (year !== undefined) query.set("year", String(year));
+  const res = await authedFetch(`/api/profile/activity?${query}`, user, { signal });
+  return res ? ((await res.json()) as Activity) : null;
 }

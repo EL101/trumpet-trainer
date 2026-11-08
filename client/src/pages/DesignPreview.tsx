@@ -20,6 +20,7 @@ import {
   TunerGauge,
 } from "@/components/music";
 import {
+  ActivityGrid,
   Bookplate,
   Button,
   Card,
@@ -43,6 +44,7 @@ import {
   Textarea,
 } from "@/components/primitives";
 import { MAX_TEMPO, MIN_TEMPO, pulseOf } from "@/lib/meter";
+import { formatDay, pastYear } from "@/lib/activity";
 import { formatPitch } from "@/lib/format";
 import { DEFAULT_NOTE_RANGES, HORN_SPAN, moveEnd, noteName, type NoteSpan } from "@/lib/noteRanges";
 import type { RunScore } from "@/lib/scoring";
@@ -52,6 +54,17 @@ import type { MusicInfo } from "@/schema";
 
 /** Dev-only gallery of the design-system building blocks (route: /design). */
 /** An exercise for PracticeButton to open. It rides in the router state, so it needn't be in history. */
+/** A made-up year for the activity grid: busier lately, with gaps, every shade used. */
+const PREVIEW_TODAY = "2026-11-08";
+const PREVIEW_ACTIVITY = new Map(
+  Array.from({ length: 371 }, (_, i) => {
+    const date = new Date(Date.UTC(2026, 10, 8) - i * 86_400_000).toISOString().slice(0, 10);
+    const h = ((i * 9301 + 49297) % 233280) / 233280;
+    const count = h < (i < 60 ? 0.25 : 0.6) ? 0 : Math.round(h * (i < 60 ? 10 : 5));
+    return [date, count] as const;
+  }),
+);
+
 const PREVIEW_EXERCISE: MusicInfo = {
   id: "design-preview",
   exerciseId: "design-preview",
@@ -507,6 +520,19 @@ export default function DesignPreview() {
         <Flex gap="2xl" mt="xl" wrap="wrap">
           <SectionHeading number={1} title="Instrument" description="Transposition and tuning" />
           <SectionHeading number={4} title="Data" description="Can't be undone" />
+        </Flex>
+        <Flex direction="column" gap="xs" mt="xl">
+          <Text textStyle="caption" color="fg.muted">
+            ActivityGrid: a year of days, shaded 1, 2–3, 4–6, 7+ (hover a day)
+          </Text>
+          <ActivityGrid
+            counts={PREVIEW_ACTIVITY}
+            start={pastYear(PREVIEW_TODAY)[0]}
+            end={PREVIEW_TODAY}
+            today={PREVIEW_TODAY}
+            describe={({ count, date }) => `${count} exercises played on ${formatDay(date)}`}
+            aria-label="A year of made-up activity"
+          />
         </Flex>
       </Section>
 

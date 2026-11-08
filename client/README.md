@@ -75,6 +75,7 @@ The roles you'll use most:
 | `accent.fg`                                 | Accent-coloured text at small sizes (better contrast)    |
 | `accent.subtle`, `accent.muted`             | Tinted fills, soft accent borders                        |
 | `intonation.good` / `fair` / `warn` / `bad` | Score and pitch colours, green through red               |
+| `activity.1` – `activity.4`                 | The activity grid's shades, lightest to darkest          |
 
 For colours that depend on cents (note colouring, pitch readouts), call
 `centsColor(cents)` from `@/lib/intonation`. It blends smoothly from green to red.
@@ -272,7 +273,17 @@ lower (`CONCERT_OFFSET` in `lib/tuning.ts`). The trumpet samples are in
 
 `pages/Profile.tsx` (route `/profile`, mockup 3a) is the practice record on a bookplate
 (portrait, name, Google sign-in for guests, sign out, exercises generated and played),
-then the settings and the data section.
+then the activity grid, the settings and the data section.
+
+- **Activity.** A year of days like GitHub's contributions graph (`ActivityGrid`, from
+  mockup 4c's grid with 1k's labels), one column per week, Monday on top. A day's
+  shade is how many different exercises were played that day, in fixed steps (1, 2–3,
+  4–6, 7+; `activityLevel()` in `lib/activity.ts`), so a day looks the same whatever
+  the busiest day was. It shows the past year (53 weeks to today), or a calendar year
+  chosen beside the heading from the years with any play (`pastYear()`,
+  `calendarYear()`). `GET /api/profile/activity?tz=&year=` counts the days in the
+  browser's time zone and lists those years. It comes from the scores, so resetting
+  practice data empties it.
 
 - **Note ranges.** What Low, Medium and High cover is the user's own: a slider each
   (`RangeSlider`, two thumbs) over the whole horn, F#3 to G6, with the two notes drawn

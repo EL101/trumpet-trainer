@@ -12,6 +12,9 @@ export { EtudeRequestSchema, ETUDE_CHARACTERS, type EtudeRequest } from "./etude
 export {
   GuestTokenSchema,
   AvatarUploadSchema,
+  ActivityQuerySchema,
+  type Activity,
+  type ActivityDay,
   type GuestTokenInput,
   type AvatarUpload,
   type Profile,

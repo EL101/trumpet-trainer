@@ -2,7 +2,9 @@ import { Router, Request, Response } from "express";
 import admin from "firebase-admin";
 import { requireAuth } from "../middleware/requireAuth.js";
 import {
+  ActivityQuerySchema,
   AvatarUploadSchema,
+  type Activity,
   GuestTokenSchema,
   type Profile,
   type ProfileStats,
@@ -15,6 +17,7 @@ import {
   syncUserFromClaims,
 } from "../queries/users.js";
 import { deleteAvatar, setAvatar } from "../queries/avatars.js";
+import { playedPerDay, playedYears } from "../queries/scores.js";
 import { AvatarError, decodeAvatarDataUrl, toDataUrl } from "../avatar.js";
 
 const router = Router();
@@ -45,6 +48,28 @@ router.get("/", requireAuth, async (req: Request, res: Response) => {
   } catch (err) {
     console.error("Failed to load profile:", err);
     res.status(500).json({ error: "Failed to load profile" });
+  }
+});
+
+/**
+ * How many exercises the caller played each day, for the profile's activity grid: of
+ * the calendar year `?year=`, or else the past year, in the time zone `?tz=` names
+ * (400 if either isn't one). Also lists the years they played in.
+ */
+router.get("/activity", requireAuth, async (req: Request, res: Response) => {
+  const query = ActivityQuerySchema.safeParse(req.query);
+  if (!query.success) return res.status(400).json({ error: "Unknown time zone or year" });
+  const { tz, year } = query.data;
+  try {
+    const [days, years] = await Promise.all([
+      playedPerDay(req.user!.uid, tz, year),
+      playedYears(req.user!.uid, tz),
+    ]);
+    const activity: Activity = { days, years };
+    res.json(activity);
+  } catch (err) {
+    console.error("Failed to load activity:", err);
+    res.status(500).json({ error: "Failed to load activity" });
   }
 });
 
