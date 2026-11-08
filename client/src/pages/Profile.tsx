@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useBlocker, type Blocker } from "react-router-dom";
 import { Box, Dialog, Flex, Grid, Heading, Portal, Spinner, Text } from "@chakra-ui/react";
 import { RotateCcw, Trash2, Check } from "lucide-react";
 import { AppShell } from "@/components/layout";
@@ -17,6 +18,7 @@ import AvatarUpload from "@/components/AvatarUpload";
 import LinkGoogleAccount from "@/components/LinkGoogleAccount";
 import SignOut from "@/components/SignOut";
 import { useAuth } from "@/auth/useAuth";
+import { auth } from "@/firebase";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { formatLongDate, formatPitch } from "@/lib/format";
 import { RANGE_LABELS } from "@/lib/generatorOptions";
@@ -156,7 +158,9 @@ function useStats() {
 
 /**
  * The settings sheet and the row that saves it. Changes are a draft until saved, kept
- * for the tab (so a trip to another page, or a reload, doesn't lose them).
+ * for the tab so a reload doesn't lose them. Leaving the page with changes unsaved
+ * asks first: the browser asks on a reload or a closed tab, and LeaveUnsaved on a
+ * move to another page.
  */
 function Settings({ played, onReset }: { played?: number; onReset: () => void }) {
   const { user } = useAuth();
@@ -188,6 +192,14 @@ function Settings({ played, onReset }: { played?: number; onReset: () => void })
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
 
+  // Going to another page in the app asks too. Not once signed out: there's no one to
+  // save for, and signing out goes to the landing page.
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      dirty && auth.currentUser !== null && currentLocation.pathname !== nextLocation.pathname,
+  );
+
+  /** Saves the draft; true if it was saved. */
   const onSave = async () => {
     setSaving(true);
     setSaveFailed(false);
@@ -195,9 +207,11 @@ function Settings({ played, onReset }: { played?: number; onReset: () => void })
       await save({ noteRanges: ranges });
       setDraft(null);
       notify({ tone: "success", title: "Settings saved" });
+      return true;
     } catch (error) {
       console.error("save settings error:", error);
       setSaveFailed(true);
+      return false;
     } finally {
       setSaving(false);
     }
@@ -341,7 +355,101 @@ function Settings({ played, onReset }: { played?: number; onReset: () => void })
           </>
         )}
       </Flex>
+
+      <LeaveUnsaved
+        blocker={blocker}
+        changes={describeChanges(changed)}
+        saving={saving}
+        saveFailed={saveFailed}
+        onSave={onSave}
+        onDiscard={() => setDraft(null)}
+      />
     </>
+  );
+}
+
+/**
+ * Asked when the user heads to another page with their ranges unsaved: save and go,
+ * go without saving (the draft is dropped), or stay. A save that fails keeps them here.
+ */
+function LeaveUnsaved({
+  blocker,
+  changes,
+  saving,
+  saveFailed,
+  onSave,
+  onDiscard,
+}: {
+  blocker: Blocker;
+  changes: string;
+  saving: boolean;
+  saveFailed: boolean;
+  onSave: () => Promise<boolean>;
+  onDiscard: () => void;
+}) {
+  const blocked = blocker.state === "blocked";
+  const stay = () => {
+    if (blocker.state === "blocked") blocker.reset();
+  };
+  const leave = () => {
+    if (blocker.state === "blocked") blocker.proceed();
+  };
+
+  return (
+    <Dialog.Root
+      role="alertdialog"
+      placement="center"
+      open={blocked}
+      onOpenChange={(e) => {
+        if (!e.open && !saving) stay();
+      }}
+    >
+      <Portal>
+        <Dialog.Backdrop bg="bg.backdrop" />
+        <Dialog.Positioner px="md">
+          <Dialog.Content maxWidth="460px" p="lg" gap="md" borderWidth="1px" borderColor="border">
+            <Kicker>Not saved yet</Kicker>
+            <Dialog.Title textStyle="heading.lg">Save your changes?</Dialog.Title>
+            <Dialog.Description textStyle="body">
+              Your note ranges have changes you haven't saved. Save them before you go, or leave
+              them behind.
+            </Dialog.Description>
+            <Text textStyle="small" color="fg.muted">
+              {changes}.
+            </Text>
+            {saveFailed && (
+              <Text role="alert" textStyle="small" color="fg.error">
+                Couldn't save your settings. Check your connection and try again.
+              </Text>
+            )}
+            <Flex justify="flex-end" gap="sm" mt="sm" wrap="wrap">
+              <Button variant="ghost" disabled={saving} onClick={stay}>
+                Stay here
+              </Button>
+              <Button
+                disabled={saving}
+                onClick={() => {
+                  onDiscard();
+                  leave();
+                }}
+              >
+                Don't save
+              </Button>
+              <Button
+                variant="primary"
+                disabled={saving}
+                onClick={async () => {
+                  if (await onSave()) leave();
+                }}
+              >
+                <Check />
+                {saving ? "Saving…" : "Save and leave"}
+              </Button>
+            </Flex>
+          </Dialog.Content>
+        </Dialog.Positioner>
+      </Portal>
+    </Dialog.Root>
   );
 }
 

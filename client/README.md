@@ -98,6 +98,10 @@ prop automatically.
 A component built for a single page can live inside that page file. Move it into
 `components/` once a second page needs it.
 
+Routes are declared in `App.tsx`, under a `Root` route that holds the shared providers
+and the `Toaster`. The app uses a data router (`createBrowserRouter`), so a page can
+hold up navigation with `useBlocker`.
+
 The signed-out landing page (`pages/LandingPage.tsx`) is the one screen without a
 shell: it has no sidebar and nothing to go back to.
 
@@ -278,7 +282,9 @@ then the settings and the data section.
   `server/src/etudes/music.ts`, checked by `utils/etudeMirror.test.ts`). Changes are a
   draft, kept for the tab, until the row at the foot of the page saves them
   (`PUT /api/settings`); Discard drops them, and Reset to default only fills in the
-  defaults. Closing the tab with a draft asks first.
+  defaults. Leaving with a draft asks first: the browser asks on a reload or a closed
+  tab, and going to another page in the app opens a dialog to save, drop the draft or
+  stay (`useBlocker`; signing out isn't held up).
 - **Where they're used.** `SettingsProvider` (`settings/`) loads the user's settings
   once (`GET /api/settings`, the defaults for a user who never saved any) and shares
   them. Generate passes the chosen range's notes (`spanOf()`) to the generators, which
