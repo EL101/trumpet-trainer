@@ -100,7 +100,7 @@ A component built for a single page can live inside that page file. Move it into
 `components/` once a second page needs it.
 
 Routes are declared in `App.tsx`, under a `Root` route that holds the shared providers
-and the `Toaster`. The app uses a data router (`createBrowserRouter`), so a page can
+(auth, profile, settings, streak, etudes) and the `Toaster`. The app uses a data router (`createBrowserRouter`), so a page can
 hold up navigation with `useBlocker`.
 
 The signed-out landing page (`pages/LandingPage.tsx`) is the one screen without a
@@ -272,9 +272,9 @@ lower (`CONCERT_OFFSET` in `lib/tuning.ts`). The trumpet samples are in
 ## Profile and settings
 
 `pages/Profile.tsx` (route `/profile`, mockup 3a) is the practice record on a bookplate
-(portrait, name, Google sign-in for guests, sign out, exercises generated and played),
-then the activity grid, the settings and the data section. On arrival these rise in
-one after another, the two stats count up, and the days played fill the grid week by
+(portrait, name, Google sign-in for guests, sign out, exercises generated and played,
+longest streak), then the activity grid, the settings and the data section. On arrival
+these rise in one after another, the stats count up, and the days played fill the grid week by
 week (again whenever another year loads, since the grid is keyed by the span shown).
 
 - **Activity.** A year of days like GitHub's contributions graph (`ActivityGrid`, from
@@ -311,6 +311,23 @@ week (again whenever another year loads, since the grid is keyed by the span sho
 - **Reset practice data** asks first, then deletes every scored run
   (`DELETE /api/scores`), which takes exercises played back to 0. History, the library,
   the generated count and the settings stay.
+- **Delete account** asks first, then deletes the user and everything they own
+  (`DELETE /api/profile`: their rows, then their Firebase user, so a failure part way
+  can be retried), signs them out and goes to the landing page. Signing in with Google
+  again starts a new, empty account.
+
+## The streak
+
+The sidebar shows the user's current streak and this week, Monday to Sunday, as the
+design's Sidebar has it; Profile's bookplate shows the longest. A day counts if
+anything was played on it, in the browser's time zone, and the current streak runs up
+to today, or to yesterday while today has nothing yet. `GET /api/profile/streak?tz=`
+gives both streaks and the days played this week; `streakWeek()` in `lib/streak.ts`
+turns those into the week's circles (played, today, missed, to come).
+`StreakProvider` (`streak/`) loads it and shares it, asking again on every move to
+another page so a day just played shows up when the player is left, and Profile asks
+again after a reset. `Sidebar` takes a `streak` prop to show another one (the
+`/design` gallery does).
 
 ## Writing styles
 

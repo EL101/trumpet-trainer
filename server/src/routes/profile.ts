@@ -8,8 +8,11 @@ import {
   GuestTokenSchema,
   type Profile,
   type ProfileStats,
+  type Streak,
+  StreakQuerySchema,
 } from "../schema/index.js";
 import {
+  deleteUser,
   discardGuest,
   getStats,
   getUserWithAvatar,
@@ -17,7 +20,7 @@ import {
   syncUserFromClaims,
 } from "../queries/users.js";
 import { deleteAvatar, setAvatar } from "../queries/avatars.js";
-import { playedPerDay, playedYears } from "../queries/scores.js";
+import { playedPerDay, playedYears, streaks } from "../queries/scores.js";
 import { AvatarError, decodeAvatarDataUrl, toDataUrl } from "../avatar.js";
 
 const router = Router();
@@ -73,6 +76,22 @@ router.get("/activity", requireAuth, async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * The caller's streaks, current and longest, and the days they played this week, in
+ * the time zone `?tz=` names (400 if it isn't one): for the sidebar and the profile.
+ */
+router.get("/streak", requireAuth, async (req: Request, res: Response) => {
+  const query = StreakQuerySchema.safeParse(req.query);
+  if (!query.success) return res.status(400).json({ error: "Unknown time zone" });
+  try {
+    const streak: Streak = await streaks(req.user!.uid, query.data.tz);
+    res.json(streak);
+  } catch (err) {
+    console.error("Failed to load streak:", err);
+    res.status(500).json({ error: "Failed to load streak" });
+  }
+});
+
 /** The caller's practice record, for the profile page. */
 router.get("/stats", requireAuth, async (req: Request, res: Response) => {
   try {
@@ -122,6 +141,34 @@ router.delete("/avatar", requireAuth, async (req: Request, res: Response) => {
     console.error("Failed to delete avatar:", err);
     res.status(500).json({ error: "Failed to delete avatar" });
   }
+});
+
+/**
+ * Delete the caller's account: everything they own here, then their Firebase user, so
+ * they can't sign in to it again. In that order so a failure part way can be retried:
+ * the data's gone either way, and asking again (requireAuth recreates an empty row)
+ * finishes the job. Once the Firebase user is gone their tokens stop working, so no
+ * request can bring the row back after.
+ */
+router.delete("/", requireAuth, async (req: Request, res: Response) => {
+  const uid = req.user!.uid;
+  try {
+    await deleteUser(uid);
+  } catch (err) {
+    console.error("Failed to delete account data:", err);
+    return res.status(500).json({ error: "Failed to delete account" });
+  }
+  try {
+    await admin.auth().deleteUser(uid);
+  } catch (err) {
+    // Already gone (a retry, or another tab beat us to it) is what we wanted.
+    const code = err instanceof Error && "code" in err ? String(err.code) : "";
+    if (code !== "auth/user-not-found") {
+      console.error(`Could not delete user ${uid} from Firebase:`, err);
+      return res.status(500).json({ error: "Failed to delete account" });
+    }
+  }
+  res.status(204).end();
 });
 
 /**

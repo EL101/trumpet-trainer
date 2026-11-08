@@ -1,6 +1,6 @@
 import { Prisma, type History, type PracticeScore } from "../generated/prisma/client.js";
 import { prisma } from "../db.js";
-import type { ScoreInput } from "../schema/index.js";
+import type { ScoreInput, Streak } from "../schema/index.js";
 import { findExercise } from "./exercises.js";
 
 /**
@@ -135,6 +135,40 @@ export async function playedYears(userId: string, timeZone: string) {
     WHERE user_id = ${userId}
     ORDER BY 1 DESC`;
   return rows.map((row) => row.year);
+}
+
+/**
+ * The user's streaks and the days they played this week, counted in `timeZone` (an
+ * IANA name, checked by StreakQuerySchema). See `Streak` for what each means.
+ *
+ * Raw SQL: the runs of days in a row are found with a window function (each day less
+ * its row number is the same all through a run), which Prisma can't express, over the
+ * days in the time zone, which it can't group by either. Covered in test/streak.test.ts.
+ */
+export async function streaks(userId: string, timeZone: string): Promise<Streak> {
+  const [row] = await prisma.$queryRaw<Streak[]>`
+    WITH days AS (
+      SELECT DISTINCT (created_at AT TIME ZONE ${timeZone})::date AS day
+      FROM practice_scores
+      WHERE user_id = ${userId}
+    ),
+    today AS (SELECT (now() AT TIME ZONE ${timeZone})::date AS day),
+    runs AS (
+      SELECT count(*)::int AS length, max(day) AS last
+      FROM (SELECT day, day - (row_number() OVER (ORDER BY day))::int AS run FROM days) d
+      GROUP BY run
+    )
+    SELECT
+      coalesce((SELECT max(length) FROM runs), 0) AS longest,
+      coalesce((SELECT max(length) FROM runs, today WHERE runs.last >= today.day - 1), 0)
+        AS current,
+      coalesce(
+        (SELECT array_agg(to_char(days.day, 'YYYY-MM-DD') ORDER BY days.day)
+         FROM days, today
+         WHERE days.day >= date_trunc('week', today.day)::date),
+        '{}'
+      ) AS week`;
+  return row;
 }
 
 /**

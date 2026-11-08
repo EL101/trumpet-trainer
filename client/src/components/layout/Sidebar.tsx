@@ -4,15 +4,17 @@ import { useId, useLayoutEffect, useRef } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { IconButton, Rule, Stat } from "@/components/primitives";
 import UserAvatar from "@/components/UserAvatar";
+import { localToday } from "@/lib/activity";
 import { prefersReducedMotion } from "@/lib/motion";
+import { describeWeek, streakWeek, type StreakDay } from "@/lib/streak";
 import { useProfile } from "@/profile/useProfile";
+import { useStreak } from "@/streak/useStreak";
 import { NAV_ITEMS, type NavItem } from "./navItems";
 import { SIDEBAR_SLIDE } from "./useSidebar";
 
-export type StreakDay = { label: string; state: "done" | "today" | "missed" };
-
 type SidebarProps = {
   items?: readonly NavItem[];
+  /** The streak to show; the signed-in user's own (from StreakProvider) if not given. */
   streak?: { days: number; week: readonly StreakDay[] };
   /** Full width, or folded down to a spine that opens it again. */
   expanded?: boolean;
@@ -97,6 +99,8 @@ let lastOutlineTop: number | null = null;
  */
 export function Sidebar({ items = NAV_ITEMS, streak, expanded = true, onToggle }: SidebarProps) {
   const { asideRef, outlineRef } = useSidebarMotion();
+  const own = useOwnStreak();
+  streak ??= own;
   const contentsId = useId();
   return (
     <Box
@@ -311,6 +315,13 @@ function useSidebarMotion() {
   return { asideRef, outlineRef };
 }
 
+/** The signed-in user's streak and this week, once loaded. */
+function useOwnStreak() {
+  const { streak } = useStreak();
+  if (!streak) return undefined;
+  return { days: streak.current, week: streakWeek(localToday(), streak.week) };
+}
+
 /** A pair of hairlines across the spine, like the raised bands on a bound book. */
 function SpineBands() {
   return (
@@ -321,29 +332,37 @@ function SpineBands() {
   );
 }
 
+/**
+ * This week as a row of circles, Monday first: filled for the days played, dashed for
+ * today until it is, outlined faintly for the rest. Read out as one sentence.
+ */
 function StreakWeek({ week }: { week: readonly StreakDay[] }) {
   return (
     <Grid
+      role="img"
+      aria-label={describeWeek(week)}
       templateColumns="repeat(7, 1fr)"
       gap="4px"
       fontSize="9px"
       textAlign="center"
       color="fg.muted"
     >
-      {week.map((d, i) => (
-        <Flex key={i} direction="column" gap="4px" align="center">
-          <Box
-            boxSize="18px"
-            borderRadius="full"
-            borderStyle={d.state === "today" ? "dashed" : "solid"}
-            borderWidth={d.state === "missed" ? "1px" : "1.25px"}
-            borderColor={d.state === "missed" ? "border" : "accent.solid"}
-            bg={d.state === "done" ? "accent.subtle" : undefined}
-            aria-label={`${d.label}: ${d.state}`}
-          />
-          {d.label}
-        </Flex>
-      ))}
+      {week.map((d) => {
+        const faint = d.state === "missed" || d.state === "upcoming";
+        return (
+          <Flex key={d.name} direction="column" gap="4px" align="center" aria-hidden>
+            <Box
+              boxSize="18px"
+              borderRadius="full"
+              borderStyle={d.state === "today" ? "dashed" : "solid"}
+              borderWidth={faint ? "1px" : "1.25px"}
+              borderColor={faint ? "border" : "accent.solid"}
+              bg={d.state === "done" ? "accent.subtle" : undefined}
+            />
+            {d.label}
+          </Flex>
+        );
+      })}
     </Grid>
   );
 }

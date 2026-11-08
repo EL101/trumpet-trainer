@@ -46,6 +46,7 @@ import {
 import { MAX_TEMPO, MIN_TEMPO, pulseOf } from "@/lib/meter";
 import { formatDay, pastYear } from "@/lib/activity";
 import { formatPitch } from "@/lib/format";
+import { streakWeek } from "@/lib/streak";
 import { DEFAULT_NOTE_RANGES, HORN_SPAN, moveEnd, noteName, type NoteSpan } from "@/lib/noteRanges";
 import type { RunScore } from "@/lib/scoring";
 import { buildTimeline } from "@/lib/timeline";
@@ -777,15 +778,12 @@ export default function DesignPreview() {
             onToggle={() => setSidebarOpen((open) => !open)}
             streak={{
               days: 12,
-              week: [
-                { label: "M", state: "done" },
-                { label: "T", state: "done" },
-                { label: "W", state: "done" },
-                { label: "T", state: "done" },
-                { label: "F", state: "today" },
-                { label: "S", state: "missed" },
-                { label: "S", state: "missed" },
-              ],
+              week: streakWeek("2026-11-06", [
+                "2026-11-02",
+                "2026-11-03",
+                "2026-11-04",
+                "2026-11-05",
+              ]),
             }}
           />
         </Box>

@@ -3,6 +3,7 @@ import AuthUserProvider from "./auth/AuthUserProvider";
 import ProfileProvider from "./profile/ProfileProvider";
 import EtudesProvider from "./etudes/EtudesProvider";
 import SettingsProvider from "./settings/SettingsProvider";
+import StreakProvider from "./streak/StreakProvider";
 import { Toaster } from "@/components/primitives";
 import LandingPage from "./pages/LandingPage";
 import PitchTest from "./pages/PitchTest";
@@ -37,10 +38,12 @@ function Root() {
     <AuthUserProvider>
       <ProfileProvider>
         <SettingsProvider>
-          <EtudesProvider>
-            <Outlet />
-            <Toaster />
-          </EtudesProvider>
+          <StreakProvider>
+            <EtudesProvider>
+              <Outlet />
+              <Toaster />
+            </EtudesProvider>
+          </StreakProvider>
         </SettingsProvider>
       </ProfileProvider>
     </AuthUserProvider>

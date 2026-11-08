@@ -41,3 +41,16 @@ export type ActivityDay = {
  * year asked for (or the past year), and the years the user played in, newest first.
  */
 export type Activity = { days: ActivityDay[]; years: number[] };
+
+/**
+ * Shape returned by GET /api/profile/streak, counting a day if anything was played on
+ * it in the user's time zone.
+ */
+export type Streak = {
+  /** Days in a row played up to today, or up to yesterday while today has nothing yet. */
+  current: number;
+  /** The most days in a row ever played. */
+  longest: number;
+  /** The days played this week, Monday first, as YYYY-MM-DD. */
+  week: string[];
+};

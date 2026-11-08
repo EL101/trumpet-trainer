@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useBlocker, type Blocker } from "react-router-dom";
+import { useBlocker, useNavigate, type Blocker } from "react-router-dom";
 import {
   Box,
   Dialog,
@@ -11,7 +11,7 @@ import {
   Text,
   type FlexProps,
 } from "@chakra-ui/react";
-import { RotateCcw, Trash2, Check } from "lucide-react";
+import { RotateCcw, Trash2, Check, UserX } from "lucide-react";
 import { AppShell } from "@/components/layout";
 import { PitchText, Staff } from "@/components/music";
 import {
@@ -30,6 +30,7 @@ import AvatarUpload from "@/components/AvatarUpload";
 import LinkGoogleAccount from "@/components/LinkGoogleAccount";
 import SignOut from "@/components/SignOut";
 import { useAuth } from "@/auth/useAuth";
+import { signOut } from "@/auth/auth";
 import { auth } from "@/firebase";
 import { useCountUp } from "@/hooks/useCountUp";
 import { usePersistedState } from "@/hooks/usePersistedState";
@@ -52,7 +53,8 @@ import {
 import { useProfile } from "@/profile/useProfile";
 import type { ActivityDay, ProfileStats } from "@/schema";
 import { useSettings } from "@/settings/useSettings";
-import { fetchActivity, fetchStats } from "@/utils/profile";
+import { useStreak } from "@/streak/useStreak";
+import { deleteAccount, fetchActivity, fetchStats } from "@/utils/profile";
 import { resetScores } from "@/utils/scores";
 
 /** Notes labelled under the range sliders: the horn's ends and each C between. */
@@ -89,6 +91,8 @@ export default function Profile() {
   const activity = useActivity();
   const generated = useCountUp(stats.value?.exercisesGenerated);
   const played = useCountUp(stats.value?.exercisesPlayed);
+  const streak = useStreak();
+  const longest = useCountUp(streak.streak?.longest);
 
   if (!user || loading) {
     return (
@@ -141,9 +145,10 @@ export default function Profile() {
         </Flex>
         <Grid
           gridColumn={{ md: "1 / -1", xl: "auto" }}
-          templateColumns="repeat(2, auto)"
+          templateColumns={{ base: "repeat(2, auto)", sm: "repeat(3, auto)" }}
           justifyContent="start"
           columnGap="2xl"
+          rowGap="md"
           ps={{ xl: "2xl" }}
           pt={{ base: "lg", xl: 0 }}
           borderColor="accent.muted"
@@ -152,6 +157,7 @@ export default function Profile() {
         >
           <Stat size="lg" value={generated ?? "–"} label="exercises generated" />
           <Stat size="lg" value={played ?? "–"} label="exercises played" />
+          <Stat size="lg" value={longest ?? "–"} label="longest streak" />
         </Grid>
       </Bookplate>
 
@@ -162,6 +168,7 @@ export default function Profile() {
         onReset={() => {
           stats.update((s) => ({ ...s, exercisesPlayed: 0 }));
           activity.clear();
+          streak.refresh();
         }}
       />
     </AppShell>
@@ -453,6 +460,11 @@ function Settings({ played, onReset }: { played?: number; onReset: () => void })
             and note ranges stay.
           </Text>
           <ResetPracticeData played={played} onReset={onReset} />
+          <Box alignSelf="stretch" borderTopWidth="1px" borderColor="border.subtle" />
+          <Text textStyle="small" color="fg.muted">
+            Deletes your account and everything in it, and signs you out.
+          </Text>
+          <DeleteAccount onDeleted={() => setDraft(null)} />
         </Flex>
       </Grid>
 
@@ -755,6 +767,91 @@ function ResetPracticeData({ played, onReset }: { played?: number; onReset: () =
               <Button variant="danger" disabled={resetting} onClick={reset}>
                 <Trash2 />
                 {resetting ? "Deleting…" : "Delete all scores"}
+              </Button>
+            </Flex>
+          </Dialog.Content>
+        </Dialog.Positioner>
+      </Portal>
+    </Dialog.Root>
+  );
+}
+
+/**
+ * "Delete account", confirmed in a dialog first: everything goes, then the user is
+ * signed out and taken to the landing page. `onDeleted` runs just before, to drop
+ * anything kept for them in the tab.
+ */
+function DeleteAccount({ onDeleted }: { onDeleted: () => void }) {
+  const { user } = useAuth();
+  const { profile } = useProfile();
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const guest = profile?.isAnonymous ?? false;
+
+  const remove = async () => {
+    setDeleting(true);
+    setFailed(false);
+    try {
+      await deleteAccount(user);
+    } catch (error) {
+      console.error("delete account error:", error);
+      setFailed(true);
+      setDeleting(false);
+      return;
+    }
+    onDeleted();
+    await signOut();
+    navigate("/", { replace: true });
+    notify({ tone: "success", title: "Account deleted" });
+  };
+
+  return (
+    <Dialog.Root
+      role="alertdialog"
+      placement="center"
+      open={open}
+      onOpenChange={(e) => {
+        if (deleting) return;
+        if (e.open) setFailed(false);
+        setOpen(e.open);
+      }}
+    >
+      <Dialog.Trigger asChild>
+        <Button variant="danger" size="sm">
+          <UserX />
+          Delete account
+        </Button>
+      </Dialog.Trigger>
+      <Portal>
+        <Dialog.Backdrop bg="bg.backdrop" />
+        <Dialog.Positioner px="md">
+          <Dialog.Content maxWidth="460px" p="lg" gap="md" borderWidth="1px" borderColor="border">
+            <Kicker color="danger.fg">Can't be undone</Kicker>
+            <Dialog.Title textStyle="heading.lg">Delete your account?</Dialog.Title>
+            <Dialog.Description textStyle="body">
+              This deletes your {guest ? "guest account" : "account"} and everything in it: your
+              history, library, practice scores, note ranges and profile picture. There's no way to
+              get them back.
+            </Dialog.Description>
+            <Text textStyle="small" color="fg.muted">
+              {guest
+                ? "You'll be signed out."
+                : "You'll be signed out. Signing in with Google again starts a new, empty account."}
+            </Text>
+            {failed && (
+              <Text role="alert" textStyle="small" color="fg.error">
+                Couldn't delete your account. Check your connection and try again.
+              </Text>
+            )}
+            <Flex justify="flex-end" gap="sm" mt="sm" wrap="wrap">
+              <Dialog.ActionTrigger asChild>
+                <Button disabled={deleting}>Keep my account</Button>
+              </Dialog.ActionTrigger>
+              <Button variant="danger" disabled={deleting} onClick={remove}>
+                <UserX />
+                {deleting ? "Deleting…" : "Delete my account"}
               </Button>
             </Flex>
           </Dialog.Content>
