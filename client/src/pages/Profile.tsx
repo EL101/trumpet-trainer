@@ -1,6 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { useBlocker, type Blocker } from "react-router-dom";
-import { Box, Dialog, Flex, Grid, Heading, Portal, Spinner, Text } from "@chakra-ui/react";
+import {
+  Box,
+  Dialog,
+  Flex,
+  Grid,
+  Heading,
+  Portal,
+  Spinner,
+  Text,
+  type FlexProps,
+} from "@chakra-ui/react";
 import { RotateCcw, Trash2, Check } from "lucide-react";
 import { AppShell } from "@/components/layout";
 import { PitchText, Staff } from "@/components/music";
@@ -21,6 +31,7 @@ import LinkGoogleAccount from "@/components/LinkGoogleAccount";
 import SignOut from "@/components/SignOut";
 import { useAuth } from "@/auth/useAuth";
 import { auth } from "@/firebase";
+import { useCountUp } from "@/hooks/useCountUp";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { calendarYear, formatDay, localToday, pastYear, type ActivityCell } from "@/lib/activity";
 import { formatLongDate, formatPitch } from "@/lib/format";
@@ -54,6 +65,19 @@ const AXIS_MARKS = [54, 60, 72, 84, 91].map((midi) => ({
 const ROW_COLUMNS = { base: "minmax(0, 1fr) 136px", md: "104px 136px minmax(0, 1fr)" };
 
 /**
+ * The page's entrance: the bookplate, activity, settings and save row rise in one after
+ * another, eased like Generate's. `enter(i)` is the `i`th one's animation.
+ */
+const ENTER_EASE = "cubic-bezier(0.33, 1, 0.68, 1)";
+const ENTER_MS = 350;
+const ENTER_STAGGER = 80;
+const enter = (i: number) => ({
+  animation: `rise-in ${ENTER_MS}ms ${ENTER_EASE} ${i * ENTER_STAGGER}ms backwards`,
+});
+/** A line of text that's just changed fading in, e.g. the save row's status. */
+const FADE_IN = { animation: "appear 250ms ease-out backwards" };
+
+/**
  * Profile and settings (mockup 3a, with the range rows of the profile canvas's C and the
  * save row of its A): the practice record on a bookplate, then the note ranges, which
  * apply once saved, and resetting practice data.
@@ -63,6 +87,8 @@ export default function Profile() {
   const { profile, loading } = useProfile();
   const stats = useStats();
   const activity = useActivity();
+  const generated = useCountUp(stats.value?.exercisesGenerated);
+  const played = useCountUp(stats.value?.exercisesPlayed);
 
   if (!user || loading) {
     return (
@@ -91,6 +117,7 @@ export default function Profile() {
         alignItems="center"
         columnGap="2xl"
         rowGap="lg"
+        _motionSafe={enter(0)}
       >
         <AvatarUpload user={user} />
         <Flex direction="column" gap="6px" minWidth={0}>
@@ -123,16 +150,12 @@ export default function Profile() {
           borderLeftWidth={{ xl: "1px" }}
           borderTopWidth={{ base: "1px", xl: 0 }}
         >
-          <Stat
-            size="lg"
-            value={stats.value?.exercisesGenerated ?? "–"}
-            label="exercises generated"
-          />
-          <Stat size="lg" value={stats.value?.exercisesPlayed ?? "–"} label="exercises played" />
+          <Stat size="lg" value={generated ?? "–"} label="exercises generated" />
+          <Stat size="lg" value={played ?? "–"} label="exercises played" />
         </Grid>
       </Bookplate>
 
-      <Activity {...activity} />
+      <Activity activity={activity} _motionSafe={enter(1)} />
 
       <Settings
         played={stats.value?.exercisesPlayed}
@@ -169,13 +192,14 @@ function useStats() {
 type ActivitySpan = "past" | `${number}`;
 
 /**
- * The activity grid's days for the span chosen (the past year to begin with), and the
- * years there's anything in to choose from. `days` is null until the first load.
+ * The span chosen (the past year to begin with), the days loaded and the span they're
+ * for (`loaded`, null until the first load; it lags `span` while the next span loads),
+ * and the years there's anything in to choose from.
  */
 function useActivity() {
   const { user } = useAuth();
   const [span, setSpan] = useState<ActivitySpan>("past");
-  const [days, setDays] = useState<ActivityDay[] | null>(null);
+  const [loaded, setLoaded] = useState<{ span: ActivitySpan; days: ActivityDay[] } | null>(null);
   const [years, setYears] = useState<number[]>([]);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -184,7 +208,7 @@ function useActivity() {
       .then((activity) => {
         if (controller.signal.aborted || !activity) return;
         setFailed(false);
-        setDays(activity.days);
+        setLoaded({ span, days: activity.days });
         setYears(activity.years);
       })
       .catch((error) => {
@@ -195,11 +219,11 @@ function useActivity() {
     return () => controller.abort();
   }, [user, span]);
   const clear = () => {
-    setDays((prev) => (prev ? [] : prev));
+    setLoaded((prev) => (prev ? { ...prev, days: [] } : prev));
     setYears([]);
     setSpan("past");
   };
-  return { span, setSpan, days, years, failed, clear };
+  return { span, setSpan, loaded, years, failed, clear };
 }
 
 const playedOn = ({ count, date }: ActivityCell) =>
@@ -208,19 +232,19 @@ const playedOn = ({ count, date }: ActivityCell) =>
 /**
  * How much the user has played each day, as a grid of days (mockup 4c's, laid out
  * like GitHub's), the more exercises the darker: the past year, or a calendar year
- * chosen beside the heading.
+ * chosen beside the heading. The grid shows the span last loaded, and its days fill in
+ * afresh each time another span arrives.
  */
 function Activity({
-  span,
-  setSpan,
-  days,
-  years,
-  failed,
-}: Omit<ReturnType<typeof useActivity>, "clear">) {
+  activity: { span, setSpan, loaded, years, failed },
+  ...rest
+}: FlexProps & { activity: ReturnType<typeof useActivity> }) {
+  const days = loaded?.days;
+  const shown = loaded?.span ?? span;
   const counts = useMemo(() => new Map(days?.map((day) => [day.date, day.played])), [days]);
   const today = localToday();
-  const [start, end] = span === "past" ? pastYear(today) : calendarYear(Number(span));
-  const when = span === "past" ? "the past year" : span;
+  const [start, end] = shown === "past" ? pastYear(today) : calendarYear(Number(shown));
+  const when = shown === "past" ? "the past year" : shown;
   const practised = days?.length ?? 0;
   const summary = failed
     ? "Couldn't load your activity."
@@ -241,6 +265,7 @@ function Activity({
       pt="lg"
       borderTopWidth="1px"
       borderColor="border"
+      {...rest}
     >
       <Flex align="flex-end" justify="space-between" gap="md" wrap="wrap">
         <SectionHeading
@@ -269,6 +294,7 @@ function Activity({
         </Flex>
       </Flex>
       <ActivityGrid
+        key={loaded?.span ?? "loading"}
         counts={counts}
         start={start}
         end={end}
@@ -323,6 +349,15 @@ function Settings({ played, onReset }: { played?: number; onReset: () => void })
       dirty && auth.currentUser !== null && currentLocation.pathname !== nextLocation.pathname,
   );
 
+  const saveState =
+    status === "loading" || status === "failed"
+      ? status
+      : saveFailed
+        ? "saveFailed"
+        : dirty
+          ? "dirty"
+          : "saved";
+
   /** Saves the draft; true if it was saved. */
   const onSave = async () => {
     setSaving(true);
@@ -347,6 +382,7 @@ function Settings({ played, onReset }: { played?: number; onReset: () => void })
         templateColumns={{ base: "minmax(0, 1fr)", lg: "minmax(0, 2fr) minmax(0, 1fr)" }}
         borderTopWidth="1px"
         borderColor="border"
+        _motionSafe={enter(2)}
       >
         <Flex
           as="section"
@@ -432,6 +468,7 @@ function Settings({ played, onReset }: { played?: number; onReset: () => void })
         py="md"
         borderTopWidth="1px"
         borderColor="border"
+        _motionSafe={enter(3)}
       >
         <Text
           flex="1"
@@ -441,22 +478,25 @@ function Settings({ played, onReset }: { played?: number; onReset: () => void })
           role={saveFailed || status === "failed" ? "alert" : undefined}
           aria-live="polite"
         >
-          {status === "loading" ? (
-            "Loading your settings…"
-          ) : status === "failed" ? (
-            "Couldn't load your settings."
-          ) : saveFailed ? (
-            "Couldn't save your settings. Check your connection and try again."
-          ) : dirty ? (
-            <>
-              <Text as="span" color="accent.fg" aria-hidden="true">
-                ●{" "}
-              </Text>
-              {describeChanges(changed)} · not saved yet
-            </>
-          ) : (
-            "All changes saved"
-          )}
+          {/* Keyed by what it says, so it fades in each time that changes. */}
+          <Box as="span" key={saveState} _motionSafe={FADE_IN}>
+            {saveState === "loading" ? (
+              "Loading your settings…"
+            ) : saveState === "failed" ? (
+              "Couldn't load your settings."
+            ) : saveState === "saveFailed" ? (
+              "Couldn't save your settings. Check your connection and try again."
+            ) : saveState === "dirty" ? (
+              <>
+                <Text as="span" color="accent.fg" aria-hidden="true">
+                  ●{" "}
+                </Text>
+                {describeChanges(changed)} · not saved yet
+              </>
+            ) : (
+              "All changes saved"
+            )}
+          </Box>
         </Text>
         {status === "failed" ? (
           <Button size="sm" onClick={reload}>
@@ -613,7 +653,7 @@ function RangeRow({
           <PitchText>{`${low} – ${high}`}</PitchText>
         </Text>
         {edited && (
-          <Text textStyle="meta" color="accent.fg">
+          <Text textStyle="meta" color="accent.fg" _motionSafe={FADE_IN}>
             ● edited
           </Text>
         )}

@@ -273,7 +273,9 @@ lower (`CONCERT_OFFSET` in `lib/tuning.ts`). The trumpet samples are in
 
 `pages/Profile.tsx` (route `/profile`, mockup 3a) is the practice record on a bookplate
 (portrait, name, Google sign-in for guests, sign out, exercises generated and played),
-then the activity grid, the settings and the data section.
+then the activity grid, the settings and the data section. On arrival these rise in
+one after another, the two stats count up, and the days played fill the grid week by
+week (again whenever another year loads, since the grid is keyed by the span shown).
 
 - **Activity.** A year of days like GitHub's contributions graph (`ActivityGrid`, from
   mockup 4c's grid with 1k's labels), one column per week, Monday on top. A day's
@@ -333,7 +335,8 @@ then the activity grid, the settings and the data section.
   motion: `_motionSafe={{ animation: "appear 400ms ease-out 200ms backwards" }}`. Code
   that animates outside CSS (its own SVG, `scrollIntoView`, `element.animate()`, a
   timer) can't use `_motionSafe`; check `prefersReducedMotion()` from `@/lib/motion`
-  instead, as `Staff` does for its labels.
+  instead, as `Staff` does for its labels. To count a figure up as it arrives (Profile's
+  stats), use `useCountUp()` from `hooks/useCountUp.ts`, which does that check itself.
 
 ## Old vs new
 

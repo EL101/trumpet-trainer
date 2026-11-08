@@ -4,7 +4,8 @@ import { defineSlotRecipe } from "@chakra-ui/react";
  * `ActivityGrid`: a year of days as squares in columns of weeks (mockup 4c's grid, with
  * 1k's month and weekday labels and key). The weeks share the width, each square at
  * least `--cell` across; narrower than that, the grid scrolls. A cell's shade comes
- * from its `data-level` (0–4); an empty day is only outlined.
+ * from its `data-level` (0–4); an empty day is only outlined. Mounting, the shaded days
+ * pop in week by week, about half a second for a year.
  */
 export const activityGridRecipe = defineSlotRecipe({
   className: "tt-activity-grid",
@@ -47,6 +48,14 @@ export const activityGridRecipe = defineSlotRecipe({
       gridTemplateColumns: "repeat(var(--weeks), minmax(var(--cell), 1fr))",
       gridTemplateRows: "repeat(7, auto)",
       gap: "var(--gap)",
+      // The days played fill in left to right, a week at a time (`--week` is the
+      // cell's column). Empty days are there from the start.
+      "& > :not([data-level='0'])": {
+        _motionSafe: {
+          animation:
+            "pop-in 100ms cubic-bezier(0.33, 1, 0.68, 1) calc(var(--week) * 5ms) backwards",
+        },
+      },
     },
     cell: {
       aspectRatio: "1",

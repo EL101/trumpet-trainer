@@ -34,6 +34,8 @@ type ActivityGridProps = Omit<HTMLChakraProps<"div">, "children"> & {
  * A span of activity (a year) as a grid of days, one column per week with Monday on
  * top, each day shaded by its count: like a GitHub contributions graph. The weeks share
  * the width; too narrow for them (a phone), it scrolls sideways, starting at the end.
+ * The days played fill in week by week as it mounts: give it a new `key` to run that
+ * again for new days.
  */
 export function ActivityGrid({
   counts,
@@ -69,14 +71,17 @@ export function ActivityGrid({
           ))}
         </Weekdays>
         <Cells role="img" aria-label={label}>
-          {grid.flat().map((cell) => (
-            <Cell
-              key={cell.date}
-              data-level={cell.level}
-              data-outside={cell.outside}
-              title={cell.outside ? undefined : describe(cell)}
-            />
-          ))}
+          {grid.flatMap((week, w) =>
+            week.map((cell) => (
+              <Cell
+                key={cell.date}
+                data-level={cell.level}
+                data-outside={cell.outside}
+                title={cell.outside ? undefined : describe(cell)}
+                style={{ "--week": w } as CSSProperties}
+              />
+            )),
+          )}
         </Cells>
         <Legend aria-hidden="true">
           <span>Less</span>
