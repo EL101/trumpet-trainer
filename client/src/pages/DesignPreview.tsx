@@ -1,5 +1,5 @@
 import { Box, Flex, Grid, Heading, Text } from "@chakra-ui/react";
-import { BookmarkPlus, Pause, Play, RotateCcw, SkipBack, SkipForward } from "lucide-react";
+import { BookmarkPlus, Pause, Play, RotateCcw, SkipBack, SkipForward, Trash2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { AppShell, FocusShell, PageHeader, Sidebar } from "@/components/layout";
 import {
@@ -31,6 +31,8 @@ import {
   NativeSelect,
   notify,
   RadioGroup,
+  RangeAxis,
+  RangeSlider,
   Rule,
   SectionHeading,
   SegmentedControl,
@@ -41,6 +43,8 @@ import {
   Textarea,
 } from "@/components/primitives";
 import { MAX_TEMPO, MIN_TEMPO, pulseOf } from "@/lib/meter";
+import { formatPitch } from "@/lib/format";
+import { DEFAULT_NOTE_RANGES, HORN_SPAN, moveEnd, noteName, type NoteSpan } from "@/lib/noteRanges";
 import type { RunScore } from "@/lib/scoring";
 import { buildTimeline } from "@/lib/timeline";
 import type { PlayedMark } from "@/lib/transcribe";
@@ -194,6 +198,7 @@ export default function DesignPreview() {
   const [bars, setBars] = useState(2);
   const [cursor, setCursor] = useState(3.4);
   const [tempo, setTempo] = useState(96);
+  const [span, setSpan] = useState<NoteSpan>([62, 81]);
   const [clicksPerBeat, setClicksPerBeat] = useState(2);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [scoreCardOpen, setScoreCardOpen] = useState<"saved" | "unsaved" | null>(null);
@@ -277,6 +282,10 @@ export default function DesignPreview() {
           </Button>
           <Button variant="primary" disabled>
             Disabled
+          </Button>
+          <Button variant="danger" size="sm">
+            <Trash2 />
+            Reset practice data
           </Button>
           <IconButton aria-label="Previous">
             <SkipBack />
@@ -411,6 +420,29 @@ export default function DesignPreview() {
                 />
               )}
             </Field>
+            <Flex direction="column" gap="xs">
+              <Text textStyle="meta" color="fg.muted">
+                RangeSlider (<PitchText>{`${noteName(span[0])} – ${noteName(span[1])}`}</PitchText>,
+                outlined where it started)
+              </Text>
+              <RangeSlider
+                value={span}
+                min={HORN_SPAN[0]}
+                max={HORN_SPAN[1]}
+                reference={DEFAULT_NOTE_RANGES.MED}
+                labels={["Lowest note", "Highest note"]}
+                valueText={(midi) => formatPitch(noteName(midi))}
+                onChange={(next, end) => setSpan(moveEnd(span, end, next[end]))}
+              />
+              <RangeAxis
+                min={HORN_SPAN[0]}
+                max={HORN_SPAN[1]}
+                marks={[54, 60, 72, 84, 91].map((m) => ({
+                  value: m,
+                  label: <PitchText>{noteName(m)}</PitchText>,
+                }))}
+              />
+            </Flex>
           </Flex>
         </Grid>
       </Section>

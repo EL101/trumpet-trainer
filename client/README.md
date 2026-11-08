@@ -6,8 +6,8 @@ brass accent, hairline borders, and outlined buttons (never filled).
 
 > The frontend is mid-rehaul. The new design system, shared components and app shell
 > (sidebar) are in place; page content is being rebuilt on top of them one screen at a
-> time (done so far: the landing page, Generate, the practice player, the library and
-> Tools). See [Old vs new](#old-vs-new) for what to use and what to avoid.
+> time (done so far: the landing page, Generate, the practice player, the library,
+> Tools and Profile). See [Old vs new](#old-vs-new) for what to use and what to avoid.
 >
 > Today and Progress aren't built yet, so they're commented out of the sidebar and
 > `App.tsx`, and their routes go to Generate, which is also where signing in lands.
@@ -64,16 +64,17 @@ theme/                    colours, fonts, spacing, component variants
 
 The roles you'll use most:
 
-| Role                                        | Use for                                               |
-| ------------------------------------------- | ----------------------------------------------------- |
-| `bg`, `bg.panel`, `bg.subtle`               | Page background, raised surfaces, light fills         |
-| `fg`, `fg.muted`, `fg.subtle`               | Body text, secondary text, tertiary labels            |
-| `fg.error`                                  | Error messages                                        |
-| `border`, `border.emphasized`               | Hairlines and dividers, hovered borders               |
-| `accent.solid`                              | The brass accent for strokes, icons and large text    |
-| `accent.fg`                                 | Accent-coloured text at small sizes (better contrast) |
-| `accent.subtle`, `accent.muted`             | Tinted fills, soft accent borders                     |
-| `intonation.good` / `fair` / `warn` / `bad` | Score and pitch colours, green through red            |
+| Role                                        | Use for                                                  |
+| ------------------------------------------- | -------------------------------------------------------- |
+| `bg`, `bg.panel`, `bg.subtle`               | Page background, raised surfaces, light fills            |
+| `fg`, `fg.muted`, `fg.subtle`               | Body text, secondary text, tertiary labels               |
+| `fg.error`                                  | Error messages                                           |
+| `danger.fg`, `danger.hover`                 | Actions that delete for good (`Button variant="danger"`) |
+| `border`, `border.emphasized`               | Hairlines and dividers, hovered borders                  |
+| `accent.solid`                              | The brass accent for strokes, icons and large text       |
+| `accent.fg`                                 | Accent-coloured text at small sizes (better contrast)    |
+| `accent.subtle`, `accent.muted`             | Tinted fills, soft accent borders                        |
+| `intonation.good` / `fair` / `warn` / `bad` | Score and pitch colours, green through red               |
 
 For colours that depend on cents (note colouring, pitch readouts), call
 `centsColor(cents)` from `@/lib/intonation`. It blends smoothly from green to red.
@@ -212,9 +213,10 @@ stop there.
   (`utils/scores.ts`), each score and each part's feedback in its own column.
   `GET /api/scores/latest/:id` gives the newest that still has its feedback.
   `LastFeedbackButton` (beside Practice on Generate and in the library's panel) and the
-  player's "Last feedback" open it. Scores are never deleted, for the user's progress:
-  each keeps what its exercise was (type, key, time signature, range, difficulty), and
-  the hourly prune only clears the feedback, of runs past an exercise's newest 20 and of
+  player's "Last feedback" open it. Scores are kept for the user's progress,
+  until they reset their practice data on Profile: each keeps what its exercise was
+  (type, key, time signature, range, difficulty), and the hourly prune only clears the
+  feedback, of runs past an exercise's newest 20 and of
   exercises in neither history nor the library. Those of an exercise gone are only
   marked at first (`feedback_orphaned_at`) and cleared by a later prune, at least 30
   minutes on, if it's still gone; one that's back is unmarked. Clearing history on
@@ -261,6 +263,35 @@ number can be told apart.
 The staff is written for B♭ trumpet, so the player sounds every note a whole tone
 lower (`CONCERT_OFFSET` in `lib/tuning.ts`). The trumpet samples are in
 `public/samples/trumpet/` (FluidR3 GM, MIT; the notice is in that folder).
+
+## Profile and settings
+
+`pages/Profile.tsx` (route `/profile`, mockup 3a) is the practice record on a bookplate
+(portrait, name, Google sign-in for guests, sign out, exercises generated and played),
+then the settings and the data section.
+
+- **Note ranges.** What Low, Medium and High cover is the user's own: a slider each
+  (`RangeSlider`, two thumbs) over the whole horn, F#3 to G6, with the two notes drawn
+  on a small staff beside it. Ranges can overlap, and each stays at least an octave wide
+  (`MIN_RANGE_SPAN`), so every key's tonic falls inside it; Any is always the whole horn.
+  The rules and the defaults are in `lib/noteRanges.ts` (the server keeps a copy in
+  `server/src/etudes/music.ts`, checked by `utils/etudeMirror.test.ts`). Changes are a
+  draft, kept for the tab, until the row at the foot of the page saves them
+  (`PUT /api/settings`); Discard drops them, and Reset to default only fills in the
+  defaults. Closing the tab with a draft asks first.
+- **Where they're used.** `SettingsProvider` (`settings/`) loads the user's settings
+  once (`GET /api/settings`, the defaults for a user who never saved any) and shares
+  them. Generate passes the chosen range's notes (`spanOf()`) to the generators, which
+  take either a named range at its defaults or the notes themselves. Etudes are written
+  on the server, which looks the range up in the user's settings rather than taking the
+  request's word. Exercises already made keep their range name: changing what Medium
+  means doesn't change them.
+- **The record.** `GET /api/profile/stats`: exercises generated is a count kept on the
+  user's row as each is saved to history (history itself is pruned), exercises played
+  is how many different exercises they have a scored run of (replays don't count again).
+- **Reset practice data** asks first, then deletes every scored run
+  (`DELETE /api/scores`), which takes exercises played back to 0. History, the library,
+  the generated count and the settings stay.
 
 ## Writing styles
 

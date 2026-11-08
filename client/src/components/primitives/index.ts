@@ -8,6 +8,7 @@ export { RadioGroup } from "./RadioGroup";
 export { ChoiceGrid } from "./ChoiceGrid";
 export { Stepper } from "./Stepper";
 export { Slider } from "./Slider";
+export { RangeSlider, RangeAxis } from "./RangeSlider";
 export { Rule } from "./Rule";
 export { Kicker } from "./Kicker";
 export { Stat } from "./Stat";

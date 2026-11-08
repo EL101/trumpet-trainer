@@ -4,6 +4,7 @@ import { ETUDE_MODEL } from "./claude.js";
 import {
   allowedDurations,
   difficultyProblems,
+  etudeSpan,
   findProblems,
   pitchesInRange,
   type EtudeOptions,
@@ -44,7 +45,7 @@ export function outputSchema(options: EtudeOptions) {
     type: "object",
     properties: {
       pitch: {
-        anyOf: [{ type: "string", enum: pitchesInRange(options.noteRange) }, { type: "null" }],
+        anyOf: [{ type: "string", enum: pitchesInRange(etudeSpan(options)) }, { type: "null" }],
       },
       quarters: { type: "number", enum: allowedDurations(options.difficulty, options.timeSig) },
     },

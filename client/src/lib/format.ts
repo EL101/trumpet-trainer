@@ -49,3 +49,10 @@ export function formatExerciseMeta({
     minutes != null ? `${minutes} min` : undefined,
   ].filter((s): s is string => !!s);
 }
+
+/** A date in full, as the profile writes when an account was made: "2 June 2026". */
+export function formatLongDate(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+}

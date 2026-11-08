@@ -1,6 +1,7 @@
 import admin from "firebase-admin";
 import { prisma } from "../db.js";
 import { retryOnConflict } from "./conflicts.js";
+import { countPlayedExercises } from "./scores.js";
 
 /** A guest untouched for this long is considered abandoned. */
 export const GUEST_TTL_MS = 48 * 60 * 60 * 1000;
@@ -72,6 +73,15 @@ export function getUserWithAvatar(uid: string) {
   return prisma.user.findUnique({ where: { id: uid }, include: { avatar: true } });
 }
 
+/** How many exercises the user has generated, and how many different ones they've played. */
+export async function getStats(uid: string) {
+  const [user, exercisesPlayed] = await Promise.all([
+    prisma.user.findUnique({ where: { id: uid }, select: { exercisesGenerated: true } }),
+    countPlayedExercises(uid),
+  ]);
+  return { exercisesGenerated: user?.exercisesGenerated ?? 0, exercisesPlayed };
+}
+
 /** Refresh the mirrored profile fields from the caller's current token claims. */
 export async function syncUserFromClaims(claims: admin.auth.DecodedIdToken) {
   const isAnonymous = claims.firebase?.sign_in_provider === "anonymous";
@@ -141,13 +151,37 @@ function mergeOnce(guestUid: string, targetUid: string) {
       }),
     };
 
-    // Only adopt the guest's avatar if the account doesn't already have one.
-    const existing = await tx.userAvatar.findUnique({ where: { userId: targetUid } });
+    // Their scored runs too: they point at the exercises just moved, by id.
+    await tx.practiceScore.updateMany({ where: { userId: guestUid }, data: { userId: targetUid } });
+
+    // The exercises the guest generated count towards the account's total.
+    const guest = await tx.user.findUnique({
+      where: { id: guestUid },
+      select: { exercisesGenerated: true },
+    });
+    if (guest?.exercisesGenerated) {
+      await tx.user.update({
+        where: { id: targetUid },
+        data: { exercisesGenerated: { increment: guest.exercisesGenerated } },
+      });
+    }
+
+    // Only adopt the guest's avatar and settings if the account doesn't already have them.
+    const [existing, settings] = await Promise.all([
+      tx.userAvatar.findUnique({ where: { userId: targetUid } }),
+      tx.userSettings.findUnique({ where: { userId: targetUid } }),
+    ]);
     if (!existing) {
       await tx.userAvatar.updateMany({ where: { userId: guestUid }, data: { userId: targetUid } });
     }
+    if (!settings) {
+      await tx.userSettings.updateMany({
+        where: { userId: guestUid },
+        data: { userId: targetUid },
+      });
+    }
 
-    // Must come last: users -> history/library/user_avatars cascades on delete,
+    // Must come last: users -> history/library/scores/avatars/settings cascades on delete,
     // so deleting first would destroy the rows we just reassigned.
     await tx.user.deleteMany({ where: { id: guestUid } });
 

@@ -30,4 +30,17 @@ export type Profile = {
   avatarUrl: string | null;
   /** True when avatarUrl is the user's own upload rather than a provider photo. */
   hasUpload: boolean;
+  /** When the account was made, as an ISO date-time. */
+  createdAt: string;
+};
+
+/** Shape returned by GET /api/profile/stats. */
+export type ProfileStats = {
+  /** Exercises generated, ever: history is pruned, so this is counted as they're saved. */
+  exercisesGenerated: number;
+  /**
+   * Different exercises with a scored run: replaying one doesn't count again. Counted
+   * from the scores, so a reset of practice data takes it back to 0.
+   */
+  exercisesPlayed: number;
 };

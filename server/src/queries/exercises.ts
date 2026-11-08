@@ -1,3 +1,4 @@
+import type { Prisma } from "../generated/prisma/client.js";
 import { prisma } from "../db.js";
 import type { ClearHistory, ExerciseInput, ExerciseTable, HistoryInput } from "../schema/index.js";
 import { retryOnConflict } from "./conflicts.js";
@@ -44,10 +45,14 @@ export async function insertHistory(userId: string, input: HistoryInput) {
   const { generationNum, ...exercise } = input;
 
   if (generationNum !== undefined) {
-    // INSERT ... ON CONFLICT DO NOTHING RETURNING *: a conflict returns no row.
-    const [row] = await prisma.history.createManyAndReturn({
-      data: { userId, generationNum, ...exercise },
-      skipDuplicates: true,
+    const row = await prisma.$transaction(async (tx) => {
+      // INSERT ... ON CONFLICT DO NOTHING RETURNING *: a conflict returns no row.
+      const [row] = await tx.history.createManyAndReturn({
+        data: { userId, generationNum, ...exercise },
+        skipDuplicates: true,
+      });
+      if (row) await countGeneration(tx, userId);
+      return row;
     });
     if (row) return { row, created: true };
     const existing = await prisma.history.findUniqueOrThrow({
@@ -56,16 +61,32 @@ export async function insertHistory(userId: string, input: HistoryInput) {
     return { row: existing, created: false };
   }
 
-  const row = await retryOnConflict(async () => {
-    const { _max } = await prisma.history.aggregate({
-      where: { userId },
-      _max: { generationNum: true },
-    });
-    return prisma.history.create({
-      data: { userId, generationNum: (_max.generationNum ?? 0) + 1, ...exercise },
-    });
-  });
+  const row = await retryOnConflict(() =>
+    prisma.$transaction(async (tx) => {
+      // First, so the user's saves queue on their row and number one after another.
+      await countGeneration(tx, userId);
+      const { _max } = await tx.history.aggregate({
+        where: { userId },
+        _max: { generationNum: true },
+      });
+      return tx.history.create({
+        data: { userId, generationNum: (_max.generationNum ?? 0) + 1, ...exercise },
+      });
+    }),
+  );
   return { row, created: true };
+}
+
+/**
+ * Count one more exercise generated, in the transaction that saves it. History is
+ * pruned, so its rows can't be counted instead.
+ */
+function countGeneration(tx: Prisma.TransactionClient, userId: string) {
+  return tx.user.update({
+    where: { id: userId },
+    data: { exercisesGenerated: { increment: 1 } },
+    select: { id: true },
+  });
 }
 
 /**

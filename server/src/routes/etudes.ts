@@ -4,7 +4,9 @@ import { EtudeRequestSchema } from "../schema/index.js";
 import { z } from "zod";
 import { anthropic, costMicros, ETUDE_MODEL } from "../etudes/claude.js";
 import { MAX_USAGE } from "../etudes/generate.js";
+import { spanOf, type EtudeOptions } from "../etudes/music.js";
 import { acceptingEtudes, startEtude } from "../etudes/run.js";
+import { getSettings } from "../queries/settings.js";
 import { envNumber } from "../env.js";
 import {
   etudeQuota,
@@ -81,7 +83,11 @@ router.post("/", requireAuth, refuseGuests, async (req: Request, res: Response) 
   }
 
   let reservation;
+  let options: EtudeOptions;
   try {
+    // The range as this user has it, from their settings: never the request's word.
+    const { noteRanges } = await getSettings(uid);
+    options = { ...parsed.data, span: spanOf(parsed.data.noteRange, noteRanges) };
     // Refused if this etude, at the most it can cost, could take spending past the cap.
     if ((await spendTodayMicros()) + bookedCostMicros > dailySpendCapMicros()) {
       return res.status(503).json({
@@ -109,7 +115,7 @@ router.post("/", requireAuth, refuseGuests, async (req: Request, res: Response) 
     return res.status(429).json({ error: `You've used all ${limit} etudes for today.`, quota });
   }
 
-  startEtude(client, reserved.id, uid, parsed.data);
+  startEtude(client, reserved.id, uid, options);
   res.status(202).json({
     etude: { id: reserved.id, status: reserved.status, error: null, exercise: null },
     quota,

@@ -8,6 +8,7 @@ import {
   findProblems,
   measureEtude,
   pitchesInRange,
+  spanOf,
   type EtudeOptions,
   type NoteEvent,
 } from "../src/etudes/music.js";
@@ -25,7 +26,7 @@ const n = (pitch: string | null, quarters: number): NoteEvent => ({ pitch, quart
 
 describe("pitchesInRange", () => {
   it("runs from the range's lowest note to its highest, both spellings of each black key", () => {
-    const pitches = pitchesInRange("MED");
+    const pitches = pitchesInRange(spanOf("MED"));
     expect(pitches[0]).toBe("C4");
     expect(pitches.at(-1)).toBe("C6");
     expect(pitches).toContain("A#4");
@@ -108,7 +109,7 @@ describe("outputSchema", () => {
   it("limits pitches and note values to the request's", () => {
     const schema = outputSchema({ ...options, noteRange: "LOW", difficulty: "LOW" });
     const note = schema.properties.bars.items.items.properties;
-    expect(note.pitch.anyOf[0].enum).toEqual(pitchesInRange("LOW"));
+    expect(note.pitch.anyOf[0].enum).toEqual(pitchesInRange(spanOf("LOW")));
     expect(note.quarters.enum).toEqual([4, 3, 2, 1]);
   });
 });

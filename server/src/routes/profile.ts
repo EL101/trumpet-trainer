@@ -1,9 +1,15 @@
 import { Router, Request, Response } from "express";
 import admin from "firebase-admin";
 import { requireAuth } from "../middleware/requireAuth.js";
-import { AvatarUploadSchema, GuestTokenSchema, type Profile } from "../schema/index.js";
+import {
+  AvatarUploadSchema,
+  GuestTokenSchema,
+  type Profile,
+  type ProfileStats,
+} from "../schema/index.js";
 import {
   discardGuest,
+  getStats,
   getUserWithAvatar,
   mergeGuestData,
   syncUserFromClaims,
@@ -33,11 +39,23 @@ router.get("/", requireAuth, async (req: Request, res: Response) => {
         ? toDataUrl(user.avatar.mimeType, user.avatar.data)
         : ((req.user!.picture as string | undefined) ?? null),
       hasUpload: user.avatar !== null,
+      createdAt: user.createdAt.toISOString(),
     };
     res.json(profile);
   } catch (err) {
     console.error("Failed to load profile:", err);
     res.status(500).json({ error: "Failed to load profile" });
+  }
+});
+
+/** The caller's practice record, for the profile page. */
+router.get("/stats", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const stats: ProfileStats = await getStats(req.user!.uid);
+    res.json(stats);
+  } catch (err) {
+    console.error("Failed to load profile stats:", err);
+    res.status(500).json({ error: "Failed to load profile stats" });
   }
 });
 

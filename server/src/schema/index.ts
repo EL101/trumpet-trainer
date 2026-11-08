@@ -15,5 +15,7 @@ export {
   type GuestTokenInput,
   type AvatarUpload,
   type Profile,
+  type ProfileStats,
 } from "./profile.js";
 export { ScoreInputSchema, ScoreNoteSchema, type ScoreInput } from "./score.js";
+export { SettingsSchema, type Settings } from "./settings.js";

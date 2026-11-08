@@ -24,5 +24,6 @@ export { cardRecipe } from "./recipes/card";
 export { inputRecipe, textareaRecipe } from "./recipes/input";
 export { segmentedRecipe, radioRecipe, choiceGridRecipe } from "./recipes/choice";
 export { sliderRecipe } from "./recipes/slider";
+export { rangeSliderRecipe } from "./recipes/rangeSlider";
 export { bookplateRecipe } from "./recipes/bookplate";
 export { toastRecipe } from "./recipes/toast";

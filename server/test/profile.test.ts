@@ -24,6 +24,7 @@ describe("GET /api/profile", () => {
       isAnonymous: false,
       avatarUrl: null,
       hasUpload: false,
+      createdAt: expect.any(String),
     });
   });
 
@@ -171,6 +172,59 @@ describe("POST /api/profile/merge-guest", () => {
     expect(await prisma.library.count({ where: { userId: target } })).toBe(1);
     expect(await prisma.user.findUnique({ where: { id: guest } })).toBeNull();
     expect(auth.deleteUser).toHaveBeenCalledWith(guest);
+  });
+
+  it("brings the guest's scores, generated count and settings along", async () => {
+    const guest = newUid("guest");
+    const target = newUid();
+    await createUser(guest, { isAnonymous: true });
+    await createUser(target);
+    await prisma.user.update({ where: { id: guest }, data: { exercisesGenerated: 4 } });
+    await prisma.user.update({ where: { id: target }, data: { exercisesGenerated: 10 } });
+    const ranges = { lowMin: 54, lowMax: 74, medMin: 62, medMax: 81, highMin: 72, highMax: 88 };
+    await prisma.userSettings.create({ data: { userId: guest, ...ranges } });
+    await prisma.practiceScore.create({
+      data: {
+        userId: guest,
+        exerciseId: crypto.randomUUID(),
+        exerciseType: "RANDOM",
+        timeSig: "4/4",
+        musicKey: "C major",
+        noteRange: "MED",
+        difficulty: "LOW",
+        tempo: 90,
+        overall: 80,
+        rightNotesScore: 80,
+        rhythmScore: 80,
+        intonationScore: 80,
+        toneScore: 80,
+      },
+    });
+
+    const res = await merge(tokenFor(googleClaims(target)), tokenFor(guestClaims(guest)));
+
+    expect(res.status).toBe(200);
+    expect(await prisma.practiceScore.count({ where: { userId: target } })).toBe(1);
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: target } });
+    expect(user.exercisesGenerated).toBe(14);
+    expect(await prisma.userSettings.findUnique({ where: { userId: target } })).toMatchObject(
+      ranges,
+    );
+  });
+
+  it("keeps the account's own settings over the guest's", async () => {
+    const guest = newUid("guest");
+    const target = newUid();
+    await createUser(guest, { isAnonymous: true });
+    await createUser(target);
+    const ranges = { lowMin: 54, lowMax: 72, medMin: 60, medMax: 84, highMin: 72 };
+    await prisma.userSettings.create({ data: { userId: guest, ...ranges, highMax: 88 } });
+    await prisma.userSettings.create({ data: { userId: target, ...ranges, highMax: 86 } });
+
+    await merge(tokenFor(googleClaims(target)), tokenFor(guestClaims(guest)));
+
+    const kept = await prisma.userSettings.findUniqueOrThrow({ where: { userId: target } });
+    expect(kept.highMax).toBe(86);
   });
 
   it("refuses to merge from an account that isn't a guest", async () => {

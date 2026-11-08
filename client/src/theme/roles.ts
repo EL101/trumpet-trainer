@@ -63,6 +63,12 @@ export const roles = {
     /** Playback cursor band behind the current note. */
     cursor: tint(brass.base, 13),
   },
+  /** Actions that delete something for good. The design system has no red, so this borrows the pitch scale's. */
+  danger: {
+    fg: pitch.red,
+    hover: tint(pitch.red, 10),
+    pressed: tint(pitch.red, 18),
+  },
   intonation: {
     good: pitch.green,
     fair: pitch.olive,

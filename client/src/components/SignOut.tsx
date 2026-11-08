@@ -1,8 +1,10 @@
 import { useAuth } from "@/auth/useAuth";
 import { signOut } from "@/auth/auth";
-import { Button } from "@chakra-ui/react";
+import { LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/primitives";
 
+/** Sign out and go back to the landing page. */
 export default function SignOut() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -13,8 +15,9 @@ export default function SignOut() {
     }
   };
   return (
-    <Button onClick={handleClick} p="1rem 2rem" width="100px" borderWidth={2} borderColor="black">
-      Sign Out
+    <Button variant="ghost" size="sm" onClick={handleClick}>
+      <LogOut />
+      Sign out
     </Button>
   );
 }

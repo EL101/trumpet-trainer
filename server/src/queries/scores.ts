@@ -86,6 +86,24 @@ export function latestScore(userId: string, exerciseId: string) {
 }
 
 /**
+ * How many different exercises the user has a scored run of: their "exercises played".
+ * Playing one again doesn't add to it.
+ */
+export async function countPlayedExercises(userId: string) {
+  const played = await prisma.practiceScore.groupBy({ by: ["exerciseId"], where: { userId } });
+  return played.length;
+}
+
+/**
+ * Delete every scored run the user has, feedback and all: their practice data. Their
+ * exercises, history and settings stay. Returns how many runs went.
+ */
+export async function deleteScores(userId: string) {
+  const { count } = await prisma.practiceScore.deleteMany({ where: { userId } });
+  return count;
+}
+
+/**
  * How long a run stays marked as orphaned before its feedback can be cleared: past the
  * next hourly prune, so its exercise has a whole run's time to come back (history
  * cleared, the exercise saved again). Also keeps two server instances' prunes, run close

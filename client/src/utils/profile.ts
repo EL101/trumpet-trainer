@@ -1,5 +1,5 @@
 import type { User } from "firebase/auth";
-import type { Profile } from "@/schema";
+import type { Profile, ProfileStats } from "@/schema";
 import { authedFetch } from "./api";
 
 export async function fetchProfile(user: User | undefined | null, signal?: AbortSignal) {
@@ -56,4 +56,10 @@ export async function countExercises(user: User | undefined | null) {
     }),
   );
   return { history, library };
+}
+
+/** How many exercises the user has generated, and how many scored runs they've saved. */
+export async function fetchStats(user: User | undefined | null, signal?: AbortSignal) {
+  const res = await authedFetch("/api/profile/stats", user, { signal });
+  return res ? ((await res.json()) as ProfileStats) : null;
 }
