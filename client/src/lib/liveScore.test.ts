@@ -3,7 +3,14 @@ import type { PitchSample } from "./hearing";
 import { newLiveScore, rewindLive, updateLive } from "./liveScore";
 import { heardUntil, scoreRun } from "./scoring";
 import { buildTimeline, soundingNotes, type Timeline } from "./timeline";
-import { BRIDGE_SECONDS, judgePlayed, restartPoint, toMark, transcribe } from "./transcribe";
+import {
+  BRIDGE_SECONDS,
+  heldTo,
+  judgePlayed,
+  restartPoint,
+  toMark,
+  transcribe,
+} from "./transcribe";
 import { CONCERT_OFFSET } from "./tuning";
 
 /** Frames a quarter note: 60 a second at ♩ = 120. */
@@ -59,9 +66,16 @@ function fullMarks(timeline: Timeline, samples: PitchSample[], now: number) {
   const sounding =
     last >= 0 && restartPoint(transcribed, heardTo, TIMING.secondsPerQuarter) !== last;
   const played = transcribed.map((p, i) =>
-    toMark(judgePlayed(p, timeline), cents, sounding && i === last),
+    toMark(
+      judgePlayed(p, timeline, heldTo(transcribed, i, TIMING.secondsPerQuarter)),
+      cents,
+      sounding && i === last,
+    ),
   );
-  const silentTo = heardTo - BRIDGE_SECONDS / TIMING.secondsPerQuarter;
+  // Nothing after a note still sounding is silence.
+  const silentTo = sounding
+    ? played[last].start
+    : heardTo - BRIDGE_SECONDS / TIMING.secondsPerQuarter;
   return { played, cents, restsTo: Math.max(0, Math.floor(silentTo * 4) / 4) };
 }
 
@@ -89,6 +103,26 @@ describe("updateLive", () => {
   it("gives the same marks, update by update, as working over every sample", () => {
     const timeline = buildTimeline(NOTES, "4/4");
     playThrough(newLiveScore(), timeline, hear(0, END, ...SOUNDS));
+  });
+
+  it("splits tongued sixteenths with no silent frame between the same, update by update", () => {
+    const timeline = buildTimeline("C5/16, C5, C5, C5, C5/q, C5/h, D5/w", "4/4");
+    const onsets = [0.25, 0.5, 0.75, 1, 2];
+    // One unbroken C5, the level dipping to half at each tongue stop.
+    const samples = hear(0, 8, { midi: 72, from: 0, to: 3.95 }, { midi: 74, from: 4, to: 7.5 }).map(
+      (s) => {
+        const seconds =
+          Math.min(...onsets.map((a) => Math.abs(s.at - a))) * TIMING.secondsPerQuarter;
+        return { ...s, level: s.level * (seconds < 0.0125 ? 0.5 : seconds < 0.03 ? 0.8 : 1) };
+      },
+    );
+    const live = newLiveScore();
+    playThrough(live, timeline, samples);
+    const final = updateLive(live, samples, timeline, TIMING, 20);
+    expect(final.played.map((m) => [m.start, m.status])).toEqual([
+      ...[0, ...onsets].map((start) => [start, "right"]),
+      [4, "right"],
+    ]);
   });
 
   it("keeps the notes that are over, and transcribes from the latest one", () => {
@@ -134,6 +168,17 @@ describe("updateLive", () => {
       const { played } = updateLive(live, sofar, timeline, TIMING, now);
       expect(played.filter((m) => m.status === "wrong")).toEqual([]);
     }
+  });
+
+  it("writes no rest after a note while it's still held", () => {
+    // ♩ = 60: a held note's ghost is rounded to a note value, which can fall short of
+    // where it's been heard to (at 3.45 beats, a dotted half).
+    const slow = { beat: 1, secondsPerQuarter: 1 };
+    const timeline = buildTimeline("C5/w, C5/w", "4/4");
+    const samples = hear(0, 6, { midi: 72, from: 0, to: 6 }).filter((s) => s.at <= 3.45);
+    const marks = updateLive(newLiveScore(), samples, timeline, slow, 3.5);
+    expect(marks.played).toMatchObject([{ start: 0, length: 3, status: "sounding" }]);
+    expect(marks.restsTo).toBe(0);
   });
 
   it("gives the same marks as an unchanged update, so the staff isn't redrawn", () => {

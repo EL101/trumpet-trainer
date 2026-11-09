@@ -1,4 +1,4 @@
-import { firstFrom, heardPitch, isVoiced, type PitchSample } from "./hearing";
+import { dipAt, firstFrom, heardPitch, isVoiced, type PitchSample } from "./hearing";
 import { soundingNotes, type SoundingNote, type Timeline } from "./timeline";
 
 /** A note as played: what the microphone heard, split into notes. */
@@ -16,8 +16,9 @@ export type GhostNote = {
   start: number;
   /**
    * How long it was held, in quarter notes: up to a whole note, a note value (4 a whole
-   * note … 0.25 a sixteenth, dotted ones too); longer, whole beats. Drawn as tied notes
-   * where it crosses a barline or no one note value fits (see `ghostPieces`).
+   * note … 0.25 a sixteenth, dotted ones too); longer, whole beats. Held on into the next
+   * note, it's any number of sixteenths. Drawn as tied notes where it crosses a barline or
+   * no one note value fits (see `ghostPieces`).
    */
   length: number;
   /** Written pitch as a MIDI number. */
@@ -76,8 +77,10 @@ export function forTempo(seconds: number, secondsPerQuarter: number, shortestWri
 /**
  * Splits what the microphone heard into the notes played, in order. A note goes on
  * while its pitch holds (through blips of another note, and short drop-outs where it
- * doesn't start again for a written note), and ends at a new pitch that lasts or at a
- * silence. `samples` must be in order of `at`; the last note may still be sounding.
+ * doesn't start again for a written note), and ends at a new pitch that lasts, at a
+ * silence, or where a written note starts at a dip in level (a tongue stop too short for
+ * a silent frame, see `dipAt`). `samples` must be in order of `at`; the last note may
+ * still be sounding.
  * Pitches heard as a fraction of the note due (see `heardPitch`) are taken up to it.
  *
  * `from` starts it partway, at a sample: from a `restartPoint`, it gives the same notes
@@ -102,6 +105,10 @@ export function transcribe(
   let current: { midi: number; start: number; last: number; heard: number } | null = null;
   // Another pitch heard through the current note, until it lasts long enough to be one.
   let pending: { midi: number; start: number; last: number } | null = null;
+  // Where the level last dipped through the current note (see `dipAt`), since the last
+  // frame of it heard: a tongue stop too short to break the sound, or to break it for
+  // longer than a drop-out. Its bottom can be a silent frame.
+  let dip: number | null = null;
 
   const close = () => {
     if (current && current.last - current.start >= shortest) {
@@ -109,10 +116,12 @@ export function transcribe(
     }
     current = null;
     pending = null;
+    dip = null;
   };
 
   for (let i = firstFrom(samples, from); i < samples.length; i++) {
     const s = samples[i];
+    if (current && dipAt(samples, i, secondsPerQuarter)) dip = s.at;
     const pitch = isVoiced(s) ? heardPitch(s.hz, due(s.at)) : null;
     if (pitch === null) continue;
     if (current) {
@@ -128,7 +137,20 @@ export function transcribe(
       continue;
     }
     current.heard = s.at;
+    const dipped = dip;
+    dip = null;
     if (Math.abs(pitch - current.midi) < HOLD_SEMITONES) {
+      // A tongue stop where a written note starts: a repeat, from this frame, as a note
+      // would start here afresh.
+      if (
+        dipped !== null &&
+        current.last - current.start >= shortest &&
+        startsBetween(sounding, dipped - slack, dipped + slack)
+      ) {
+        close();
+        current = { midi: Math.round(pitch), start: s.at, last: s.at, heard: s.at };
+        continue;
+      }
       current.last = s.at;
       pending = null;
       continue;
@@ -169,10 +191,29 @@ export function restartPoint(
 }
 
 /**
- * A played note written as a ghost: its start snapped to a sixteenth, its length to the
- * nearest note value, or held past a whole note, to the nearest beat.
+ * Where a played note (`notes[i]`, as `transcribe` gave them) is held to on the staff:
+ * the next one's start, if that follows on with less than BRIDGE_SECONDS of silence
+ * between (the tongue between two notes, or the new note's pitch taking a moment to
+ * settle), as that's no rest; otherwise undefined, and it's as long as it sounded.
  */
-export function toGhost({ start, end, midi }: PlayedNote): GhostNote {
+export function heldTo(notes: readonly PlayedNote[], i: number, secondsPerQuarter: number) {
+  const next = notes[i + 1];
+  if (!next || next.start - notes[i].end >= BRIDGE_SECONDS / secondsPerQuarter) return undefined;
+  return next.start;
+}
+
+/**
+ * A played note written as a ghost: its start snapped to a sixteenth, and its length to
+ * the nearest note value, or held past a whole note, to the nearest beat. Given `heldTo`
+ * (see `heldTo`), it runs up to there instead, on a sixteenth: rounding its length to a
+ * note value would leave a gap before the next note, written as a rest that wasn't played.
+ */
+export function toGhost({ start, end, midi }: PlayedNote, heldTo?: number): GhostNote {
+  const snapped = Math.round(start * 4) / 4;
+  if (heldTo !== undefined) {
+    const length = Math.round(heldTo * 4) / 4 - snapped;
+    if (length >= NOTE_VALUES[NOTE_VALUES.length - 1]) return { start: snapped, length, midi };
+  }
   const length = end - start;
   const beats = Math.round(length);
   const value =
@@ -181,7 +222,7 @@ export function toGhost({ start, end, midi }: PlayedNote): GhostNote {
       : NOTE_VALUES.reduce((best, v) =>
           Math.abs(Math.log(v / length)) < Math.abs(Math.log(best / length)) ? v : best,
         );
-  return { start: Math.round(start * 4) / 4, length: value, midi };
+  return { start: snapped, length: value, midi };
 }
 
 /** Lengths this close, in quarter notes, are the same: sums of sixteenths stray only by rounding. */
@@ -213,6 +254,46 @@ export function ghostPieces(
   if (!pieces.length) return [{ ...ghost, length: longest(ghost.length), tied: false }];
   pieces[pieces.length - 1].tied = false;
   return pieces;
+}
+
+/**
+ * Which `pieces` (as `ghostPieces` gives them, every note's in order) are beamed
+ * together, as runs of indices: each run of eighths and sixteenths (dotted ones too) that
+ * follow on one from the next, with no gap or overlap, within one beat group of the bar.
+ * `groups` are the beat groups' lengths in quarter notes, repeated through the bar (1 in
+ * 4/4, 1.5 in 6/8, as the written staff beams). A piece at or past the music's end isn't
+ * beamed. Only runs of two or more are given.
+ */
+export function beamRuns(
+  pieces: readonly Pick<GhostPiece, "start" | "length">[],
+  timeline: Pick<Timeline, "bar" | "end">,
+  groups: readonly number[],
+): number[][] {
+  // The end of the beat group a piece is in, or null if it isn't beamed.
+  const groupEnd = ({ start, length }: Pick<GhostPiece, "start" | "length">) => {
+    if (length >= 1 - SAME_LENGTH || start >= timeline.end - SAME_LENGTH) return null;
+    let end = Math.floor(start / timeline.bar + SAME_LENGTH) * timeline.bar;
+    for (let k = 0; end <= start + SAME_LENGTH; k++) end += groups[k % groups.length];
+    return start + length <= end + SAME_LENGTH ? end : null;
+  };
+  const runs: number[][] = [];
+  let run: number[] = [];
+  let runEnd: number | null = null;
+  pieces.forEach((piece, i) => {
+    const end = groupEnd(piece);
+    const last = pieces[run[run.length - 1]];
+    const follows =
+      last && Math.abs(last.start + last.length - piece.start) < SAME_LENGTH && end === runEnd;
+    if (end !== null && follows) {
+      run.push(i);
+      return;
+    }
+    if (run.length > 1) runs.push(run);
+    run = end === null ? [] : [i];
+    runEnd = end;
+  });
+  if (run.length > 1) runs.push(run);
+  return runs;
 }
 
 /** A silence on the played staff: a rest, as long as a note value, or a whole bar's rest. */
@@ -268,16 +349,19 @@ export function silences(
 }
 
 /**
- * A played note as judged: written as a ghost, with the written note it was (an index
+ * A played note as judged: written as a ghost (held to `heldTo`, if given), with the written note it was (an index
  * into `timeline.notes`), or null if it wasn't the note written where it sounded (the one
  * under its middle) or sounded where a rest is written.
  */
 export type JudgedNote = GhostNote & { written: number | null };
 
-export function judgePlayed(p: PlayedNote, timeline: Timeline): JudgedNote {
+export function judgePlayed(p: PlayedNote, timeline: Timeline, heldTo?: number): JudgedNote {
   const middle = (p.start + p.end) / 2;
   const i = timeline.notes.findIndex((n) => n.start <= middle && middle < n.start + n.length);
-  return { ...toGhost(p), written: i >= 0 && timeline.notes[i].midi === p.midi ? i : null };
+  return {
+    ...toGhost(p, heldTo),
+    written: i >= 0 && timeline.notes[i].midi === p.midi ? i : null,
+  };
 }
 
 /** A played note as the played staff draws it. */

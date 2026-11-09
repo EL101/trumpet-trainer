@@ -3,6 +3,7 @@ import { heardUntil, noteCents, type Timing } from "./scoring";
 import { soundingNotes, type Timeline } from "./timeline";
 import {
   BRIDGE_SECONDS,
+  heldTo,
   judgePlayed,
   restartPoint,
   toMark,
@@ -48,7 +49,9 @@ export function rewindLive(live: LiveScore, from: number, timeline: Timeline, be
   const before = live.kept.filter((note) => note.end < from);
   const reopened = before.pop();
   live.kept = before;
-  live.keptJudged = before.map((p) => judgePlayed(p, timeline));
+  // As they were judged: each is held to the one after it, which is still where it was
+  // (the note reopened starts again where it did).
+  live.keptJudged = live.keptJudged.slice(0, before.length);
   live.restartAt = reopened ? reopened.start : 0;
   const sounding = soundingNotes(timeline);
   for (const k of live.locked.keys()) {
@@ -66,7 +69,7 @@ export function rewindLive(live: LiveScore, from: number, timeline: Timeline, be
  *
  * `restsTo` is where silence after the last note is known to, on a sixteenth, for the
  * played staff's rests (see `silences`): BRIDGE_SECONDS before the newest frame, as a
- * silence shorter than that may yet be the note carrying on.
+ * silence shorter than that may yet be the note carrying on, and none while it sounds.
  */
 export function updateLive(
   live: LiveScore,
@@ -80,12 +83,14 @@ export function updateLive(
 
   const open = transcribe(samples, timeline, time.secondsPerQuarter, live.restartAt);
   const over = restartPoint(open, heardTo, time.secondsPerQuarter);
+  const judge = (p: PlayedNote, i: number) =>
+    judgePlayed(p, timeline, heldTo(open, i, time.secondsPerQuarter));
   const done = open.slice(0, Math.max(0, over));
-  const doneJudged = done.map((p) => judgePlayed(p, timeline));
+  const doneJudged = done.map(judge);
   const judged = [
     ...live.keptJudged,
     ...doneJudged,
-    ...open.slice(done.length).map((p) => judgePlayed(p, timeline)),
+    ...open.slice(done.length).map((p, i) => judge(p, done.length + i)),
   ];
   // The note still sounding isn't judged until it's over: it's judged by the written
   // note under its middle, which moves on as it's held, so a note played a little early
@@ -118,7 +123,11 @@ export function updateLive(
   if (!cents.every((c, i) => c === live.cents[i]) || cents.length !== live.cents.length) {
     live.cents = cents;
   }
-  const silentTo = heardTo - BRIDGE_SECONDS / time.secondsPerQuarter;
+  // Nothing after a note still sounding is silence: its ghost's length is rounded to a
+  // note value, which can fall short of where it's been heard to.
+  const silentTo = sounding
+    ? played[played.length - 1].start
+    : heardTo - BRIDGE_SECONDS / time.secondsPerQuarter;
   const restsTo = Math.max(0, Math.floor(silentTo * 4) / 4);
   return { played: live.played, cents: live.cents, restsTo };
 }

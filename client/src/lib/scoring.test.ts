@@ -295,6 +295,23 @@ describe("scoreRun", () => {
     }
   });
 
+  it("hears tongued sixteenths as tongued, though no frame between them is silent", () => {
+    const timeline = buildTimeline("G4/16, G4, G4, G4, G4/q, C5/h", "4/4");
+    // One unbroken sound, the level dipping to half at each tongue stop (a 25 ms stop,
+    // through the 43 ms frame).
+    const onsets = [0.25, 0.5, 0.75, 1];
+    const samples = hear(4, { midi: 67, from: 0, to: 1.95 }, { midi: 72, from: 2, to: 3.8 }).map(
+      (s) => {
+        const seconds =
+          Math.min(...onsets.map((a) => Math.abs(s.at - a))) * TIMING.secondsPerQuarter;
+        return { ...s, level: s.level * (seconds < 0.0125 ? 0.5 : seconds < 0.03 ? 0.8 : 1) };
+      },
+    );
+    const run = scoreRun(timeline, samples, TIMING);
+    expect(run.parts.rhythm).toEqual({ score: 100, notes: [] });
+    expect(run.played.map((m) => m.start)).toEqual([0, ...onsets, 2]);
+  });
+
   it("hears a note that wavers, and one scooped into", () => {
     const { timeline, samples } = asWritten("C5/w, G4/w", "4/4", (s, i) =>
       i === 0

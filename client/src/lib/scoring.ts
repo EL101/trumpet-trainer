@@ -1,8 +1,9 @@
 import { formatPitch } from "./format";
-import { firstFrom, heardPitch, isVoiced, type PitchSample } from "./hearing";
+import { dipAt, firstFrom, heardPitch, isVoiced, type PitchSample } from "./hearing";
 import {
   BRIDGE_SECONDS,
   DROPOUT_SECONDS,
+  heldTo,
   judgePlayed,
   toGhost,
   toMark,
@@ -187,7 +188,9 @@ export function scoreRun(
       tone: { score: scores.tone, notes: toneNotes(played) },
     },
     cents,
-    played: transcribed.map((p) => toMark(judgePlayed(p, timeline), cents)),
+    played: transcribed.map((p, i) =>
+      toMark(judgePlayed(p, timeline, heldTo(transcribed, i, time.secondsPerQuarter)), cents),
+    ),
   };
 }
 
@@ -278,7 +281,8 @@ function hear(
   const sounding = voiced.length / (last - first + 1);
 
   // Where it came in: the moment a sound near the note played starts (a scoop into it
-  // counts), nearest its beat.
+  // counts), or a tongue stop too short for a silent frame dips through it (`dipAt`),
+  // nearest its beat.
   const near = (i: number) => Math.abs((pitchOf(samples[i]) ?? -Infinity) - played) < NEAR;
   const lead = Math.min(beat / 2, note.length);
   const window = indicesBetween(
@@ -288,7 +292,8 @@ function hear(
   );
   let onset: number | null = null;
   for (let i = window.from; i < window.to; i++) {
-    if (!near(i) || (i > 0 && near(i - 1))) continue;
+    const attack = !(i > 0 && near(i - 1)) || dipAt(samples, i, time.secondsPerQuarter);
+    if (!near(i) || !attack) continue;
     if (
       onset === null ||
       Math.abs(samples[i].at - note.start) < Math.abs(samples[onset].at - note.start)

@@ -143,6 +143,26 @@ const OUT_OF_RANGE_PLAYED: PlayedMark[] = [
   { start: 6, length: 2, midi: 93, status: "sounding", cents: null },
 ];
 
+/**
+ * Quick notes played, beamed by the beat as written notes are: eighths and sixteenths, a
+ * dotted eighth and sixteenth, stems up for a low run, a wrong note inside a beam, and
+ * a held note tied into an eighth beamed with the next.
+ */
+const BEAMED_NOTES =
+  "C5/8, D5, E5, F5, G5/16, A5, G5, F5, E5/8., D5/16, F4/8, G4, A4, F4, G4/16, E5, D5, C5, G4/q, E5/8, D5, C5/h";
+const BEAMED_PLAYED: PlayedMark[] = buildTimeline(BEAMED_NOTES, "4/4").notes.flatMap(
+  (n, i): PlayedMark[] => {
+    if (n.midi === null || i === 19) return [];
+    // The G4 on beat 3 of bar 2 held on through the E5 after it.
+    const length = i === 18 ? 1.5 : n.length;
+    const midi = i === 15 ? 74 : n.midi;
+    const status = i === 15 ? "wrong" : "right";
+    return [
+      { start: n.start, length, midi, status, cents: status === "wrong" ? null : (i % 5) * 6 - 9 },
+    ];
+  },
+);
+
 const PREVIEW_SCORE: RunScore = {
   overall: 83,
   parts: {
@@ -643,6 +663,21 @@ export default function DesignPreview() {
               measuresPerLine={4}
               scale={0.8}
               played={PREVIEW_PLAYED}
+              playedTo={Infinity}
+            />
+          </Box>
+          <Box>
+            <Text fontSize="12px" color="fg.muted" mb="xs">
+              Eighths and sixteenths played are beamed by the beat, as written notes are: the played
+              staff is drawn by VexFlow too
+            </Text>
+            <Staff
+              notes={BEAMED_NOTES}
+              timeSig="4/4"
+              musicKey="C major"
+              measuresPerLine={2}
+              scale={0.8}
+              played={BEAMED_PLAYED}
               playedTo={Infinity}
             />
           </Box>

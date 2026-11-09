@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { PitchSample } from "./hearing";
 import { buildTimeline } from "./timeline";
 import {
+  beamRuns,
   forTempo,
   ghostPieces,
+  heldTo,
   judgePlayed,
   silences,
   restartPoint,
@@ -33,6 +35,18 @@ function hear(length: number, ...sounds: Sound[]): PitchSample[] {
 }
 
 const near = (value: number, expected: number) => Math.abs(value - expected) < 0.05;
+
+/**
+ * `samples` with a tongue stop too short for a silent frame at each of `at`: the level
+ * dips to half over a frame or two, as a 25 ms stop does through a 43 ms frame.
+ */
+function tongued(samples: PitchSample[], ...at: number[]): PitchSample[] {
+  return samples.map((s) => {
+    const seconds = Math.min(...at.map((a) => Math.abs(s.at - a))) * SPQ;
+    const share = seconds < 0.0125 ? 0.5 : seconds < 0.03 ? 0.8 : 1;
+    return { ...s, level: s.level * share };
+  });
+}
 
 /** The played notes judged wrong, as ghosts. */
 const wrongNotes = (played: PlayedNote[], timeline: Timeline) =>
@@ -73,6 +87,34 @@ describe("transcribe", () => {
       SPQ,
     );
     expect(played.map((p) => p.midi)).toEqual([67, 67, 72, 76]);
+  });
+
+  it("hears tongued sixteenths as separate notes, though no frame between is silent", () => {
+    const timeline = buildTimeline("C5/16, C5, C5, C5, C5/q, C5/h", "4/4");
+    const onsets = [0.25, 0.5, 0.75, 1, 2];
+    const played = transcribe(
+      tongued(hear(4, { midi: 72, from: 0, to: 3.9 }), ...onsets),
+      timeline,
+      SPQ,
+    );
+    expect(played.map((p) => Math.round(p.start * 4) / 4)).toEqual([0, ...onsets]);
+    expect(played.map((p) => toGhost(p).length)).toEqual([0.25, 0.25, 0.25, 0.25, 1, 2]);
+  });
+
+  it("hears a tongue stop as a repeat when its one silent frame is shorter than a drop-out", () => {
+    // A 40 ms stop: one frame at the bottom of the dip hears nothing.
+    const timeline = buildTimeline("C5/8, C5, C5/h.", "4/4");
+    const samples = tongued(hear(4, { midi: 72, from: 0, to: 3.9 }), 0.5, 1).map((s) =>
+      [15, 30].includes(Math.round(s.at * 30)) ? { ...s, hz: 0, clarity: 0.2, level: 0.001 } : s,
+    );
+    const played = transcribe(samples, timeline, SPQ);
+    expect(played.map((p) => Math.round(p.start * 4) / 4)).toEqual([0, 0.5, 1]);
+  });
+
+  it("holds a note through a dip in level where no note is written", () => {
+    const timeline = buildTimeline("C5/w", "4/4");
+    const played = transcribe(tongued(hear(4, { midi: 72, from: 0, to: 3.8 }), 1.5), timeline, SPQ);
+    expect(played).toHaveLength(1);
   });
 
   it("keeps a note going through a blip of another, and drops a stray sound", () => {
@@ -148,6 +190,68 @@ describe("toGhost", () => {
   it("keeps a note held past a whole note, to the nearest beat", () => {
     expect(toGhost({ start: 0, end: 5.8, midi: 72 }).length).toBe(6);
     expect(toGhost({ start: 1, end: 8.1, midi: 72 }).length).toBe(7);
+  });
+});
+
+describe("heldTo", () => {
+  const notes = [
+    { start: 0.08, end: 0.7, midi: 72 },
+    { start: 0.95, end: 1.6, midi: 74 }, // 0.125 s after the last: tongued
+    { start: 2.5, end: 3, midi: 76 }, // 0.45 s after: a rest
+  ];
+
+  it("holds a note to the next one when the silence between is shorter than a rest", () => {
+    expect(heldTo(notes, 0, SPQ)).toBe(0.95);
+    expect(heldTo(notes, 1, SPQ)).toBeUndefined();
+    expect(heldTo(notes, 2, SPQ)).toBeUndefined();
+  });
+
+  it("writes a note held on as reaching the next one's sixteenth, with no rest between", () => {
+    // Heard for 0.62 beats, so a dotted eighth on its own, and a sixteenth rest after.
+    expect(toGhost(notes[0]).length).toBe(0.75);
+    expect(toGhost(notes[0], heldTo(notes, 0, SPQ))).toEqual({ start: 0, length: 1, midi: 72 });
+    // A next note snapped onto its own start leaves it as it sounded.
+    expect(toGhost({ start: 0, end: 0.1, midi: 72 }, 0.1).length).toBe(0.25);
+  });
+});
+
+describe("beamRuns", () => {
+  const timeline = buildTimeline("C5/w, C5/w", "4/4");
+  const runs = (...pieces: [number, number][]) =>
+    beamRuns(
+      pieces.map(([start, length]) => ({ start, length })),
+      timeline,
+      [1],
+    );
+
+  it("beams eighths and sixteenths that follow on within a beat", () => {
+    expect(runs([0, 0.5], [0.5, 0.5], [1, 0.25], [1.25, 0.25], [1.5, 0.5])).toEqual([
+      [0, 1],
+      [2, 3, 4],
+    ]);
+    expect(runs([0, 0.75], [0.75, 0.25])).toEqual([[0, 1]]);
+  });
+
+  it("breaks at a beat, a gap, a longer note and a note crossing the beat", () => {
+    expect(runs([0.5, 0.5], [1, 0.5])).toEqual([]);
+    expect(runs([0, 0.25], [0.5, 0.5])).toEqual([]);
+    expect(runs([0, 0.5], [0.5, 1], [1.5, 0.5])).toEqual([]);
+    expect(runs([0, 0.25], [0.25, 0.5], [0.75, 0.5])).toEqual([[0, 1]]);
+  });
+
+  it("beams by the meter's groups, and not past the music's end", () => {
+    const eighths = Array.from({ length: 6 }, (_, i): [number, number] => [i / 2, 0.5]);
+    expect(
+      beamRuns(
+        eighths.map(([start, length]) => ({ start, length })),
+        buildTimeline("C5/h., C5/h.", "6/8"),
+        [1.5],
+      ),
+    ).toEqual([
+      [0, 1, 2],
+      [3, 4, 5],
+    ]);
+    expect(runs([7.5, 0.5], [8, 0.5])).toEqual([]);
   });
 });
 
