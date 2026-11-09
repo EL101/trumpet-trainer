@@ -7,7 +7,7 @@
 -- AlterTable
 ALTER TABLE "users" ADD COLUMN     "exercises_generated" INTEGER NOT NULL DEFAULT 0;
 
--- History is pruned to each user's newest 100, so the true count is gone. The best
+-- History is pruned to each user's newest rows, so the true count is gone. The best
 -- start is every exercise still on record: in history, or saved to the library after
 -- history let it go.
 UPDATE "users" u
