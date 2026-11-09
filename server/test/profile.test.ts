@@ -4,6 +4,7 @@ import { app } from "../src/app.js";
 import { prisma } from "../src/db.js";
 import { AVATAR_MAX_BYTES } from "../src/avatar.js";
 import { setAvatar } from "../src/queries/avatars.js";
+import { spendTodayMicros } from "../src/queries/etudes.js";
 import { auth, firebaseError, googleClaims, guestClaims, tokenFor } from "./firebaseMock.js";
 import { JPEG, PNG, addHistory, addLibrary, createUser, dataUrl, newUid } from "./helpers.js";
 
@@ -400,6 +401,22 @@ describe("DELETE /api/profile", () => {
       avatars: 1,
       settings: 1,
     });
+  });
+
+  it("keeps what the caller's etudes cost, for the spend cap, with no user", async () => {
+    const { uid, token } = await userWithData();
+    const etude = await prisma.etudeGeneration.create({
+      data: { userId: uid, model: "claude-haiku-5-5", status: "SUCCEEDED", costMicros: 40_000 },
+    });
+    const spent = await spendTodayMicros();
+
+    expect((await request(app).delete("/api/profile").set(bearer(token))).status).toBe(204);
+
+    expect(await prisma.etudeGeneration.findUnique({ where: { id: etude.id } })).toMatchObject({
+      userId: null,
+      costMicros: 40_000,
+    });
+    expect(await spendTodayMicros()).toBe(spent);
   });
 
   it("lets guests delete theirs", async () => {

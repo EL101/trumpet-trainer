@@ -191,7 +191,8 @@ function mergeOnce(guestUid: string, targetUid: string) {
 
 /**
  * Delete the user's row, and with it by cascade everything they own: history, library,
- * scores, avatar, settings and etude generations. False if there was no row.
+ * scores, avatar and settings. Their etude requests stay, with no user, since the daily
+ * spend cap counts what they cost. False if there was no row.
  */
 export async function deleteUser(uid: string) {
   const { count } = await prisma.user.deleteMany({ where: { id: uid } });

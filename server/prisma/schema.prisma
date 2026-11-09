@@ -116,7 +116,9 @@ enum EtudeStatus {
 /// global daily spend cap, and records what each etude really cost.
 model EtudeGeneration {
   id           String      @id @default(uuid())
-  userId       String      @map("user_id")
+  /// Null once the user has deleted their account. The row stays, since the spend cap
+  /// counts it: deleting an account mustn't give back what its etudes cost.
+  userId       String?     @map("user_id")
   status       EtudeStatus @default(PENDING)
   model        String
   inputTokens  Int         @default(0) @map("input_tokens")
@@ -130,7 +132,7 @@ model EtudeGeneration {
   error        String?
   createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   /// One etude being written per user at a time, enforced by the database, so two
   /// requests at once can't both start one (or both take the last of the quota).

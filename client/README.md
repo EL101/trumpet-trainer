@@ -314,7 +314,8 @@ week (again whenever another year loads, since the grid is keyed by the span sho
 - **Delete account** asks first, then deletes the user and everything they own
   (`DELETE /api/profile`: their rows, then their Firebase user, so a failure part way
   can be retried), signs them out and goes to the landing page. Signing in with Google
-  again starts a new, empty account.
+  again starts a new, empty account. Their etude requests stay, with no user, since the
+  daily spend cap counts what they cost.
 
 ## The streak
 
