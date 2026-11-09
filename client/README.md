@@ -325,10 +325,11 @@ anything was played on it, in the browser's time zone, and the current streak ru
 to today, or to yesterday while today has nothing yet. `GET /api/profile/streak?tz=`
 gives both streaks and the days played this week; `streakWeek()` in `lib/streak.ts`
 turns those into the week's circles (played, today, missed, to come).
-`StreakProvider` (`streak/`) loads it and shares it, asking again on every move to
-another page so a day just played shows up when the player is left, and Profile asks
-again after a reset. `Sidebar` takes a `streak` prop to show another one (the
-`/design` gallery does).
+`StreakProvider` (`streak/`) loads it and shares it. Its `refresh()` asks again after
+anything that changes it: the player calls it once a run is saved, so the day just
+played is there when the player is left, and Profile after a reset. It also asks again
+whenever the tab comes back into view, for a day that's gone by or play in another tab.
+`Sidebar` takes a `streak` prop to show another one (the `/design` gallery does).
 
 ## Writing styles
 
