@@ -7,6 +7,7 @@ import {
   HORN_SPAN,
   moveEnd,
   noteName,
+  RANGE_AXIS_NOTES,
   spanOf,
   toSpan,
 } from "./noteRanges";
@@ -95,5 +96,13 @@ describe("describeChanges", () => {
     expect(describeChanges(["LOW", "HIGH"])).toBe("Low and High ranges changed");
     expect(describeChanges(["LOW", "MED", "HIGH"])).toBe("Low, Medium and High ranges changed");
     expect(describeChanges([])).toBe("");
+  });
+});
+
+describe("RANGE_AXIS_NOTES", () => {
+  it("is the horn's two ends and each C between", () => {
+    expect(RANGE_AXIS_NOTES.map(noteName)).toEqual(["F#3", "C4", "C5", "C6", "G6"]);
+    expect(RANGE_AXIS_NOTES[0]).toBe(HORN_SPAN[0]);
+    expect(RANGE_AXIS_NOTES.at(-1)).toBe(HORN_SPAN[1]);
   });
 });

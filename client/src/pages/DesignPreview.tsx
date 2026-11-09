@@ -47,7 +47,14 @@ import { MAX_TEMPO, MIN_TEMPO, pulseOf } from "@/lib/meter";
 import { formatDay, pastYear } from "@/lib/activity";
 import { formatPitch } from "@/lib/format";
 import { streakWeek } from "@/lib/streak";
-import { DEFAULT_NOTE_RANGES, HORN_SPAN, moveEnd, noteName, type NoteSpan } from "@/lib/noteRanges";
+import {
+  DEFAULT_NOTE_RANGES,
+  HORN_SPAN,
+  moveEnd,
+  noteName,
+  RANGE_AXIS_NOTES,
+  type NoteSpan,
+} from "@/lib/noteRanges";
 import type { RunScore } from "@/lib/scoring";
 import { buildTimeline } from "@/lib/timeline";
 import type { PlayedMark } from "@/lib/transcribe";
@@ -451,7 +458,7 @@ export default function DesignPreview() {
               <RangeAxis
                 min={HORN_SPAN[0]}
                 max={HORN_SPAN[1]}
-                marks={[54, 60, 72, 84, 91].map((m) => ({
+                marks={RANGE_AXIS_NOTES.map((m) => ({
                   value: m,
                   label: <PitchText>{noteName(m)}</PitchText>,
                 }))}

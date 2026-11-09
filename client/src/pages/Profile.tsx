@@ -45,6 +45,7 @@ import {
   isNoteRanges,
   moveEnd,
   noteName,
+  RANGE_AXIS_NOTES,
   SETTABLE_RANGES,
   type NoteRanges,
   type NoteSpan,
@@ -57,8 +58,8 @@ import { useStreak } from "@/streak/useStreak";
 import { deleteAccount, fetchActivity, fetchStats } from "@/utils/profile";
 import { resetScores } from "@/utils/scores";
 
-/** Notes labelled under the range sliders: the horn's ends and each C between. */
-const AXIS_MARKS = [54, 60, 72, 84, 91].map((midi) => ({
+/** The range sliders' axis labels, at `RANGE_AXIS_NOTES`. */
+const AXIS_MARKS = RANGE_AXIS_NOTES.map((midi) => ({
   value: midi,
   label: <PitchText>{noteName(midi)}</PitchText>,
 }));

@@ -35,6 +35,16 @@ const spanOfNotes = ([low, high]: readonly [string, string]): NoteSpan => [
 /** The whole horn, F#3 to G6: every range has to stay inside it. */
 export const HORN_SPAN = spanOfNotes(RANGE_NOTES.ANY);
 
+/**
+ * The notes labelled under a range slider's axis: the horn's two ends and each C
+ * between them (F#3, C4, C5, C6, G6).
+ */
+export const RANGE_AXIS_NOTES: readonly number[] = [
+  HORN_SPAN[0],
+  ...["C4", "C5", "C6"].map((note) => Note.midi(note)!),
+  HORN_SPAN[1],
+];
+
 /** What the ranges cover for a user who hasn't changed them. */
 export const DEFAULT_NOTE_RANGES: NoteRanges = {
   LOW: spanOfNotes(RANGE_NOTES.LOW),
