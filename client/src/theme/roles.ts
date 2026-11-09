@@ -63,6 +63,22 @@ export const roles = {
     /** Playback cursor band behind the current note. */
     cursor: tint(brass.base, 13),
   },
+  /** Actions that delete something for good. The design system has no red, so this borrows the pitch scale's. */
+  danger: {
+    fg: pitch.red,
+    hover: tint(pitch.red, 10),
+    pressed: tint(pitch.red, 18),
+  },
+  /**
+   * The activity grid's shades, lightest to darkest: how much was played on a day. A
+   * day with nothing is left unfilled, outlined with `border`.
+   */
+  activity: {
+    1: brass[300],
+    2: brass[400],
+    3: brass[600],
+    4: brass[800],
+  },
   intonation: {
     good: pitch.green,
     fair: pitch.olive,

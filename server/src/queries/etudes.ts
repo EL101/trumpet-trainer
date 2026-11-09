@@ -65,16 +65,16 @@ export function failStaleEtudes(userId: string) {
   });
 }
 
-/** An etude request as the client sees it, with the history row it was saved as. */
-async function withExercise(row: {
-  id: string;
-  userId: string;
-  status: EtudeStatus;
-  exerciseId: string | null;
-  error: string | null;
-}) {
+/**
+ * An etude request of `userId`'s as the client sees it, with the history row it was
+ * saved as. The user is passed in, since the row's own is null once its user is gone.
+ */
+async function withExercise(
+  userId: string,
+  row: { id: string; status: EtudeStatus; exerciseId: string | null; error: string | null },
+) {
   const exercise = row.exerciseId
-    ? await prisma.history.findFirst({ where: { userId: row.userId, exerciseId: row.exerciseId } })
+    ? await prisma.history.findFirst({ where: { userId, exerciseId: row.exerciseId } })
     : null;
   return { id: row.id, status: row.status, error: row.error, exercise };
 }
@@ -87,7 +87,7 @@ export async function pendingEtude(userId: string): Promise<EtudeView | null> {
     where: { userId, status: EtudeStatus.PENDING },
     orderBy: { createdAt: "desc" },
   });
-  return row ? withExercise(row) : null;
+  return row ? withExercise(userId, row) : null;
 }
 
 /**
@@ -96,7 +96,7 @@ export async function pendingEtude(userId: string): Promise<EtudeView | null> {
  */
 export async function findEtude(userId: string, id: string): Promise<EtudeView | null> {
   const row = await prisma.etudeGeneration.findFirst({ where: { id, userId } });
-  return row ? withExercise(row) : null;
+  return row ? withExercise(userId, row) : null;
 }
 
 /**

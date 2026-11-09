@@ -51,12 +51,9 @@ import {
   type TimeSignature,
 } from "@/lib/generatorOptions";
 import { prefersReducedMotion } from "@/lib/motion";
-import {
-  generateLongTones,
-  generateMusic,
-  generateScaleExercise,
-  RANGE_NOTES,
-} from "@/utils/generateMusic";
+import { noteName, spanOf, type NoteSpan } from "@/lib/noteRanges";
+import { useSettings } from "@/settings/useSettings";
+import { generateLongTones, generateMusic, generateScaleExercise } from "@/utils/generateMusic";
 import type { EtudeQuota } from "@/utils/etudes";
 import { clearHistory, getInitialHistory, insertToHistory } from "@/utils/history";
 import { generateLipSlurs, lipSlurFingerings } from "@/utils/lipSlurs";
@@ -83,17 +80,20 @@ type Settings = {
   difficulty: Difficulty;
 };
 
-/** The notes for each type made in the browser. Etudes come from the server instead. */
-const GENERATORS: Partial<Record<ExerciseType, (settings: Settings) => string>> = {
+/**
+ * The notes for each type made in the browser, in `span`: the chosen range as the user
+ * has set it. Etudes come from the server instead, which looks the range up itself.
+ */
+const GENERATORS: Partial<Record<ExerciseType, (settings: Settings, span: NoteSpan) => string>> = {
   // The margin only offers long tones at low or high difficulty (see TYPE_DIFFICULTIES).
-  LONG_TONES: ({ measures, timeSig, key, range, difficulty }) =>
-    generateLongTones(measures, timeSig, key, range, difficulty === "HIGH" ? "HIGH" : "LOW"),
-  LIP_SLURS: ({ measures, timeSig, range, difficulty }) =>
-    generateLipSlurs(measures, timeSig, range, difficulty),
-  SCALES: ({ timeSig, key, range, difficulty }) =>
-    generateScaleExercise(timeSig, key, range, difficulty),
-  RANDOM: ({ measures, timeSig, key, range, difficulty }) =>
-    generateMusic(measures, timeSig, key, range, difficulty),
+  LONG_TONES: ({ measures, timeSig, key, difficulty }, span) =>
+    generateLongTones(measures, timeSig, key, span, difficulty === "HIGH" ? "HIGH" : "LOW"),
+  LIP_SLURS: ({ measures, timeSig, difficulty }, span) =>
+    generateLipSlurs(measures, timeSig, span, difficulty),
+  SCALES: ({ timeSig, key, difficulty }, span) =>
+    generateScaleExercise(timeSig, key, span, difficulty),
+  RANDOM: ({ measures, timeSig, key, difficulty }, span) =>
+    generateMusic(measures, timeSig, key, span, difficulty),
 };
 
 /** Types whose length comes from the music itself, so the Measures setting is ignored. */
@@ -157,6 +157,8 @@ export function Generate() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [history, setHistory] = useState<Record<number, MusicInfo>>({});
   const { user } = useContext(AuthUserContext);
+  // What Low, Medium and High cover, as the user has set them on Profile.
+  const { noteRanges } = useSettings().settings;
   // The exercise on the plate stays there through a reload, or a trip to the player and
   // back. It's kept per tab, so two tabs keep their own, and per player.
   const [generated, setGenerated] = usePersistedState<MusicInfo | null>(
@@ -313,7 +315,7 @@ export function Generate() {
       id: crypto.randomUUID(),
       exerciseId: crypto.randomUUID(),
       exerciseType: type,
-      notes: generate(settings),
+      notes: generate(settings, spanOf(range, noteRanges)),
       timeSig,
       musicKey: KEYLESS.has(type) ? "C major" : key,
       noteRange: range,
@@ -832,6 +834,46 @@ type SettingsMarginProps = Omit<FlexProps, "onChange"> & {
   etudesOff: boolean;
 };
 
+/**
+ * The notes the chosen range covers, and a notice while the user's own ranges (from
+ * Profile) aren't in: until they are, the browser's exercises use the defaults. Etudes
+ * are written on the server, which always uses the user's own.
+ */
+function RangeHelper({ low, high, etudes }: { low: string; high: string; etudes: boolean }) {
+  const { status, reload } = useSettings();
+  return (
+    <>
+      {/* The defaults' notes would be wrong for an etude, which is written in the user's. */}
+      {!(etudes && status === "failed") && <PitchText>{`${low} to ${high}`}</PitchText>}
+      {status === "loading" && (
+        // Fades in late, so a load that's quick (most are) never shows it.
+        <chakra.span
+          display="block"
+          _motionSafe={{ animation: "appear 250ms ease-out 1s backwards" }}
+        >
+          Loading your note ranges…
+        </chakra.span>
+      )}
+      {status === "failed" && (
+        <chakra.span display="block" color="fg.error" role="alert">
+          {etudes
+            ? "Couldn't load your note ranges to show here. Etudes still use yours. "
+            : "Couldn't load your note ranges, so this uses the defaults. "}
+          <chakra.button
+            type="button"
+            color="accent.fg"
+            textDecoration="underline"
+            cursor="pointer"
+            onClick={reload}
+          >
+            Try again
+          </chakra.button>
+        </chakra.span>
+      )}
+    </>
+  );
+}
+
 /** The right-hand margin: every generator setting, with Generate at its foot. */
 function SettingsMargin({
   settings,
@@ -852,7 +894,8 @@ function SettingsMargin({
     label: <PitchText>{k}</PitchText>,
     disabled: keyless,
   }));
-  const [low, high] = RANGE_NOTES[settings.range];
+  const { noteRanges } = useSettings().settings;
+  const [low, high] = spanOf(settings.range, noteRanges).map(noteName);
   const ownLength = SETS_OWN_LENGTH.has(settings.type);
   const measureLimits = measureLimitsFor(settings.type);
   const etudes = settings.type === "ETUDES";
@@ -973,7 +1016,7 @@ function SettingsMargin({
           />
         </Field>
 
-        <Field label="Range" helper={<PitchText>{`${low} to ${high}`}</PitchText>}>
+        <Field label="Range" helper={<RangeHelper low={low} high={high} etudes={etudes} />}>
           <SegmentedControl
             aria-label="Range"
             options={RANGE_OPTIONS}

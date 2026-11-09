@@ -1,14 +1,26 @@
 import { Router, Request, Response } from "express";
 import admin from "firebase-admin";
 import { requireAuth } from "../middleware/requireAuth.js";
-import { AvatarUploadSchema, GuestTokenSchema, type Profile } from "../schema/index.js";
 import {
+  ActivityQuerySchema,
+  AvatarUploadSchema,
+  type Activity,
+  GuestTokenSchema,
+  type Profile,
+  type ProfileStats,
+  type Streak,
+  StreakQuerySchema,
+} from "../schema/index.js";
+import {
+  deleteUser,
   discardGuest,
+  getStats,
   getUserWithAvatar,
   mergeGuestData,
   syncUserFromClaims,
 } from "../queries/users.js";
 import { deleteAvatar, setAvatar } from "../queries/avatars.js";
+import { playedPerDay, playedYears, streaks } from "../queries/scores.js";
 import { AvatarError, decodeAvatarDataUrl, toDataUrl } from "../avatar.js";
 
 const router = Router();
@@ -33,11 +45,61 @@ router.get("/", requireAuth, async (req: Request, res: Response) => {
         ? toDataUrl(user.avatar.mimeType, user.avatar.data)
         : ((req.user!.picture as string | undefined) ?? null),
       hasUpload: user.avatar !== null,
+      createdAt: user.createdAt.toISOString(),
     };
     res.json(profile);
   } catch (err) {
     console.error("Failed to load profile:", err);
     res.status(500).json({ error: "Failed to load profile" });
+  }
+});
+
+/**
+ * How many exercises the caller played each day, for the profile's activity grid: of
+ * the calendar year `?year=`, or else the past year, in the time zone `?tz=` names
+ * (400 if either isn't one). Also lists the years they played in.
+ */
+router.get("/activity", requireAuth, async (req: Request, res: Response) => {
+  const query = ActivityQuerySchema.safeParse(req.query);
+  if (!query.success) return res.status(400).json({ error: "Unknown time zone or year" });
+  const { tz, year } = query.data;
+  try {
+    const [days, years] = await Promise.all([
+      playedPerDay(req.user!.uid, tz, year),
+      playedYears(req.user!.uid, tz),
+    ]);
+    const activity: Activity = { days, years };
+    res.json(activity);
+  } catch (err) {
+    console.error("Failed to load activity:", err);
+    res.status(500).json({ error: "Failed to load activity" });
+  }
+});
+
+/**
+ * The caller's streaks, current and longest, and the days they played this week, in
+ * the time zone `?tz=` names (400 if it isn't one): for the sidebar and the profile.
+ */
+router.get("/streak", requireAuth, async (req: Request, res: Response) => {
+  const query = StreakQuerySchema.safeParse(req.query);
+  if (!query.success) return res.status(400).json({ error: "Unknown time zone" });
+  try {
+    const streak: Streak = await streaks(req.user!.uid, query.data.tz);
+    res.json(streak);
+  } catch (err) {
+    console.error("Failed to load streak:", err);
+    res.status(500).json({ error: "Failed to load streak" });
+  }
+});
+
+/** The caller's practice record, for the profile page. */
+router.get("/stats", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const stats: ProfileStats = await getStats(req.user!.uid);
+    res.json(stats);
+  } catch (err) {
+    console.error("Failed to load profile stats:", err);
+    res.status(500).json({ error: "Failed to load profile stats" });
   }
 });
 
@@ -79,6 +141,34 @@ router.delete("/avatar", requireAuth, async (req: Request, res: Response) => {
     console.error("Failed to delete avatar:", err);
     res.status(500).json({ error: "Failed to delete avatar" });
   }
+});
+
+/**
+ * Delete the caller's account: everything they own here, then their Firebase user, so
+ * they can't sign in to it again. In that order so a failure part way can be retried:
+ * the data's gone either way, and asking again (requireAuth recreates an empty row)
+ * finishes the job. Once the Firebase user is gone their tokens stop working, so no
+ * request can bring the row back after.
+ */
+router.delete("/", requireAuth, async (req: Request, res: Response) => {
+  const uid = req.user!.uid;
+  try {
+    await deleteUser(uid);
+  } catch (err) {
+    console.error("Failed to delete account data:", err);
+    return res.status(500).json({ error: "Failed to delete account" });
+  }
+  try {
+    await admin.auth().deleteUser(uid);
+  } catch (err) {
+    // Already gone (a retry, or another tab beat us to it) is what we wanted.
+    const code = err instanceof Error && "code" in err ? String(err.code) : "";
+    if (code !== "auth/user-not-found") {
+      console.error(`Could not delete user ${uid} from Firebase:`, err);
+      return res.status(500).json({ error: "Failed to delete account" });
+    }
+  }
+  res.status(204).end();
 });
 
 /**

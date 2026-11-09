@@ -1,5 +1,5 @@
 import type { User } from "firebase/auth";
-import type { Profile } from "@/schema";
+import type { Activity, Profile, ProfileStats, Streak } from "@/schema";
 import { authedFetch } from "./api";
 
 export async function fetchProfile(user: User | undefined | null, signal?: AbortSignal) {
@@ -56,4 +56,43 @@ export async function countExercises(user: User | undefined | null) {
     }),
   );
   return { history, library };
+}
+
+/** How many exercises the user has generated, and how many different ones they've played. */
+export async function fetchStats(user: User | undefined | null, signal?: AbortSignal) {
+  const res = await authedFetch("/api/profile/stats", user, { signal });
+  return res ? ((await res.json()) as ProfileStats) : null;
+}
+
+/** The browser's time zone, whose days practice is counted in. */
+const timeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+/** The user's streaks and the days they played this week, in the browser's time zone. */
+export async function fetchStreak(user: User | undefined | null, signal?: AbortSignal) {
+  const query = new URLSearchParams({ tz: timeZone() });
+  const res = await authedFetch(`/api/profile/streak?${query}`, user, { signal });
+  return res ? ((await res.json()) as Streak) : null;
+}
+
+/**
+ * Delete the user's account and everything in it, for good. Rejects if the server
+ * couldn't finish; asking again finishes the job.
+ */
+export async function deleteAccount(user: User | undefined | null) {
+  await authedFetch("/api/profile", user, { method: "DELETE" });
+}
+
+/**
+ * How many different exercises the user played each day of `year`, or with no year
+ * the past year, counted in the browser's time zone; and the years they played in.
+ */
+export async function fetchActivity(
+  user: User | undefined | null,
+  year?: number,
+  signal?: AbortSignal,
+) {
+  const query = new URLSearchParams({ tz: timeZone() });
+  if (year !== undefined) query.set("year", String(year));
+  const res = await authedFetch(`/api/profile/activity?${query}`, user, { signal });
+  return res ? ((await res.json()) as Activity) : null;
 }

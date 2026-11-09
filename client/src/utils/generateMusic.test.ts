@@ -1,14 +1,14 @@
 import { Note } from "tonal";
 import { describe, expect, it } from "vitest";
 import { DIFFICULTIES, RANGES } from "@/schema";
-import { TIME_SIGNATURES } from "@/lib/generatorOptions";
+import { keyChoices, TIME_SIGNATURES } from "@/lib/generatorOptions";
 import {
   generateLongTones,
   generateMusic,
   generateScaleExercise,
-  RANGE_NOTES,
   scalePitches,
 } from "./generateMusic";
+import { HORN_SPAN, MIN_RANGE_SPAN, RANGE_NOTES } from "@/lib/noteRanges";
 import { LONG_TONE_MELODY, withinLeap } from "./melody";
 import { DURATION_TO_BEATS, splitNotes } from "./splitNotes";
 
@@ -43,6 +43,21 @@ describe("scalePitches", () => {
     const top = pitches.indexOf("Gb5");
     const climb = pitches.slice(0, top + 1).map((p) => Note.midi(p)!);
     expect(climb).toEqual([...climb].sort((a, b) => a - b));
+  });
+
+  it("starts and ends on the tonic in every range a user can set, down to an octave", () => {
+    for (let low = HORN_SPAN[0]; low + MIN_RANGE_SPAN <= HORN_SPAN[1]; low++) {
+      const span = [low, low + MIN_RANGE_SPAN] as const;
+      for (const key of keyChoices(true)) {
+        const pitches = scalePitches(key, span);
+        expect(Note.pitchClass(pitches[0])).toBe(Note.pitchClass(key.split(" ")[0]));
+        expect(pitches[0]).toBe(pitches.at(-1));
+        for (const pitch of pitches) {
+          expect(Note.midi(pitch)).toBeGreaterThanOrEqual(span[0]);
+          expect(Note.midi(pitch)).toBeLessThanOrEqual(span[1]);
+        }
+      }
+    }
   });
 
   it.each(RANGES)("starts and ends on the tonic and stays inside the %s range", (range) => {

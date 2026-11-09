@@ -2,8 +2,9 @@ import {
   allowedDurations,
   barLength,
   DIFFICULTY_TARGETS,
+  etudeSpan,
   intervalName,
-  RANGE_NOTES,
+  noteName,
   type Difficulty,
   type EtudeOptions,
 } from "./music.js";
@@ -61,7 +62,7 @@ function difficultyLines(options: EtudeOptions): string[] {
  * the player's own practice, one instruction per entry; nothing passes it yet.
  */
 export function userMessage(options: EtudeOptions, focus: readonly string[] = []): string {
-  const [low, high] = RANGE_NOTES[options.noteRange];
+  const [low, high] = etudeSpan(options).map(noteName);
   const lines = [
     `Key: ${options.musicKey}`,
     `Time signature: ${options.timeSig} (each bar is ${barLength(options.timeSig)} quarter notes long)`,

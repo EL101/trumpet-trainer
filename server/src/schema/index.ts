@@ -12,8 +12,15 @@ export { EtudeRequestSchema, ETUDE_CHARACTERS, type EtudeRequest } from "./etude
 export {
   GuestTokenSchema,
   AvatarUploadSchema,
+  ActivityQuerySchema,
+  StreakQuerySchema,
+  type Activity,
+  type ActivityDay,
   type GuestTokenInput,
   type AvatarUpload,
   type Profile,
+  type ProfileStats,
+  type Streak,
 } from "./profile.js";
 export { ScoreInputSchema, ScoreNoteSchema, type ScoreInput } from "./score.js";
+export { SettingsSchema, type Settings } from "./settings.js";
