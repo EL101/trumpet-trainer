@@ -4,7 +4,7 @@ import type { ClearHistory, ExerciseInput, ExerciseTable, HistoryInput } from ".
 import { retryOnConflict } from "./conflicts.js";
 
 /** History rows kept per user. The library has no limit. */
-export const HISTORY_LIMIT = 100;
+export const HISTORY_LIMIT = 300;
 
 // `history` is browsed newest-generation-first, and only its newest
 // HISTORY_LIMIT rows are listed; `library` is browsed newest-saved-first.
