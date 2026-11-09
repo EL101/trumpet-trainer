@@ -834,6 +834,46 @@ type SettingsMarginProps = Omit<FlexProps, "onChange"> & {
   etudesOff: boolean;
 };
 
+/**
+ * The notes the chosen range covers, and a notice while the user's own ranges (from
+ * Profile) aren't in: until they are, the browser's exercises use the defaults. Etudes
+ * are written on the server, which always uses the user's own.
+ */
+function RangeHelper({ low, high, etudes }: { low: string; high: string; etudes: boolean }) {
+  const { status, reload } = useSettings();
+  return (
+    <>
+      {/* The defaults' notes would be wrong for an etude, which is written in the user's. */}
+      {!(etudes && status === "failed") && <PitchText>{`${low} to ${high}`}</PitchText>}
+      {status === "loading" && (
+        // Fades in late, so a load that's quick (most are) never shows it.
+        <chakra.span
+          display="block"
+          _motionSafe={{ animation: "appear 250ms ease-out 1s backwards" }}
+        >
+          Loading your note ranges…
+        </chakra.span>
+      )}
+      {status === "failed" && (
+        <chakra.span display="block" color="fg.error" role="alert">
+          {etudes
+            ? "Couldn't load your note ranges to show here. Etudes still use yours. "
+            : "Couldn't load your note ranges, so this uses the defaults. "}
+          <chakra.button
+            type="button"
+            color="accent.fg"
+            textDecoration="underline"
+            cursor="pointer"
+            onClick={reload}
+          >
+            Try again
+          </chakra.button>
+        </chakra.span>
+      )}
+    </>
+  );
+}
+
 /** The right-hand margin: every generator setting, with Generate at its foot. */
 function SettingsMargin({
   settings,
@@ -976,7 +1016,7 @@ function SettingsMargin({
           />
         </Field>
 
-        <Field label="Range" helper={<PitchText>{`${low} to ${high}`}</PitchText>}>
+        <Field label="Range" helper={<RangeHelper low={low} high={high} etudes={etudes} />}>
           <SegmentedControl
             aria-label="Range"
             options={RANGE_OPTIONS}
