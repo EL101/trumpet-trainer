@@ -75,6 +75,10 @@ The roles you'll use most:
 | `accent.subtle`, `accent.muted`             | Tinted fills, soft accent borders                     |
 | `intonation.good` / `fair` / `warn` / `bad` | Score and pitch colours, green through red            |
 
+Two groups are only for drawings, not UI: `engraving.*` (the etched brass of the landing
+page's trumpets: `line`, `hatch`, `deep`, `wash`) and `spotlight.*` (the landing page's
+pool of light and its darker edges).
+
 For colours that depend on cents (note colouring, pitch readouts), call
 `centsColor(cents)` from `@/lib/intonation`. It blends smoothly from green to red.
 

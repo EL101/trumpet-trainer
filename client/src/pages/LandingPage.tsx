@@ -1,5 +1,7 @@
 import {
+  Box,
   Center,
+  chakra,
   Flex,
   Heading,
   Image,
@@ -7,54 +9,67 @@ import {
   Text,
   useBreakpointValue,
   useMediaQuery,
-  type FlexProps,
 } from "@chakra-ui/react";
 import { FirebaseError } from "firebase/app";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { signInAsGuest, signInWithGoogle } from "@/auth/auth";
 import googleIcon from "@/assets/google-icon.svg";
 import { useAuth } from "@/auth/useAuth";
 import { IntonationLegend, Staff } from "@/components/music";
 import { Button, Rule } from "@/components/primitives";
+import { demoAt, valvesFor, type DemoPacing } from "@/lib/landingDemo";
+import { buildTimeline } from "@/lib/timeline";
 import { roles } from "@/theme";
 
-/** A four-bar phrase in C, scored up to the cursor as if someone were playing it now. */
+/**
+ * A four-bar phrase in C, played on a loop: the left herald plays the first two bars and
+ * the right one answers with the last two, each note taking its colour as it's played.
+ */
 const EXAMPLE = {
   notes:
     "E4/q, G4/8, A4/8, C5/h, B4/q/r, D5/8, C5/8, A4/q, G4/q, F4/q, A4/q, G4/8, F4/8, E4/q, D4/h, C4/h",
-  // One entry per note, rests included. Notes past the cursor haven't been played yet.
-  cents: [4, -3, 7, 12, null, 18, 6, -2, 9],
-  cursor: 9.3,
+  timeSig: "4/4",
+  // One entry per note, rests included.
+  cents: [4, -3, 7, 12, null, 18, 6, -2, 9, 3, 11, -27, -8, 2, -1, 5],
+  /** For viewers who'd rather not see motion: the phrase stopped part-way through. */
+  stillCursor: 9.3,
 };
+const EXAMPLE_TIMELINE = buildTimeline(EXAMPLE.notes, EXAMPLE.timeSig);
+const PACING: DemoPacing = { bpm: 100, lead: 0.8, hold: 2.2 };
 
 /**
- * The entrance, in ms after the page appears. The brand and headline rise in while the
- * trumpets spring in from the sides. The music is laid down (the centre staff, then its
- * colour key, and each trumpet's staff out of its bell), then the sign-in choices pop in.
+ * The entrance, in ms after the page appears. The brand and headline rise in, the music
+ * is laid down left to right while the heralds step in from the sides, then the colour key
+ * fills in and the sign-in choices pop in. The heralds start playing once the staff is down.
  */
 const INTRO = {
   brand: 0,
   headline: 120,
   textFor: 800,
-  leftFanfare: 150,
-  rightFanfare: 350,
   music: 400,
   musicFor: 1600,
-  /** The colour key fills in once the centre staff is down. */
+  heralds: 500,
+  heraldsFor: 1100,
+  /** The colour key fills in once the staff is down. */
   legendFor: 600,
   signInFor: 500,
 };
 const LEGEND_AT = INTRO.music + INTRO.musicFor;
+const SIGN_IN_AT = LEGEND_AT + INTRO.legendFor;
+const PLAY_FROM = LEGEND_AT + 200;
 
-/** easeOutCubic. The fanfares rely on this exact curve to time their notes. */
+/** easeOutCubic. */
 const EASE_OUT = "cubic-bezier(0.33, 1, 0.68, 1)";
 /** easeInOutSine, for left-to-right reveals that should read at an even pace. */
 const EASE_IN_OUT = "cubic-bezier(0.45, 0, 0.55, 1)";
 /** easeOutBack: overshoots a little, so things spring into place. */
 const POP_EASING = "cubic-bezier(0.34, 1.56, 0.64, 1)";
 
-/** Signed-out home (mockup 4b): a title page with the sign-in choices set like an imprint. */
+/**
+ * Signed-out home: a title page whose example staff is played by two heralds, one at each
+ * end, in front of notation drifting up through a pool of light.
+ */
 export default function LandingPage() {
   const { user, loading } = useAuth();
   const location = useLocation();
@@ -72,28 +87,27 @@ export default function LandingPage() {
     return <Navigate to={from ?? "/generate"} replace />;
   }
 
-  // The sign-in choices wait until all the music and its colour key are down.
-  const signInAt = Math.max(
-    LEGEND_AT + INTRO.legendFor,
-    fanfareDrawnBy(INTRO.leftFanfare),
-    fanfareDrawnBy(INTRO.rightFanfare),
-  );
   const riseIn = (delay: number) => ({
     animation: `rise-in ${INTRO.textFor}ms ${EASE_OUT} ${delay}ms backwards`,
   });
 
   return (
     <Flex
+      position="relative"
       direction="column"
       align="center"
       minHeight="100dvh"
+      overflow="hidden"
       bg="bg"
       color="fg"
       pt={{ base: "xl", md: "2xl" }}
       pb={{ base: "lg", md: "xl" }}
     >
+      <NotationDrift />
+
       <Flex
         as="header"
+        position="relative"
         direction="column"
         align="center"
         gap="xs"
@@ -105,11 +119,9 @@ export default function LandingPage() {
         <Rule tone="accent" width="28px" />
       </Flex>
 
-      {/* The trumpets bracket the content in-flow, so they can't end up behind it. */}
-      <Fanfare side="left" phase={-2.06} delay={INTRO.leftFanfare} mt={{ base: "sm", md: 0 }} />
-
       <Flex
         as="main"
+        position="relative"
         flex="1"
         direction="column"
         align="center"
@@ -117,7 +129,7 @@ export default function LandingPage() {
         gap="xl"
         width="100%"
         px={{ base: "lg", md: "72px" }}
-        py={{ base: "md", md: 0 }}
+        py={{ base: "xl", md: "2xl" }}
       >
         <Heading
           as="h1"
@@ -131,38 +143,66 @@ export default function LandingPage() {
           Practice with Interactive Exercises and Live Feedback.
         </Heading>
         <ExamplePassage />
-        <SignInChoices appearAt={signInAt} />
+        <SignInChoices appearAt={SIGN_IN_AT} />
       </Flex>
-
-      <Fanfare side="right" phase={1.09} delay={INTRO.rightFanfare} />
     </Flex>
   );
 }
 
-/** The staff being scored, with the colour key beneath it. */
+/**
+ * The example staff with its colour key beneath, played on a loop. From laptop width up,
+ * a herald stands at each end of the staff, bell to the lines, and plays its half.
+ */
 function ExamplePassage() {
   // All four bars fit on one line from tablet width up; phones get two lines of two.
   const perLine = useBreakpointValue({ base: 2, md: 4 }, { ssr: false });
-  const scale = useBreakpointValue({ base: 0.8, md: 0.9, lg: 1.1 }, { ssr: false });
+  const scale = useBreakpointValue({ base: 0.8, md: 0.9, lg: 1 }, { ssr: false }) ?? 1;
+  const heralds = useBreakpointValue({ base: false, lg: true }, { ssr: false }) ?? false;
+  const demo = useDemo();
+
+  // Recoloured only when another note is played, so the staff isn't redrawn every frame.
+  const cents = useMemo(
+    () => EXAMPLE.cents.map((c, i) => (i < demo.played ? c : null)),
+    [demo.played],
+  );
+  const sounding = demo.sounding == null ? null : EXAMPLE_TIMELINE.notes[demo.sounding].midi;
+  const valves = sounding == null ? [] : valvesFor(sounding);
 
   return (
     <Flex direction="column" align="center" gap="sm" width="100%">
-      <Staff
-        notes={EXAMPLE.notes}
-        timeSig="4/4"
-        musicKey="C major"
-        cents={EXAMPLE.cents}
-        cursor={EXAMPLE.cursor}
-        measuresPerLine={perLine}
-        scale={scale}
-        maxWidth="1000px"
-        // Laid down left to right as the page arrives.
-        _motionSafe={{
-          animation: `wipe-in ${INTRO.musicFor}ms ${EASE_IN_OUT} ${INTRO.music}ms backwards`,
-        }}
-        role="img"
-        aria-label="An example exercise in C major. Each note played so far is coloured by how close it was to pitch."
-      />
+      <Box position="relative" width="100%" maxWidth={{ base: "1000px", lg: "780px" }}>
+        {heralds && (
+          <Herald
+            side="left"
+            playing={demo.player === "left"}
+            valves={demo.player === "left" ? valves : []}
+            staffScale={scale}
+          />
+        )}
+        <Staff
+          notes={EXAMPLE.notes}
+          timeSig={EXAMPLE.timeSig}
+          musicKey="C major"
+          cents={cents}
+          cursor={demo.cursor}
+          measuresPerLine={perLine}
+          scale={scale}
+          // Laid down left to right as the page arrives.
+          _motionSafe={{
+            animation: `wipe-in ${INTRO.musicFor}ms ${EASE_IN_OUT} ${INTRO.music}ms backwards`,
+          }}
+          role="img"
+          aria-label="An example exercise in C major. Each note is coloured by how close it was to pitch as it's played."
+        />
+        {heralds && (
+          <Herald
+            side="right"
+            playing={demo.player === "right"}
+            valves={demo.player === "right" ? valves : []}
+            staffScale={scale}
+          />
+        )}
+      </Box>
       {/* "In tune", then the colour bar from green to red, then "35¢ off". */}
       <IntonationLegend
         _motionSafe={{
@@ -171,6 +211,45 @@ function ExamplePassage() {
       />
     </Flex>
   );
+}
+
+/**
+ * Where the example's loop is now. It starts once the staff has been laid down; for
+ * viewers who'd rather not see motion it stays still, part-way through the phrase.
+ */
+function useDemo() {
+  const [reduceMotion] = useMediaQuery(["(prefers-reduced-motion: reduce)"], { ssr: false });
+  const seconds = useLoopClock(!reduceMotion);
+
+  if (reduceMotion) {
+    const played = Math.floor(EXAMPLE.stillCursor);
+    return { cursor: EXAMPLE.stillCursor, played, player: null, sounding: null };
+  }
+  return demoAt(EXAMPLE_TIMELINE, seconds - PLAY_FROM / 1000, PACING);
+}
+
+/**
+ * Seconds since mount, ticking at about 30 fps while `running`. A hidden tab's frames
+ * stop, so the clock picks up where it left off when the tab comes back.
+ */
+function useLoopClock(running: boolean) {
+  const [seconds, setSeconds] = useState(0);
+  const elapsed = useRef(0);
+
+  useEffect(() => {
+    if (!running) return;
+    let prev = performance.now();
+    let frame = requestAnimationFrame(function tick(now) {
+      frame = requestAnimationFrame(tick);
+      if (now - prev < 1000 / 30) return;
+      elapsed.current += Math.min(now - prev, 100) / 1000;
+      prev = now;
+      setSeconds(elapsed.current);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [running]);
+
+  return seconds;
 }
 
 /** The sign-in buttons. With motion allowed, they pop in at `appearAt` (ms after mount). */
@@ -245,307 +324,333 @@ function SignInChoices({ appearAt }: { appearAt: number }) {
   );
 }
 
-// ---- Backdrop -----------------------------------------------------------------------
+// ---- The heralds ----------------------------------------------------------------------
 //
-// Each fanfare is a full-width band: a trumpet juts in from one edge and a staff waves out
-// of its bell across the page. The drawing scales with the page width (down to a
-// minimum), so the trumpet stays pinned to its edge and the far end of the staff runs off
-// the other side.
+// Each herald is drawn in its own SVG, laid out in pixels from the point where the staff
+// starts (or, for the right one, ends) on its middle line. The trumpet comes up from the
+// lower corner, tilted, with its bell just short of the staff, and the staff's lines run
+// on into the bell. The right herald is the left one mirrored.
 
-const VIEW_W = 1800;
-/** The drawing's vertical extent; nothing is drawn above VIEW_TOP or below VIEW_TOP + VIEW_H. */
-const VIEW_TOP = 50;
-const VIEW_H = 170;
-const AXIS_Y = 130;
-const MOUTH_X = 340;
-/** Length of the staff, from the middle of the bell to the far edge. */
-const FLOW = VIEW_W - MOUTH_X;
-const WAVELENGTH = 520;
-/** How fast the music drifts out of the bell, in drawing units per second. */
-const DRIFT_SPEED = 20;
-/** Distance over which notes fade in as they leave the bell. */
-const EMERGE = 80;
-const BAR = 230;
-/** The melody is seven bars long, a little longer than the staff, and loops back into the bell. */
-const LOOP = 7 * BAR;
+/** How far the bell's centre sits from the end of the staff. */
+const BELL_GAP = 34;
+/** The trumpet's size against its drawing (which is about 1000 units long). */
+const TRUMPET_SCALE = 0.52;
+/** Tilt of the trumpet, bell up. */
+const TILT = -14;
+/** How much further it tips up while playing. */
+const LEAN = -2.5;
+/** The SVG's extent around that point: it reaches back over the trumpet, and a little onto the staff. */
+const HERALD_BOX = { left: 560, right: 20, top: 90, bottom: 270 };
+/** Where the staff's middle line is, from the top of `Staff`, in staff units (see `Staff`). */
+const STAFF_MIDDLE = 50;
+const STAFF_SPACE = 10;
 
-/** Pipes, as centrelines: the bell pipe, then the main tuning slide running into the lead pipe. */
-// They start well off the edge so the trumpet's overshoot on entry never shows their ends.
-const TUBES = ["M-120 130 H160", "M-120 162 H185 A13 13 0 0 1 185 188 H-120"];
-const VALVES = [20, 50, 80];
+/** The bell's centre in the trumpet drawing's own units. */
+const BELL_CENTRE = { x: 965, y: 84 };
 
-type BackdropNote = { u: number; step: number; kind: "q" | "h" | "8" };
-
-/**
- * `u` is the distance along the staff before any drift, `step` counts half-spaces up from
- * the middle line. Eighths ("8") come in beamed pairs, never two pairs back to back.
- */
-const MELODY: BackdropNote[] = [
-  { u: 60, step: -3, kind: "q" },
-  { u: 110, step: -1, kind: "8" },
-  { u: 150, step: 1, kind: "8" },
-  { u: 200, step: 0, kind: "q" },
-  { u: 295, step: 2, kind: "h" },
-  { u: 385, step: 3, kind: "8" },
-  { u: 425, step: 1, kind: "8" },
-  { u: 525, step: -1, kind: "q" },
-  { u: 575, step: 0, kind: "8" },
-  { u: 615, step: 2, kind: "8" },
-  { u: 665, step: 4, kind: "q" },
-  { u: 760, step: 3, kind: "h" },
-  { u: 860, step: 1, kind: "q" },
-  { u: 985, step: -2, kind: "8" },
-  { u: 1025, step: 0, kind: "8" },
-  { u: 1075, step: 2, kind: "q" },
-  { u: 1125, step: 1, kind: "q" },
-  { u: 1220, step: 3, kind: "h" },
-  { u: 1320, step: -1, kind: "q" },
-  { u: 1445, step: 2, kind: "8" },
-  { u: 1485, step: 0, kind: "8" },
-  { u: 1535, step: -2, kind: "q" },
-  { u: 1585, step: -1, kind: "q" },
-];
-const BARLINES = Array.from({ length: LOOP / BAR }, (_, i) => 20 + i * BAR);
-
-/**
- * Seconds of drift so far, ticking at about 30 fps. Holds still for viewers who ask for
- * reduced motion, and picks up where it left off when a hidden tab comes back.
- */
-function useDriftClock() {
-  const [reduceMotion] = useMediaQuery(["(prefers-reduced-motion: reduce)"], { ssr: false });
-  const [seconds, setSeconds] = useState(0);
-  const elapsed = useRef(0);
-
-  useEffect(() => {
-    if (reduceMotion) return;
-    let prev = performance.now();
-    let frame = requestAnimationFrame(function tick(now) {
-      frame = requestAnimationFrame(tick);
-      if (now - prev < 1000 / 30) return;
-      elapsed.current += Math.min(now - prev, 100) / 1000;
-      prev = now;
-      setSeconds(elapsed.current);
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [reduceMotion]);
-
-  return seconds;
-}
-
-// Entrance: the trumpet springs in from its edge, then its staff draws out of the bell and
-// each note appears as the line reaches it.
-const POP_MS = 700;
-const DRAW_MS = 1800;
-
-/** When a fanfare whose entrance starts at `delay` begins drawing its staff. */
-function fanfareDrawsAt(delay: number) {
-  return delay + POP_MS * 0.8;
-}
-
-/** When that fanfare's staff is fully drawn. */
-function fanfareDrawnBy(delay: number) {
-  return fanfareDrawsAt(delay) + DRAW_MS;
-}
-
-/**
- * Decorative band: a trumpet jutting in from `side`, playing a wavy staff across the page.
- * `phase` shifts the wave; pick one that keeps the staff away from the content mid-page.
- * `delay` (ms) is when its entrance starts.
- */
-function Fanfare({
+function Herald({
   side,
-  phase,
-  delay = 0,
-  ...rest
-}: FlexProps & { side: "left" | "right"; phase: number; delay?: number }) {
-  const drawStart = fanfareDrawsAt(delay);
-  /** When the drawing staff reaches `u`: the inverse of EASE_OUT. */
-  const drawnAt = (u: number) =>
-    `${Math.round(drawStart + DRAW_MS * (1 - Math.cbrt(1 - Math.min(1, u / FLOW))))}ms`;
-
-  const shift = useDriftClock() * DRIFT_SPEED;
-  const x = (u: number) => (side === "left" ? MOUTH_X + u : VIEW_W - MOUTH_X - u);
-  const staffAt = (u: number) => {
-    const t = u / FLOW;
-    // Leaves the bell level, then swings wider and opens up the further it travels. The
-    // wave travels outward as fast as the notes, so they ride it out of the bell.
-    const swing = 40 * (1 - Math.exp(-5 * t));
-    const mid = AXIS_Y + swing * Math.sin((2 * Math.PI * (u - shift)) / WAVELENGTH + phase);
-    return { mid, gap: 7 + 7 * t };
-  };
-  const drifted = (u: number) => (u + shift) % LOOP;
-
-  const lines = [-2, -1, 0, 1, 2].map((k) => {
-    const points: string[] = [];
-    for (let u = 0; u <= FLOW; u += 8) {
-      const { mid, gap } = staffAt(u);
-      points.push(`${x(u).toFixed(1)} ${(mid + k * gap).toFixed(1)}`);
-    }
-    return `M${points.join("L")}`;
-  });
-
-  const notes = MELODY.map((note, i) => {
-    // A beamed pair drifts as one, so it never splits across the loop.
-    const lead = note.kind === "8" && MELODY[i - 1]?.kind === "8" ? MELODY[i - 1] : note;
-    const u = drifted(lead.u) + note.u - lead.u;
-    const { mid, gap } = staffAt(u);
-    const opacity = Math.min(1, u / EMERGE);
-    return { ...note, cx: x(u), cy: mid - (note.step * gap) / 2, gap, opacity };
-  });
-
-  const fadeId = `tt-fanfare-${side}`;
-  const ink = `url(#${fadeId})`;
+  playing,
+  valves,
+  staffScale,
+}: {
+  side: "left" | "right";
+  playing: boolean;
+  /** The valves held down (1–3) for the note being played. */
+  valves: readonly number[];
+  staffScale: number;
+}) {
+  const { left, right, top, bottom } = HERALD_BOX;
+  const width = left + right;
+  const height = top + bottom;
+  const mirrored = side === "right";
+  const id = `tt-herald-${side}`;
 
   return (
-    <Flex
+    <chakra.svg
       aria-hidden
-      width="100%"
-      overflow="hidden"
+      position="absolute"
+      top={`${STAFF_MIDDLE * staffScale - top}px`}
+      // The point where the staff ends sits at x = 0 in the drawing.
+      left={mirrored ? `calc(100% - ${right}px)` : `${-left}px`}
+      width={`${width}px`}
+      height={`${height}px`}
+      viewBox={
+        mirrored ? `${-right} ${-top} ${width} ${height}` : `${-left} ${-top} ${width} ${height}`
+      }
+      overflow="visible"
       pointerEvents="none"
-      // Below the minimum width the drawing overflows; keep the trumpet's edge in view.
-      justify={side === "left" ? "flex-start" : "flex-end"}
       _motionSafe={{
-        "& .tt-trumpet": {
-          "--slide-from": side === "left" ? "-450px" : "450px",
-          animation: `slide-in ${POP_MS}ms ${POP_EASING} ${delay}ms backwards`,
-        },
-        "& .tt-staff-line": {
-          strokeDasharray: 1,
-          animation: `draw-on ${DRAW_MS}ms ${EASE_OUT} ${drawStart}ms backwards`,
-        },
-        // Each mark sets its own delay inline.
-        "& .tt-staff-mark": { animation: "appear 400ms ease-out backwards" },
+        // Steps in from its side of the page as the staff is laid down.
+        "--slide-from": mirrored ? "420px" : "-420px",
+        animation: `slide-in ${INTRO.heraldsFor}ms ${EASE_OUT} ${INTRO.heralds}ms backwards, appear ${INTRO.heraldsFor}ms ease-out ${INTRO.heralds}ms backwards`,
       }}
-      {...rest}
     >
-      <svg
-        viewBox={`0 ${VIEW_TOP} ${VIEW_W} ${VIEW_H}`}
-        style={{ display: "block", width: "100%", minWidth: "900px", flexShrink: 0 }}
-      >
-        <defs>
-          <linearGradient
-            id={fadeId}
-            gradientUnits="userSpaceOnUse"
-            x1={x(0)}
-            x2={x(FLOW)}
-            y1={0}
-            y2={0}
+      <g transform={mirrored ? "scale(-1 1)" : undefined}>
+        {/* The staff's lines carried on from its end into the bell. */}
+        <g stroke={roles.fg.subtle} strokeWidth={1}>
+          {[-2, -1, 0, 1, 2].map((k) => (
+            <line
+              key={k}
+              x1={-BELL_GAP}
+              x2={1}
+              y1={k * STAFF_SPACE * staffScale}
+              y2={k * STAFF_SPACE * staffScale}
+            />
+          ))}
+        </g>
+        {/* Tips up a little while it plays, about the bell, which stays on the staff. */}
+        <g
+          style={{
+            transform: playing ? `rotate(${LEAN}deg)` : "none",
+            transformBox: "view-box",
+            transformOrigin: `${-BELL_GAP}px 0px`,
+            transition: "transform 500ms ease-in-out",
+          }}
+        >
+          <g
+            transform={`translate(${-BELL_GAP} 0) rotate(${TILT}) scale(${TRUMPET_SCALE}) translate(${-BELL_CENTRE.x} ${-BELL_CENTRE.y})`}
           >
-            <stop offset="0" stopColor={roles.accent.solid} stopOpacity={0.75} />
-            <stop offset="0.45" stopColor={roles.accent.solid} stopOpacity={0.35} />
-            <stop offset="1" stopColor={roles.accent.solid} stopOpacity={0.1} />
-          </linearGradient>
-        </defs>
-
-        {/* Separate groups: the entrance's CSS transform would replace the mirroring. */}
-        <g className="tt-trumpet">
-          <g transform={side === "right" ? `translate(${VIEW_W} 0) scale(-1 1)` : undefined}>
-            <Trumpet />
+            <EtchedTrumpet id={id} valves={valves} />
+            {/* Rings of sound leaving the bell while it plays. */}
+            {playing && (
+              <ellipse
+                cx={BELL_CENTRE.x}
+                cy={BELL_CENTRE.y}
+                rx={14}
+                ry={106}
+                fill="none"
+                stroke={roles.engraving.hatch}
+                strokeWidth={2.6}
+                strokeDasharray="6 6"
+                style={{
+                  opacity: 0,
+                  transformBox: "fill-box",
+                  transformOrigin: "0% 50%",
+                  animation: "ring-out 1.1s ease-out infinite",
+                }}
+              />
+            )}
           </g>
         </g>
-
-        <g stroke={ink} strokeWidth={1.1} fill="none">
-          {lines.map((d, k) => (
-            <path key={k} d={d} pathLength={1} className="tt-staff-line" />
-          ))}
-          {BARLINES.map((bar) => {
-            const u = drifted(bar);
-            const { mid, gap } = staffAt(u);
-            return (
-              <line
-                key={bar}
-                x1={x(u)}
-                x2={x(u)}
-                y1={mid - 2 * gap}
-                y2={mid + 2 * gap}
-                opacity={Math.min(1, u / EMERGE)}
-                className="tt-staff-mark"
-                style={{ animationDelay: drawnAt(bar) }}
-              />
-            );
-          })}
-        </g>
-
-        <g stroke={ink} fill={ink}>
-          {notes.map((n, i) => {
-            const pairedWith =
-              n.kind === "8" ? (notes[i - 1]?.kind === "8" ? i - 1 : i + 1) : undefined;
-            // Stems go up below the middle line and down from it; a beamed pair agrees.
-            const step = pairedWith != null ? (n.step + notes[pairedWith].step) / 2 : n.step;
-            const up = step < 0;
-            const rx = n.gap * 0.66;
-            const stemX = n.cx + (up ? rx : -rx) * 0.9;
-            const stemEnd = n.cy + (up ? -3.5 : 3.5) * n.gap;
-            const beamTo = n.kind === "8" && pairedWith === i + 1 ? notes[i + 1] : undefined;
-            return (
-              <g
-                key={n.u}
-                opacity={n.opacity}
-                className="tt-staff-mark"
-                style={{ animationDelay: drawnAt(n.u) }}
-              >
-                <ellipse
-                  cx={n.cx}
-                  cy={n.cy}
-                  rx={rx}
-                  ry={n.gap * 0.46}
-                  transform={`rotate(-20 ${n.cx} ${n.cy})`}
-                  fill={n.kind === "h" ? "none" : undefined}
-                  strokeWidth={n.kind === "h" ? 1.6 : 0}
-                />
-                <line x1={stemX} x2={stemX} y1={n.cy} y2={stemEnd} strokeWidth={1.2} />
-                {beamTo && (
-                  <line
-                    x1={stemX}
-                    y1={stemEnd}
-                    x2={beamTo.cx + (up ? rx : -rx) * 0.9}
-                    y2={beamTo.cy + (up ? -3.5 : 3.5) * beamTo.gap}
-                    strokeWidth={n.gap * 0.45}
-                  />
-                )}
-              </g>
-            );
-          })}
-        </g>
-      </svg>
-    </Flex>
+      </g>
+    </chakra.svg>
   );
 }
 
-/** A trumpet in profile, bell facing right, drawn as a brass line engraving. */
-function Trumpet() {
-  const brass = roles.accent.solid;
+// The trumpet, in its own units: bell to the right with its centre at BELL_CENTRE, the
+// mouthpiece at the far left, valves up.
+
+/** Pipes as centrelines, with their bore. */
+const PIPES = [
+  { d: "M118 206 L260 200 H690", bore: 12 },
+  { d: "M690 200 A27 27 0 0 1 690 254 H494", bore: 12 },
+  { d: "M175 84 A40 40 0 0 0 175 164 H354", bore: 12 },
+  { d: "M354 222 H300 A16 16 0 0 0 300 254 H354", bore: 12 },
+  { d: "M416 270 V290 A8 8 0 0 0 432 290 V270", bore: 9 },
+  { d: "M466 270 V302 A10 10 0 0 0 486 302 V270", bore: 10 },
+];
+const BELL_PIPE = "M175 84 H600";
+/** Hatching along the underside of each pipe, and on the mouthpiece. */
+const PIPE_HATCHING = [
+  "M120 209.4 L260 203.4 H690 M120 211.4 L260 205.4 H690",
+  "M690 257.4 H494 M690 259.4 H494",
+  "M720.4 227 A30.4 30.4 0 0 1 690 257.4 M722.4 227 A32.4 32.4 0 0 1 690 259.4",
+  "M175 167.4 H354 M175 169.4 H354",
+  "M131.6 124 A43.4 43.4 0 0 0 175 167.4",
+  "M354 257.4 H300 M354 259.4 H300",
+  "M33 216 C42 213 48 210 58 209",
+];
+const VALVE_X = [372, 424, 476];
+/** How far a valve's button travels when pressed. */
+const VALVE_TRAVEL = 8;
+const BELL = "M590 77.5 C760 77.5 880 60 965 -21 L965 189 C880 108 760 90.5 590 90.5 Z";
+/** Hatching that shades the underside of the flare, and a little on its top. */
+const BELL_HATCHING = [
+  "M620 92 C760 94 880 112 962 176",
+  "M650 91.4 C775 93.4 885 108 962 162",
+  "M690 90.8 C795 92.6 893 104 962 148",
+  "M740 90.4 C820 92 905 100 962 134",
+  "M800 90 C860 91 920 96 962 120",
+];
+const BELL_TOP_HATCHING = ["M790 76 C860 72 920 52 962 10", "M860 74 C905 68 935 54 962 34"];
+
+/**
+ * A trumpet drawn as an etching: brass line work over a pale wash, hatched on its
+ * shadowed sides. `valves` lists the valves held down (1–3). `id` prefixes the hatch
+ * patterns, so it must be unique on the page.
+ */
+function EtchedTrumpet({ id, valves }: { id: string; valves: readonly number[] }) {
+  const { line, hatch, deep, wash } = roles.engraving;
   const paper = roles.bg.DEFAULT;
+
   return (
-    <g stroke={brass} strokeWidth={1.4} fill={paper}>
-      {/* A brass stroke with a paper core draws each pipe as a hollow tube. */}
+    <g>
+      <defs>
+        <pattern
+          id={`${id}-hatch`}
+          patternUnits="userSpaceOnUse"
+          width={5}
+          height={5}
+          patternTransform="rotate(45)"
+        >
+          <line x1={0} y1={0} x2={0} y2={5} stroke={line} strokeWidth={1.3} />
+        </pattern>
+        <pattern
+          id={`${id}-cross`}
+          patternUnits="userSpaceOnUse"
+          width={4}
+          height={4}
+          patternTransform="rotate(-45)"
+        >
+          <line x1={0} y1={0} x2={0} y2={4} stroke={deep} strokeWidth={1.3} />
+        </pattern>
+      </defs>
+
+      {/* Each pipe: a line-coloured stroke with a wash down its middle draws it as a tube. */}
       <g fill="none">
-        {TUBES.map((d) => (
-          <path key={d} d={d} strokeWidth={12} />
+        {PIPES.map(({ d, bore }) => (
+          <path key={d} d={d} stroke={line} strokeWidth={bore + 4.4} />
         ))}
-        {TUBES.map((d) => (
-          <path key={`core-${d}`} d={d} strokeWidth={9.2} stroke={paper} />
+        {PIPES.map(({ d, bore }) => (
+          <path key={`wash-${d}`} d={d} stroke={wash} strokeWidth={bore} />
+        ))}
+        <path d={PIPE_HATCHING.join(" ")} stroke={hatch} strokeWidth={1.4} />
+      </g>
+
+      <g stroke={line} strokeWidth={2.4} fill={wash}>
+        {/* Braces, the mouthpiece and its receiver. */}
+        <rect x={556} y={91} width={7} height={102} />
+        <rect x={250} y={91} width={6} height={66} />
+        <path d="M22 190 C40 190 46 198 56 201 L96 203 L96 209 L56 211 C46 214 40 222 22 222 Z" />
+        <ellipse cx={22} cy={206} rx={4} ry={16} />
+        <rect x={92} y={198} width={28} height={16} rx={2} />
+
+        {VALVE_X.map((cx, i) => (
+          <g key={cx}>
+            {/* The button and stem, which ride down into the cap when the valve's pressed. */}
+            <g
+              style={{
+                transform: valves.includes(i + 1) ? `translateY(${VALVE_TRAVEL}px)` : "none",
+                transition: "transform 90ms ease-out",
+              }}
+            >
+              <line x1={cx} x2={cx} y1={36} y2={104} />
+              <rect x={cx - 16} y={22} width={32} height={12} rx={6} fill={paper} />
+            </g>
+            <rect x={cx - 20} y={100} width={40} height={10} rx={2} />
+            <rect x={cx - 18} y={110} width={36} height={150} />
+            <path
+              d={`M${cx + 6} 112 V258 M${cx + 9} 112 V258 M${cx + 12} 112 V258`}
+              stroke={hatch}
+              strokeWidth={1.4}
+            />
+            <rect x={cx - 19} y={120} width={38} height={7} rx={1.5} />
+            <rect x={cx - 19} y={240} width={38} height={7} rx={1.5} />
+            <rect x={cx - 15} y={260} width={30} height={11} rx={3} />
+          </g>
         ))}
       </g>
-      {VALVES.map((cx) => (
-        <g key={cx}>
-          <line x1={cx} x2={cx} y1={84} y2={96} />
-          <rect x={cx - 9} y={78} width={18} height={6} rx={3} fill={roles.accent.subtle} />
-          <rect x={cx - 12} y={96} width={24} height={6} rx={1.5} />
-          <rect x={cx - 10} y={102} width={20} height={102} />
-          <rect x={cx - 8} y={204} width={16} height={8} rx={2} />
-        </g>
-      ))}
-      <path d="M150 124 C240 124 300 112 340 60 L340 200 C300 148 240 136 150 136 Z" />
-      {/* Sheen along the top of the flare. */}
-      <path
-        d="M168 127.5 C244 127.5 298 118 331 78"
-        fill="none"
-        stroke={roles.accent.muted}
-        strokeWidth={1.2}
-      />
-      <ellipse cx={MOUTH_X} cy={AXIS_Y} rx={11} ry={70} fill={roles.accent.subtle} />
-      <ellipse cx={MOUTH_X} cy={AXIS_Y} rx={14} ry={73} fill="none" />
+
+      {/* The bell pipe passes in front of the valve stems. */}
+      <path d={BELL_PIPE} fill="none" stroke={line} strokeWidth={16.4} />
+      <path d={BELL_PIPE} fill="none" stroke={wash} strokeWidth={12} />
+      <path d="M175 87.4 H600 M175 89.4 H600" fill="none" stroke={hatch} strokeWidth={1.4} />
+
+      <path d={BELL} fill={wash} stroke={line} strokeWidth={2.4} />
+      <g fill="none" stroke={hatch} strokeWidth={1.5}>
+        {BELL_HATCHING.map((d) => (
+          <path key={d} d={d} />
+        ))}
+        {BELL_TOP_HATCHING.map((d) => (
+          <path key={d} d={d} opacity={0.5} />
+        ))}
+      </g>
+      {/* Into the bell: hatched, and cross-hatched deeper in. */}
+      <ellipse cx={965} cy={84} rx={12} ry={104} fill={wash} />
+      <ellipse cx={965} cy={84} rx={12} ry={104} fill={`url(#${id}-hatch)`} />
+      <ellipse cx={970} cy={84} rx={7} ry={78} fill={`url(#${id}-cross)`} />
+      <ellipse cx={965} cy={84} rx={14} ry={106} fill="none" stroke={line} strokeWidth={3.6} />
+      <ellipse cx={965} cy={84} rx={17.5} ry={109.5} fill="none" stroke={line} strokeWidth={1.5} />
     </g>
+  );
+}
+
+// ---- The backdrop ---------------------------------------------------------------------
+
+/**
+ * Notation drifting up the page, as Bravura glyphs: `x` across the page (%), glyph `size`
+ * (px), `opacity`, seconds to `rise` the full height and to `sway` once, and where in its
+ * rise it `starts` (a negative delay, in seconds). Big glyphs are faint and slow, small
+ * ones clearer and quicker, so they read as near and far.
+ */
+const DRIFT = [
+  { glyph: "", x: 4, size: 40, opacity: 0.16, rise: 34, sway: 9, starts: -2 },
+  { glyph: "", x: 10, size: 22, opacity: 0.28, rise: 22, sway: 6, starts: -9 },
+  { glyph: "", x: 16, size: 30, opacity: 0.2, rise: 28, sway: 8, starts: -15 },
+  { glyph: "", x: 22, size: 18, opacity: 0.3, rise: 19, sway: 5, starts: -4 },
+  { glyph: "", x: 28, size: 52, opacity: 0.12, rise: 40, sway: 11, starts: -22 },
+  { glyph: "", x: 34, size: 20, opacity: 0.26, rise: 21, sway: 6, starts: -13 },
+  { glyph: "", x: 40, size: 26, opacity: 0.22, rise: 25, sway: 7, starts: -1 },
+  { glyph: "", x: 46, size: 60, opacity: 0.1, rise: 44, sway: 12, starts: -30 },
+  { glyph: "", x: 52, size: 18, opacity: 0.3, rise: 20, sway: 5, starts: -7 },
+  { glyph: "", x: 58, size: 32, opacity: 0.18, rise: 29, sway: 8, starts: -18 },
+  { glyph: "", x: 64, size: 22, opacity: 0.26, rise: 23, sway: 6, starts: -3 },
+  { glyph: "", x: 70, size: 46, opacity: 0.13, rise: 38, sway: 10, starts: -26 },
+  { glyph: "", x: 76, size: 20, opacity: 0.28, rise: 21, sway: 6, starts: -11 },
+  { glyph: "", x: 82, size: 30, opacity: 0.2, rise: 27, sway: 7, starts: -6 },
+  { glyph: "", x: 88, size: 54, opacity: 0.12, rise: 42, sway: 11, starts: -16 },
+  { glyph: "", x: 94, size: 22, opacity: 0.26, rise: 22, sway: 6, starts: -14 },
+  { glyph: "", x: 7, size: 26, opacity: 0.22, rise: 26, sway: 7, starts: -19 },
+  { glyph: "", x: 48, size: 24, opacity: 0.24, rise: 24, sway: 7, starts: -10 },
+  { glyph: "", x: 72, size: 18, opacity: 0.3, rise: 19, sway: 5, starts: -17 },
+  { glyph: "", x: 91, size: 28, opacity: 0.2, rise: 30, sway: 8, starts: -24 },
+];
+
+/**
+ * Behind everything: a warm pool of light behind the title, the edges a shade darker, and
+ * notation drifting up through it like dust in a spotlight. The notation is left out for
+ * viewers who'd rather not see motion.
+ */
+function NotationDrift() {
+  return (
+    <Box aria-hidden position="absolute" inset={0} pointerEvents="none" overflow="hidden">
+      <Box
+        position="absolute"
+        inset={0}
+        bgImage={`radial-gradient(ellipse 52% 46% at 50% 46%, ${roles.spotlight.core} 0%, ${roles.spotlight.edge} 55%, transparent 80%)`}
+      />
+      <Box
+        position="absolute"
+        inset={0}
+        bgImage={`radial-gradient(ellipse 80% 75% at 50% 50%, transparent 60%, ${roles.spotlight.vignette} 100%)`}
+      />
+      {DRIFT.map((d, i) => (
+        <Box
+          key={i}
+          position="absolute"
+          left={`${d.x}%`}
+          bottom="-90px"
+          display="none"
+          _motionSafe={{
+            display: "block",
+            animation: `float-up ${d.rise}s linear ${d.starts}s infinite`,
+          }}
+        >
+          <Text
+            as="span"
+            display="inline-block"
+            fontFamily="Bravura"
+            fontSize={`${d.size}px`}
+            lineHeight={1}
+            color="accent.fg"
+            opacity={d.opacity}
+            animation={`sway ${d.sway}s ease-in-out infinite`}
+          >
+            {d.glyph}
+          </Text>
+        </Box>
+      ))}
+    </Box>
   );
 }

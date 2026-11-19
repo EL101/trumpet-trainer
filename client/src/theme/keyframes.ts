@@ -35,6 +35,28 @@ export const keyframes = defineKeyframes({
     from: { clipPath: "inset(-50% 100% -50% 0)" },
     to: { clipPath: "inset(-50% 0 -50% 0)" },
   },
+  /**
+   * Drift up the full height of the screen, fading in at the bottom and out at the top.
+   * Loop it (`linear infinite`) with a negative delay so it starts part-way up.
+   */
+  "float-up": {
+    "0%": { transform: "translateY(0)", opacity: 0 },
+    "10%, 82%": { opacity: 1 },
+    "100%": { transform: "translateY(calc(-100dvh - 180px))", opacity: 0 },
+  },
+  /** Sway from side to side with a little tilt, for something drifting. Loop it. */
+  sway: {
+    "0%, 100%": { transform: "translateX(-16px) rotate(-7deg)" },
+    "50%": { transform: "translateX(16px) rotate(7deg)" },
+  },
+  /**
+   * A ring of sound leaving a trumpet's bell: spreads out from its left edge and fades.
+   * Give it `transform-box: fill-box` and `transform-origin: 0% 50%`, and loop it.
+   */
+  "ring-out": {
+    from: { transform: "none", opacity: 0.8 },
+    to: { transform: "translateX(40px) scale(1.4)", opacity: 0 },
+  },
   /** Waiting: dim and brighten, for placeholders standing in for content. Loop it. */
   pulse: { "50%": { opacity: 0.45 } },
   /**
