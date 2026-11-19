@@ -271,7 +271,8 @@ lower (`CONCERT_OFFSET` in `lib/tuning.ts`). The trumpet samples are in
 - **Use text styles, not ad-hoc font sizes:**
   `<Text textStyle="heading.md">`, `<Heading textStyle="display.md">`, `<Text textStyle="kicker">`.
   Between the sizes: `subheading` (a row's label, a size up from `heading.sm`) and
-  `small` (body a size down, for short lines in a list).
+  `small` (body a size down, for short lines in a list). Music glyphs set as text
+  (decoration, not the staff) use `notation.sm`–`xl`, in Bravura (the `music` font).
 - **Spacing:** the design system's scale is `xs`, `sm`, `md`, `lg`, `xl`, `2xl`
   (4.6px through 36.8px). Chakra's numeric scale (`p={4}`) still works, but it's what
   the old pages use.

@@ -36,13 +36,15 @@ export const keyframes = defineKeyframes({
     to: { clipPath: "inset(-50% 0 -50% 0)" },
   },
   /**
-   * Drift up the full height of the screen, fading in at the bottom and out at the top.
+   * Drift up the full height of the box it's in, from just below its bottom to past its
+   * top, fading in and out on the way. Put it inside a box with `container-type: size`,
+   * whose height (`cqh`) sets the climb; outside one it climbs the height of the screen.
    * Loop it (`linear infinite`) with a negative delay so it starts part-way up.
    */
   "float-up": {
     "0%": { transform: "translateY(0)", opacity: 0 },
     "10%, 82%": { opacity: 1 },
-    "100%": { transform: "translateY(calc(-100dvh - 180px))", opacity: 0 },
+    "100%": { transform: "translateY(calc(-100cqh - 180px))", opacity: 0 },
   },
   /** Sway from side to side with a little tilt, for something drifting. Loop it. */
   sway: {

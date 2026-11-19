@@ -11,6 +11,7 @@ import {
   useMediaQuery,
 } from "@chakra-ui/react";
 import { FirebaseError } from "firebase/app";
+import { Pause, Play } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { signInAsGuest, signInWithGoogle } from "@/auth/auth";
@@ -76,6 +77,9 @@ const POP_EASING = "cubic-bezier(0.34, 1.56, 0.64, 1)";
 export default function LandingPage() {
   const { user, loading } = useAuth();
   const location = useLocation();
+  const [reduceMotion] = useMediaQuery(["(prefers-reduced-motion: reduce)"], { ssr: false });
+  // Stops the example's loop and the drifting notation (WCAG 2.2.2: pause, stop, hide).
+  const [motionPaused, setMotionPaused] = useState(false);
 
   if (loading) {
     return (
@@ -106,7 +110,7 @@ export default function LandingPage() {
       pt={{ base: "xl", md: "2xl" }}
       pb={{ base: "lg", md: "xl" }}
     >
-      <NotationDrift />
+      <NotationDrift paused={motionPaused} />
 
       <Flex
         as="header"
@@ -145,23 +149,42 @@ export default function LandingPage() {
         >
           Practice with Interactive Exercises and Live Feedback.
         </Heading>
-        <ExamplePassage />
+        <ExamplePassage paused={motionPaused} />
         <SignInChoices appearAt={SIGN_IN_AT} />
       </Flex>
+
+      {/* The loop and the drift go on as long as the page is open, so they can be
+          stopped. Nothing moves for viewers who ask for reduced motion, so it's not
+          offered to them. */}
+      {!reduceMotion && (
+        <Button
+          variant="ghost"
+          size="sm"
+          position="absolute"
+          bottom={{ base: "sm", md: "lg" }}
+          right={{ base: "sm", md: "lg" }}
+          onClick={() => setMotionPaused((paused) => !paused)}
+          _motionSafe={{ animation: `appear 400ms ease-out ${SIGN_IN_AT}ms backwards` }}
+        >
+          {motionPaused ? <Play aria-hidden /> : <Pause aria-hidden />}
+          {motionPaused ? "Play motion" : "Pause motion"}
+        </Button>
+      )}
     </Flex>
   );
 }
 
 /**
  * The example staff with its colour key beneath, played on a loop. From laptop width up,
- * a herald stands at each end of the staff, bell to the lines, and plays its half.
+ * a herald stands at each end of the staff, bell to the lines, and plays its half. While
+ * `paused`, it stands still part-way through, as it does for reduced motion.
  */
-function ExamplePassage() {
+function ExamplePassage({ paused }: { paused: boolean }) {
   // All four bars fit on one line from tablet width up; phones get two lines of two.
   const perLine = useBreakpointValue({ base: 2, md: 4 }, { ssr: false });
   const scale = useBreakpointValue({ base: 0.8, md: 0.9, lg: 1 }, { ssr: false }) ?? 1;
   const heralds = useBreakpointValue({ base: false, lg: true }, { ssr: false }) ?? false;
-  const demo = useDemo();
+  const demo = useDemo(paused);
 
   // Recoloured only when another note is played, so the staff isn't redrawn every frame.
   const cents = useMemo(
@@ -220,11 +243,12 @@ function ExamplePassage() {
  * Where the example's loop is now. It starts once the staff has been laid down; for
  * viewers who'd rather not see motion it stays still, part-way through the phrase.
  */
-function useDemo() {
+function useDemo(paused: boolean) {
   const [reduceMotion] = useMediaQuery(["(prefers-reduced-motion: reduce)"], { ssr: false });
-  const seconds = useLoopClock(!reduceMotion);
+  const still = reduceMotion || paused;
+  const seconds = useLoopClock(!still);
 
-  if (reduceMotion) {
+  if (still) {
     const played = Math.floor(EXAMPLE.stillCursor);
     return { cursor: EXAMPLE.stillCursor, played, player: null, sounding: null };
   }
@@ -232,8 +256,9 @@ function useDemo() {
 }
 
 /**
- * Seconds since mount, ticking at about 30 fps while `running`. A hidden tab's frames
- * stop, so the clock picks up where it left off when the tab comes back.
+ * Seconds of running time, re-rendering at about 30 fps while `running`. Time a hidden
+ * tab spends away doesn't count: the clock picks up where it left off when the tab comes
+ * back, and a stop and restart (`running` false, then true) does the same.
  */
 function useLoopClock(running: boolean) {
   const [seconds, setSeconds] = useState(0);
@@ -242,14 +267,24 @@ function useLoopClock(running: boolean) {
   useEffect(() => {
     if (!running) return;
     let prev = performance.now();
+    // Frames stop while the tab is hidden; start counting afresh when it's shown again.
+    const onVisibility = () => {
+      if (!document.hidden) prev = performance.now();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
     let frame = requestAnimationFrame(function tick(now) {
       frame = requestAnimationFrame(tick);
       if (now - prev < 1000 / 30) return;
-      elapsed.current += Math.min(now - prev, 100) / 1000;
+      // Every moment the page was shown counts, however far apart the frames come, so a
+      // slow device plays at the right tempo. A second at most, in case a stall slips by.
+      elapsed.current += Math.min(now - prev, 1000) / 1000;
       prev = now;
       setSeconds(elapsed.current);
     });
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [running]);
 
   return seconds;
@@ -603,42 +638,53 @@ function EtchedTrumpet({ id, valves }: { id: string; valves: readonly number[] }
 // ---- The backdrop ---------------------------------------------------------------------
 
 /**
- * Notation drifting up the page, as Bravura glyphs: `x` across the page (%), glyph `size`
- * (px), `opacity`, seconds to `rise` the full height and to `sway` once, and where in its
- * rise it `starts` (a negative delay, in seconds). Big glyphs are faint and slow, small
- * ones clearer and quicker, so they read as near and far.
+ * Notation drifting up the page, as Bravura glyphs (SMuFL code points): `x` across the
+ * page (%), glyph `size` (a `notation.*` text style), `opacity`, seconds to `rise` the
+ * full height and to `sway` once, and where in its rise it `starts` (a negative delay, in
+ * seconds). Big glyphs are faint and slow, small ones clearer and quicker, so they read
+ * as near and far.
  */
 const DRIFT = [
-  { glyph: "", x: 4, size: 40, opacity: 0.16, rise: 34, sway: 9, starts: -2 },
-  { glyph: "", x: 10, size: 22, opacity: 0.28, rise: 22, sway: 6, starts: -9 },
-  { glyph: "", x: 16, size: 30, opacity: 0.2, rise: 28, sway: 8, starts: -15 },
-  { glyph: "", x: 22, size: 18, opacity: 0.3, rise: 19, sway: 5, starts: -4 },
-  { glyph: "", x: 28, size: 52, opacity: 0.12, rise: 40, sway: 11, starts: -22 },
-  { glyph: "", x: 34, size: 20, opacity: 0.26, rise: 21, sway: 6, starts: -13 },
-  { glyph: "", x: 40, size: 26, opacity: 0.22, rise: 25, sway: 7, starts: -1 },
-  { glyph: "", x: 46, size: 60, opacity: 0.1, rise: 44, sway: 12, starts: -30 },
-  { glyph: "", x: 52, size: 18, opacity: 0.3, rise: 20, sway: 5, starts: -7 },
-  { glyph: "", x: 58, size: 32, opacity: 0.18, rise: 29, sway: 8, starts: -18 },
-  { glyph: "", x: 64, size: 22, opacity: 0.26, rise: 23, sway: 6, starts: -3 },
-  { glyph: "", x: 70, size: 46, opacity: 0.13, rise: 38, sway: 10, starts: -26 },
-  { glyph: "", x: 76, size: 20, opacity: 0.28, rise: 21, sway: 6, starts: -11 },
-  { glyph: "", x: 82, size: 30, opacity: 0.2, rise: 27, sway: 7, starts: -6 },
-  { glyph: "", x: 88, size: 54, opacity: 0.12, rise: 42, sway: 11, starts: -16 },
-  { glyph: "", x: 94, size: 22, opacity: 0.26, rise: 22, sway: 6, starts: -14 },
-  { glyph: "", x: 7, size: 26, opacity: 0.22, rise: 26, sway: 7, starts: -19 },
-  { glyph: "", x: 48, size: 24, opacity: 0.24, rise: 24, sway: 7, starts: -10 },
-  { glyph: "", x: 72, size: 18, opacity: 0.3, rise: 19, sway: 5, starts: -17 },
-  { glyph: "", x: 91, size: 28, opacity: 0.2, rise: 30, sway: 8, starts: -24 },
-];
+  { glyph: "\uE050", x: 4, size: "lg", opacity: 0.16, rise: 34, sway: 9, starts: -2 },
+  { glyph: "\uE1D7", x: 10, size: "sm", opacity: 0.28, rise: 22, sway: 6, starts: -9 },
+  { glyph: "\uE1D9", x: 16, size: "md", opacity: 0.2, rise: 28, sway: 8, starts: -15 },
+  { glyph: "\uE1D5", x: 22, size: "sm", opacity: 0.3, rise: 19, sway: 5, starts: -4 },
+  { glyph: "\uE1D3", x: 28, size: "xl", opacity: 0.12, rise: 40, sway: 11, starts: -22 },
+  { glyph: "\uE262", x: 34, size: "sm", opacity: 0.26, rise: 21, sway: 6, starts: -13 },
+  { glyph: "\uE1D7", x: 40, size: "md", opacity: 0.22, rise: 25, sway: 7, starts: -1 },
+  { glyph: "\uE050", x: 46, size: "xl", opacity: 0.1, rise: 44, sway: 12, starts: -30 },
+  { glyph: "\uE260", x: 52, size: "sm", opacity: 0.3, rise: 20, sway: 5, starts: -7 },
+  { glyph: "\uE1D9", x: 58, size: "md", opacity: 0.18, rise: 29, sway: 8, starts: -18 },
+  { glyph: "\uE1D5", x: 64, size: "sm", opacity: 0.26, rise: 23, sway: 6, starts: -3 },
+  { glyph: "\uE1D3", x: 70, size: "lg", opacity: 0.13, rise: 38, sway: 10, starts: -26 },
+  { glyph: "\uE261", x: 76, size: "sm", opacity: 0.28, rise: 21, sway: 6, starts: -11 },
+  { glyph: "\uE1D7", x: 82, size: "md", opacity: 0.2, rise: 27, sway: 7, starts: -6 },
+  { glyph: "\uE062", x: 88, size: "xl", opacity: 0.12, rise: 42, sway: 11, starts: -16 },
+  { glyph: "\uE1D9", x: 94, size: "sm", opacity: 0.26, rise: 22, sway: 6, starts: -14 },
+  { glyph: "\uE260", x: 7, size: "md", opacity: 0.22, rise: 26, sway: 7, starts: -19 },
+  { glyph: "\uE4E5", x: 48, size: "md", opacity: 0.24, rise: 24, sway: 7, starts: -10 },
+  { glyph: "\uE262", x: 72, size: "sm", opacity: 0.3, rise: 19, sway: 5, starts: -17 },
+  { glyph: "\uE1D5", x: 91, size: "md", opacity: 0.2, rise: 30, sway: 8, starts: -24 },
+] as const;
 
 /**
  * Behind everything: a warm pool of light behind the title, the edges a shade darker, and
- * notation drifting up through it like dust in a spotlight. The notation is left out for
- * viewers who'd rather not see motion.
+ * notation drifting up through it like dust in a spotlight. While `paused`, the notation
+ * stops where it is. It's left out for viewers who'd rather not see motion.
  */
-function NotationDrift() {
+function NotationDrift({ paused }: { paused: boolean }) {
+  const playState = paused ? "paused" : "running";
   return (
-    <Box aria-hidden position="absolute" inset={0} pointerEvents="none" overflow="hidden">
+    <Box
+      aria-hidden
+      position="absolute"
+      inset={0}
+      pointerEvents="none"
+      overflow="hidden"
+      // `float-up` climbs the height of this box (`cqh`), the whole page, not just the
+      // screen, so the notation passes the title even when the page scrolls.
+      css={{ containerType: "size" }}
+    >
       <Box
         position="absolute"
         inset={0}
@@ -659,17 +705,17 @@ function NotationDrift() {
           _motionSafe={{
             display: "block",
             animation: `float-up ${d.rise}s linear ${d.starts}s infinite`,
+            animationPlayState: playState,
           }}
         >
           <Text
             as="span"
             display="inline-block"
-            fontFamily="Bravura"
-            fontSize={`${d.size}px`}
-            lineHeight={1}
+            textStyle={`notation.${d.size}`}
             color="accent.fg"
             opacity={d.opacity}
             animation={`sway ${d.sway}s ease-in-out infinite`}
+            animationPlayState={playState}
           >
             {d.glyph}
           </Text>
