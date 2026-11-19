@@ -73,6 +73,7 @@ import { getKeySig } from "@/utils/generateMusic";
 import { getHistoryEntry } from "@/utils/history";
 import { getLibraryEntry } from "@/utils/library";
 import { lipSlurFingerings } from "@/utils/lipSlurs";
+import { useStreak } from "@/streak/useStreak";
 import { saveScore, scoreLimitOf, unsavedNotice } from "@/utils/scores";
 import type { MusicInfo } from "@/schema";
 
@@ -231,6 +232,8 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
   // The run just scored, marked on the staff until the next one starts.
   const [run, setRun] = useState<(ScoredRun & { tempo: number; unsaved?: string }) | null>(null);
   const latest = useLatestScore(exercise.exerciseId);
+  // A saved run can start or extend the streak the sidebar shows once the player is left.
+  const { refresh: refreshStreak } = useStreak();
   // The score card, open on the run just played or on the last one saved.
   const [card, setCard] = useState<{ open: boolean; showing: "run" | "saved" }>({
     open: false,
@@ -363,7 +366,11 @@ function Player({ exercise, from }: { exercise: MusicInfo; from: PracticeOrigin 
     setRun(played);
     openCard("run");
     saveScore(exercise.exerciseId, tempo, scored, user)
-      .then((saved) => saved && latest.setScore(saved))
+      .then((saved) => {
+        if (!saved) return;
+        latest.setScore(saved);
+        refreshStreak();
+      })
       .catch((error) => {
         if (!scoreLimitOf(error)) console.error("save score error:", error);
         const { title, description, card } = unsavedNotice(error);

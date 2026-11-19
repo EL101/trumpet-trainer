@@ -3,6 +3,7 @@ import { barLength, notate } from "./notate";
 import { LONG_TONE_MELODY, melody, RANDOM_MELODY } from "./melody";
 import { figureLength, randomFigure, rhythmFor } from "./rhythm";
 import type { Difficulty, Key, Range } from "@/schema";
+import { toSpan, type NoteSpan } from "@/lib/noteRanges";
 
 export const PRACTICAL_MAJOR = [
   "C",
@@ -58,26 +59,14 @@ const MINOR_TO_MAJOR: Record<string, string> = {
   Gb: "A", // Bbb → A (enharmonic)
 };
 
-/** Lowest and highest written note for each range. */
-export const RANGE_NOTES: Record<Range, readonly [string, string]> = {
-  LOW: ["F#3", "C5"],
-  MED: ["C4", "C6"],
-  HIGH: ["C5", "G6"],
-  ANY: ["F#3", "G6"],
-};
-
-const RANGE_THRESHOLDS = Object.fromEntries(
-  Object.entries(RANGE_NOTES).map(([range, notes]) => [range, notes.map((n) => Note.midi(n))]),
-) as Record<Range, (number | null)[]>;
-
 /** Every note of the key's scale inside the range, lowest first. */
-export function scaleNotesInRange(key: Key, range: Range): string[] {
-  const [low, high] = RANGE_THRESHOLDS[range];
+export function scaleNotesInRange(key: Key, range: Range | NoteSpan): string[] {
+  const [low, high] = toSpan(range);
   return Scale.get(key)
     .notes.flatMap((note) => [3, 4, 5, 6].map((octave) => `${note}${octave}`))
     .filter((note) => {
       const midi = Note.midi(note);
-      return midi !== null && midi >= low! && midi <= high!;
+      return midi !== null && midi >= low && midi <= high;
     })
     .sort((a, b) => Note.midi(a)! - Note.midi(b)!);
 }
@@ -87,7 +76,7 @@ export function scaleNotesInRange(key: Key, range: Range): string[] {
  * the range, down to the bottom, and back up to the tonic, so every note of the key the
  * range allows is played and the scale starts and ends at home.
  */
-export function scalePitches(key: Key, range: Range): string[] {
+export function scalePitches(key: Key, range: Range | NoteSpan): string[] {
   const notes = scaleNotesInRange(key, range);
   const tonic = notes.findIndex((note) => Note.pitchClass(note) === Scale.get(key).tonic);
   const up = notes.slice(tonic);
@@ -113,7 +102,7 @@ export function generateMusic(
   bars: number,
   timeSig: string,
   key: Key,
-  range: Range = "MED",
+  range: Range | NoteSpan = "MED",
   difficulty: Difficulty = "LOW",
 ) {
   const rhythm = rhythmFor(timeSig, difficulty);
@@ -149,7 +138,7 @@ export function generateLongTones(
   bars: number,
   timeSig: string,
   key: Key,
-  range: Range = "MED",
+  range: Range | NoteSpan = "MED",
   difficulty: keyof typeof LONG_TONE_MELODY = "LOW",
 ) {
   const options = LONG_TONE_LENGTHS[difficulty];
@@ -173,7 +162,7 @@ export function generateLongTones(
 export function generateScaleExercise(
   timeSig: string,
   key: Key,
-  range: Range = "MED",
+  range: Range | NoteSpan = "MED",
   difficulty: Difficulty = "LOW",
 ) {
   const rhythm = rhythmFor(timeSig, difficulty);

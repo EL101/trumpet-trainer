@@ -2,7 +2,10 @@ import { chakra, type HTMLChakraProps, type RecipeVariantProps } from "@chakra-u
 import { forwardRef } from "react";
 import { buttonRecipe } from "@/theme";
 
-/** Outlined action. `variant`: primary (accent) · secondary (hairline) · ghost (text-only). */
+/**
+ * Outlined action. `variant`: primary (accent) · secondary (hairline) · ghost (text-only) ·
+ * danger (red, for deleting something for good).
+ */
 export const Button = chakra("button", buttonRecipe, { defaultProps: { type: "button" } });
 
 export type ButtonProps = HTMLChakraProps<"button", RecipeVariantProps<typeof buttonRecipe>>;

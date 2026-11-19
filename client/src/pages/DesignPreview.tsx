@@ -1,5 +1,5 @@
 import { Box, Flex, Grid, Heading, Text } from "@chakra-ui/react";
-import { BookmarkPlus, Pause, Play, RotateCcw, SkipBack, SkipForward } from "lucide-react";
+import { BookmarkPlus, Pause, Play, RotateCcw, SkipBack, SkipForward, Trash2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { AppShell, FocusShell, PageHeader, Sidebar } from "@/components/layout";
 import {
@@ -20,6 +20,7 @@ import {
   TunerGauge,
 } from "@/components/music";
 import {
+  ActivityGrid,
   Bookplate,
   Button,
   Card,
@@ -31,6 +32,8 @@ import {
   NativeSelect,
   notify,
   RadioGroup,
+  RangeAxis,
+  RangeSlider,
   Rule,
   SectionHeading,
   SegmentedControl,
@@ -41,6 +44,17 @@ import {
   Textarea,
 } from "@/components/primitives";
 import { MAX_TEMPO, MIN_TEMPO, pulseOf } from "@/lib/meter";
+import { formatDay, pastYear } from "@/lib/activity";
+import { formatPitch } from "@/lib/format";
+import { streakWeek } from "@/lib/streak";
+import {
+  DEFAULT_NOTE_RANGES,
+  HORN_SPAN,
+  moveEnd,
+  noteName,
+  RANGE_AXIS_NOTES,
+  type NoteSpan,
+} from "@/lib/noteRanges";
 import type { RunScore } from "@/lib/scoring";
 import { buildTimeline } from "@/lib/timeline";
 import type { PlayedMark } from "@/lib/transcribe";
@@ -48,6 +62,17 @@ import type { MusicInfo } from "@/schema";
 
 /** Dev-only gallery of the design-system building blocks (route: /design). */
 /** An exercise for PracticeButton to open. It rides in the router state, so it needn't be in history. */
+/** A made-up year for the activity grid: busier lately, with gaps, every shade used. */
+const PREVIEW_TODAY = "2026-11-08";
+const PREVIEW_ACTIVITY = new Map(
+  Array.from({ length: 371 }, (_, i) => {
+    const date = new Date(Date.UTC(2026, 10, 8) - i * 86_400_000).toISOString().slice(0, 10);
+    const h = ((i * 9301 + 49297) % 233280) / 233280;
+    const count = h < (i < 60 ? 0.25 : 0.6) ? 0 : Math.round(h * (i < 60 ? 10 : 5));
+    return [date, count] as const;
+  }),
+);
+
 const PREVIEW_EXERCISE: MusicInfo = {
   id: "design-preview",
   exerciseId: "design-preview",
@@ -194,6 +219,7 @@ export default function DesignPreview() {
   const [bars, setBars] = useState(2);
   const [cursor, setCursor] = useState(3.4);
   const [tempo, setTempo] = useState(96);
+  const [span, setSpan] = useState<NoteSpan>([62, 81]);
   const [clicksPerBeat, setClicksPerBeat] = useState(2);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [scoreCardOpen, setScoreCardOpen] = useState<"saved" | "unsaved" | null>(null);
@@ -277,6 +303,10 @@ export default function DesignPreview() {
           </Button>
           <Button variant="primary" disabled>
             Disabled
+          </Button>
+          <Button variant="danger" size="sm">
+            <Trash2 />
+            Reset practice data
           </Button>
           <IconButton aria-label="Previous">
             <SkipBack />
@@ -411,6 +441,29 @@ export default function DesignPreview() {
                 />
               )}
             </Field>
+            <Flex direction="column" gap="xs">
+              <Text textStyle="meta" color="fg.muted">
+                RangeSlider (<PitchText>{`${noteName(span[0])} – ${noteName(span[1])}`}</PitchText>,
+                outlined where it started)
+              </Text>
+              <RangeSlider
+                value={span}
+                min={HORN_SPAN[0]}
+                max={HORN_SPAN[1]}
+                reference={DEFAULT_NOTE_RANGES.MED}
+                labels={["Lowest note", "Highest note"]}
+                valueText={(midi) => formatPitch(noteName(midi))}
+                onChange={(next, end) => setSpan(moveEnd(span, end, next[end]))}
+              />
+              <RangeAxis
+                min={HORN_SPAN[0]}
+                max={HORN_SPAN[1]}
+                marks={RANGE_AXIS_NOTES.map((m) => ({
+                  value: m,
+                  label: <PitchText>{noteName(m)}</PitchText>,
+                }))}
+              />
+            </Flex>
           </Flex>
         </Grid>
       </Section>
@@ -475,6 +528,19 @@ export default function DesignPreview() {
         <Flex gap="2xl" mt="xl" wrap="wrap">
           <SectionHeading number={1} title="Instrument" description="Transposition and tuning" />
           <SectionHeading number={4} title="Data" description="Can't be undone" />
+        </Flex>
+        <Flex direction="column" gap="xs" mt="xl">
+          <Text textStyle="caption" color="fg.muted">
+            ActivityGrid: a year of days, shaded 1, 2–3, 4–6, 7+ (hover a day)
+          </Text>
+          <ActivityGrid
+            counts={PREVIEW_ACTIVITY}
+            start={pastYear(PREVIEW_TODAY)[0]}
+            end={PREVIEW_TODAY}
+            today={PREVIEW_TODAY}
+            describe={({ count, date }) => `${count} exercises played on ${formatDay(date)}`}
+            aria-label="A year of made-up activity"
+          />
         </Flex>
       </Section>
 
@@ -719,15 +785,12 @@ export default function DesignPreview() {
             onToggle={() => setSidebarOpen((open) => !open)}
             streak={{
               days: 12,
-              week: [
-                { label: "M", state: "done" },
-                { label: "T", state: "done" },
-                { label: "W", state: "done" },
-                { label: "T", state: "done" },
-                { label: "F", state: "today" },
-                { label: "S", state: "missed" },
-                { label: "S", state: "missed" },
-              ],
+              week: streakWeek("2026-11-06", [
+                "2026-11-02",
+                "2026-11-03",
+                "2026-11-04",
+                "2026-11-05",
+              ]),
             }}
           />
         </Box>

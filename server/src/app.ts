@@ -5,6 +5,7 @@ import libraryRouter from "./routes/library.js";
 import profileRouter from "./routes/profile.js";
 import etudesRouter from "./routes/etudes.js";
 import scoresRouter from "./routes/scores.js";
+import settingsRouter from "./routes/settings.js";
 import { AVATAR_BODY_LIMIT } from "./avatar.js";
 
 export const app = express();
@@ -28,3 +29,4 @@ app.use("/api/library", libraryRouter);
 app.use("/api/profile", profileRouter);
 app.use("/api/etudes", etudesRouter);
 app.use("/api/scores", scoresRouter);
+app.use("/api/settings", settingsRouter);

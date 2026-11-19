@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatExerciseMeta, formatPitch, toRoman } from "./format";
+import { formatExerciseMeta, formatLongDate, formatPitch, toRoman } from "./format";
 
 describe("formatPitch", () => {
   it("turns ASCII accidentals into music symbols", () => {
@@ -33,5 +33,15 @@ describe("toRoman", () => {
   it("numbers sections", () => {
     expect(toRoman(4)).toBe("IV");
     expect(toRoman(9)).toBe("IX");
+  });
+});
+
+describe("formatLongDate", () => {
+  it("writes the day, the month in full and the year", () => {
+    expect(formatLongDate("2026-06-02T12:00:00.000Z")).toBe("2 June 2026");
+  });
+
+  it("is empty for a date that isn't one", () => {
+    expect(formatLongDate("not a date")).toBe("");
   });
 });

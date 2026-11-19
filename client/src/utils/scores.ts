@@ -122,3 +122,12 @@ export async function getLatestScore(
     throw error;
   }
 }
+
+/**
+ * Reset the user's practice data: every scored run they've saved is deleted, for good.
+ * Their exercises, history and settings stay. Resolves to how many runs went.
+ */
+export async function resetScores(user: User | undefined | null): Promise<number> {
+  const res = await authedFetch("/api/scores", user, { method: "DELETE" });
+  return res ? ((await res.json()) as { deleted: number }).deleted : 0;
+}

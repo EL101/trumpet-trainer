@@ -150,6 +150,27 @@ describe("POST /api/etudes", () => {
     expect(note.quarters.enum).toEqual([4, 3, 2, 1.5, 1, 0.5]);
   });
 
+  it("writes in the range as the user has set it, whatever the request says", async () => {
+    const uid = newUid();
+    const token = tokenFor(googleClaims(uid));
+    // Medium as D4–A5 for this user.
+    await request(app)
+      .put("/api/settings")
+      .set(auth(token))
+      .send({ noteRanges: { LOW: [54, 72], MED: [62, 81], HIGH: [72, 91] } });
+    claude.create.mockResolvedValueOnce(reply(GOOD_BARS));
+
+    const { finished } = await generate(token, { ...body, span: [54, 91] });
+
+    const params = claude.create.mock.calls[0][0];
+    const pitches =
+      params.output_config.format.schema.properties.bars.items.items.properties.pitch.anyOf[0].enum;
+    expect(pitches[0]).toBe("D4");
+    expect(pitches.at(-1)).toBe("A5");
+    expect(params.messages[0].content).toContain("Range: D4 to A5");
+    expect(finished!.body.etude.status).toBe("SUCCEEDED");
+  });
+
   it("asks again once with the problems, and charges for both attempts", async () => {
     const uid = newUid();
     claude.create
