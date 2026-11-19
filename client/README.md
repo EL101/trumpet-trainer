@@ -77,6 +77,10 @@ The roles you'll use most:
 | `intonation.good` / `fair` / `warn` / `bad` | Score and pitch colours, green through red               |
 | `activity.1` – `activity.4`                 | The activity grid's shades, lightest to darkest          |
 
+Two groups are only for drawings, not UI: `engraving.*` (the etched brass of the landing
+page's trumpets: `line`, `hatch`, `deep`, `wash`) and `spotlight.*` (the landing page's
+pool of light and its darker edges).
+
 For colours that depend on cents (note colouring, pitch readouts), call
 `centsColor(cents)` from `@/lib/intonation`. It blends smoothly from green to red.
 
@@ -336,7 +340,8 @@ whenever the tab comes back into view, for a day that's gone by or play in anoth
 - **Use text styles, not ad-hoc font sizes:**
   `<Text textStyle="heading.md">`, `<Heading textStyle="display.md">`, `<Text textStyle="kicker">`.
   Between the sizes: `subheading` (a row's label, a size up from `heading.sm`) and
-  `small` (body a size down, for short lines in a list).
+  `small` (body a size down, for short lines in a list). Music glyphs set as text
+  (decoration, not the staff) use `notation.sm`–`xl`, in Bravura (the `music` font).
 - **Spacing:** the design system's scale is `xs`, `sm`, `md`, `lg`, `xl`, `2xl`
   (4.6px through 36.8px). Chakra's numeric scale (`p={4}`) still works, but it's what
   the old pages use.

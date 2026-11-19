@@ -26,6 +26,8 @@ export const tokens = defineTokens({
   fonts: {
     heading: { value: `"Cormorant Garamond", Georgia, serif` },
     body: { value: `"Lora", Georgia, serif` },
+    /** Bravura, the SMuFL music font VexFlow uses, for notation set as text. */
+    music: { value: `"Bravura", serif` },
   },
   // The design system's spacing scale (density 1.15 baked in). Named so it doesn't
   // collide with Chakra's numeric 4px scale that legacy pages still use.

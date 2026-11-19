@@ -75,6 +75,17 @@ export const textStyles = defineTextStyles({
   small: { value: { fontSize: "14px", lineHeight: 1.5 } },
   meta: { value: { fontSize: "12px", lineHeight: 1.4 } },
   caption: { value: { fontSize: "11px", lineHeight: 1.35 } },
+  /**
+   * Music glyphs set as text in Bravura (SMuFL code points, e.g. "" for a treble
+   * clef), for notation used as decoration, like the landing page's drifting backdrop.
+   * Not for the staff, which VexFlow draws.
+   */
+  notation: {
+    sm: { value: { fontFamily: "music", fontSize: "20px", lineHeight: 1 } },
+    md: { value: { fontFamily: "music", fontSize: "28px", lineHeight: 1 } },
+    lg: { value: { fontFamily: "music", fontSize: "44px", lineHeight: 1 } },
+    xl: { value: { fontFamily: "music", fontSize: "56px", lineHeight: 1 } },
+  },
   /** Large tabular numerals for stats and scores. */
   figure: {
     lg: { value: { ...heading, ...tabular, fontSize: "38px", fontWeight: 400, lineHeight: 1 } },

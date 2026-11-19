@@ -63,6 +63,22 @@ export const roles = {
     /** Playback cursor band behind the current note. */
     cursor: tint(brass.base, 13),
   },
+  /**
+   * Brass drawn as an etching (the landing page's trumpets): ink lines over a pale brass
+   * wash, shaded with hatching. For drawings, not for UI.
+   */
+  engraving: {
+    line: brass[700],
+    hatch: brass[600],
+    deep: brass[800],
+    wash: brass[200],
+  },
+  /** The landing page's backdrop: a warm pool of light behind the title, dimmer at the edges. */
+  spotlight: {
+    core: tint(brass[200], 75),
+    edge: tint(brass[200], 25),
+    vignette: tint(ink, 7),
+  },
   /** Actions that delete something for good. The design system has no red, so this borrows the pitch scale's. */
   danger: {
     fg: pitch.red,
