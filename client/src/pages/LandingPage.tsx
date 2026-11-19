@@ -40,8 +40,9 @@ const PACING: DemoPacing = { bpm: 100, lead: 0.8, hold: 2.2 };
 
 /**
  * The entrance, in ms after the page appears. The brand and headline rise in, the music
- * is laid down left to right while the heralds step in from the sides, then the colour key
- * fills in and the sign-in choices pop in. The heralds start playing once the staff is down.
+ * is laid down left to right while the heralds raise their horns to it (the right a beat
+ * after the left), then the colour key fills in and the sign-in choices pop in. The
+ * heralds start playing once the staff is down.
  */
 const INTRO = {
   brand: 0,
@@ -50,7 +51,9 @@ const INTRO = {
   music: 400,
   musicFor: 1600,
   heralds: 500,
-  heraldsFor: 1100,
+  /** The right herald raises its horn this long after the left. */
+  heraldsStagger: 220,
+  heraldsFor: 1300,
   /** The colour key fills in once the staff is down. */
   legendFor: 600,
   signInFor: 500,
@@ -348,6 +351,17 @@ const STAFF_SPACE = 10;
 /** The bell's centre in the trumpet drawing's own units. */
 const BELL_CENTRE = { x: 965, y: 84 };
 
+/** Where the mouthpiece ends up in the herald's drawing: the end the horn is raised by. */
+const MOUTHPIECE = (() => {
+  const dx = (22 - BELL_CENTRE.x) * TRUMPET_SCALE;
+  const dy = (206 - BELL_CENTRE.y) * TRUMPET_SCALE;
+  const a = (TILT * Math.PI) / 180;
+  return {
+    x: -BELL_GAP + dx * Math.cos(a) - dy * Math.sin(a),
+    y: dx * Math.sin(a) + dy * Math.cos(a),
+  };
+})();
+
 function Herald({
   side,
   playing,
@@ -365,6 +379,7 @@ function Herald({
   const height = top + bottom;
   const mirrored = side === "right";
   const id = `tt-herald-${side}`;
+  const enterAt = INTRO.heralds + (mirrored ? INTRO.heraldsStagger : 0);
 
   return (
     <chakra.svg
@@ -380,11 +395,8 @@ function Herald({
       }
       overflow="visible"
       pointerEvents="none"
-      _motionSafe={{
-        // Steps in from its side of the page as the staff is laid down.
-        "--slide-from": mirrored ? "420px" : "-420px",
-        animation: `slide-in ${INTRO.heraldsFor}ms ${EASE_OUT} ${INTRO.heralds}ms backwards, appear ${INTRO.heraldsFor}ms ease-out ${INTRO.heralds}ms backwards`,
-      }}
+      // The staff's lines into the bell fade in as the horn comes up to them.
+      _motionSafe={{ animation: `appear 600ms ease-out ${enterAt + 300}ms backwards` }}
     >
       <g transform={mirrored ? "scale(-1 1)" : undefined}>
         {/* The staff's lines carried on from its end into the bell. */}
@@ -399,40 +411,52 @@ function Herald({
             />
           ))}
         </g>
-        {/* Tips up a little while it plays, about the bell, which stays on the staff. */}
-        <g
+        {/* Raised to the staff on arrival, swinging up from the mouthpiece end, past the
+            staff and back down onto it. */}
+        <chakra.g
           style={{
-            transform: playing ? `rotate(${LEAN}deg)` : "none",
             transformBox: "view-box",
-            transformOrigin: `${-BELL_GAP}px 0px`,
-            transition: "transform 500ms ease-in-out",
+            transformOrigin: `${MOUTHPIECE.x}px ${MOUTHPIECE.y}px`,
+          }}
+          _motionSafe={{
+            animation: `raise-horn ${INTRO.heraldsFor}ms ${EASE_OUT} ${enterAt}ms backwards`,
           }}
         >
+          {/* Tips up a little while it plays, about the bell, which stays on the staff. */}
           <g
-            transform={`translate(${-BELL_GAP} 0) rotate(${TILT}) scale(${TRUMPET_SCALE}) translate(${-BELL_CENTRE.x} ${-BELL_CENTRE.y})`}
+            style={{
+              transform: playing ? `rotate(${LEAN}deg)` : "none",
+              transformBox: "view-box",
+              transformOrigin: `${-BELL_GAP}px 0px`,
+              transition: "transform 500ms ease-in-out",
+            }}
           >
-            <EtchedTrumpet id={id} valves={valves} />
-            {/* Rings of sound leaving the bell while it plays. */}
-            {playing && (
-              <ellipse
-                cx={BELL_CENTRE.x}
-                cy={BELL_CENTRE.y}
-                rx={14}
-                ry={106}
-                fill="none"
-                stroke={roles.engraving.hatch}
-                strokeWidth={2.6}
-                strokeDasharray="6 6"
-                style={{
-                  opacity: 0,
-                  transformBox: "fill-box",
-                  transformOrigin: "0% 50%",
-                  animation: "ring-out 1.1s ease-out infinite",
-                }}
-              />
-            )}
+            <g
+              transform={`translate(${-BELL_GAP} 0) rotate(${TILT}) scale(${TRUMPET_SCALE}) translate(${-BELL_CENTRE.x} ${-BELL_CENTRE.y})`}
+            >
+              <EtchedTrumpet id={id} valves={valves} />
+              {/* Rings of sound leaving the bell while it plays. */}
+              {playing && (
+                <ellipse
+                  cx={BELL_CENTRE.x}
+                  cy={BELL_CENTRE.y}
+                  rx={14}
+                  ry={106}
+                  fill="none"
+                  stroke={roles.engraving.hatch}
+                  strokeWidth={2.6}
+                  strokeDasharray="6 6"
+                  style={{
+                    opacity: 0,
+                    transformBox: "fill-box",
+                    transformOrigin: "0% 50%",
+                    animation: "ring-out 1.1s ease-out infinite",
+                  }}
+                />
+              )}
+            </g>
           </g>
-        </g>
+        </chakra.g>
       </g>
     </chakra.svg>
   );

@@ -50,6 +50,18 @@ export const keyframes = defineKeyframes({
     "50%": { transform: "translateX(16px) rotate(7deg)" },
   },
   /**
+   * A horn raised to play: swings up from below, overshoots, dips back and settles. Set
+   * `transform-origin` to the end it's held by (the mouthpiece), and use an ease-out
+   * curve so each swing slows into its turn.
+   */
+  "raise-horn": {
+    "0%": { transform: "rotate(20deg)", opacity: 0 },
+    "18%": { opacity: 1 },
+    "55%": { transform: "rotate(-5deg)" },
+    "78%": { transform: "rotate(1.5deg)" },
+    "100%": { transform: "rotate(0deg)" },
+  },
+  /**
    * A ring of sound leaving a trumpet's bell: spreads out from its left edge and fades.
    * Give it `transform-box: fill-box` and `transform-origin: 0% 50%`, and loop it.
    */
