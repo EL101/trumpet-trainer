@@ -78,6 +78,7 @@ export const roles = {
     core: tint(brass[200], 75),
     edge: tint(brass[200], 25),
     vignette: tint(ink, 7),
+  },
   /** Actions that delete something for good. The design system has no red, so this borrows the pitch scale's. */
   danger: {
     fg: pitch.red,
