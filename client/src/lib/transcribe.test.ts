@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { PitchSample } from "./hearing";
+import { dipAt, type PitchSample } from "./hearing";
 import { buildTimeline } from "./timeline";
 import {
   beamRuns,
   forTempo,
   ghostPieces,
   heldTo,
+  holdLimit,
   judgePlayed,
   silences,
   restartPoint,
@@ -111,6 +112,19 @@ describe("transcribe", () => {
     expect(played.map((p) => Math.round(p.start * 4) / 4)).toEqual([0, 0.5, 1]);
   });
 
+  it("hears a tongued repeat whose dip reads another pitch for a frame", () => {
+    // The level is so low at the bottom of each tongue stop that the pitch strays a semitone.
+    const timeline = buildTimeline("C5/16, C5, C5, C5, C5/q, C5/h", "4/4");
+    const onsets = [0.25, 0.5, 0.75, 1, 2];
+    const dipped = tongued(hear(4, { midi: 72, from: 0, to: 3.9 }), ...onsets);
+    const stray = 440 * 2 ** ((73 + CONCERT_OFFSET - 69) / 12);
+    const samples = dipped.map((s, i) => (dipAt(dipped, i, SPQ) ? { ...s, hz: stray } : s));
+    expect(samples.filter((s) => s.hz === stray)).toHaveLength(onsets.length);
+    const played = transcribe(samples, timeline, SPQ);
+    expect(played.map((p) => Math.round(p.start * 4) / 4)).toEqual([0, ...onsets]);
+    expect(played.every((p) => p.midi === 72)).toBe(true);
+  });
+
   it("holds a note through a dip in level where no note is written", () => {
     const timeline = buildTimeline("C5/w", "4/4");
     const played = transcribe(tongued(hear(4, { midi: 72, from: 0, to: 3.8 }), 1.5), timeline, SPQ);
@@ -200,16 +214,34 @@ describe("heldTo", () => {
     { start: 2.5, end: 3, midi: 76 }, // 0.45 s after: a rest
   ];
 
+  const limit = holdLimit(buildTimeline("C5/w", "4/4"), SPQ);
+
   it("holds a note to the next one when the silence between is shorter than a rest", () => {
-    expect(heldTo(notes, 0, SPQ)).toBe(0.95);
-    expect(heldTo(notes, 1, SPQ)).toBeUndefined();
-    expect(heldTo(notes, 2, SPQ)).toBeUndefined();
+    expect(heldTo(notes, 0, limit)).toBe(0.95);
+    expect(heldTo(notes, 1, limit)).toBeUndefined();
+    expect(heldTo(notes, 2, limit)).toBeUndefined();
+  });
+
+  it("holds through less silence at a fast tempo, so a short rest played is kept", () => {
+    // Music with no rests between notes holds through BRIDGE_SECONDS, whatever the tempo:
+    // the rests padding out the last bar don't count.
+    expect(holdLimit(buildTimeline("C5/16, C5, C5", "4/4"), 0.375)).toBeCloseTo(0.2 / 0.375);
+    // ♩ = 160: an eighth rest is 0.19 s, under BRIDGE_SECONDS, played here as 0.16 s.
+    const fast = holdLimit(buildTimeline("C5/8, B4/8/r, C5/8, B4/8/r, C5/8", "4/4"), 0.375);
+    const played = [
+      { start: 0, end: 0.57, midi: 72 },
+      { start: 1, end: 1.57, midi: 72 },
+    ];
+    expect(heldTo(played, 0, fast)).toBeUndefined();
+    expect(toGhost(played[0], heldTo(played, 0, fast)).length).toBe(0.5);
+    // A tongue between notes still isn't a rest.
+    expect(heldTo([{ ...played[0], end: 0.9 }, played[1]], 0, fast)).toBe(1);
   });
 
   it("writes a note held on as reaching the next one's sixteenth, with no rest between", () => {
     // Heard for 0.62 beats, so a dotted eighth on its own, and a sixteenth rest after.
     expect(toGhost(notes[0]).length).toBe(0.75);
-    expect(toGhost(notes[0], heldTo(notes, 0, SPQ))).toEqual({ start: 0, length: 1, midi: 72 });
+    expect(toGhost(notes[0], heldTo(notes, 0, limit))).toEqual({ start: 0, length: 1, midi: 72 });
     // A next note snapped onto its own start leaves it as it sounded.
     expect(toGhost({ start: 0, end: 0.1, midi: 72 }, 0.1).length).toBe(0.25);
   });

@@ -106,8 +106,8 @@ export function transcribe(
   // Another pitch heard through the current note, until it lasts long enough to be one.
   let pending: { midi: number; start: number; last: number } | null = null;
   // Where the level last dipped through the current note (see `dipAt`), since the last
-  // frame of it heard: a tongue stop too short to break the sound, or to break it for
-  // longer than a drop-out. Its bottom can be a silent frame.
+  // frame of its pitch heard: a tongue stop too short to break the sound, or to break it
+  // for longer than a drop-out. Its bottom can be a silent frame.
   let dip: number | null = null;
 
   const close = () => {
@@ -137,9 +137,11 @@ export function transcribe(
       continue;
     }
     current.heard = s.at;
-    const dipped = dip;
-    dip = null;
     if (Math.abs(pitch - current.midi) < HOLD_SEMITONES) {
+      // The dip is kept through frames of another pitch (a stray reading as the tongue
+      // lets go), until one of this note's takes it or the other pitch becomes a note.
+      const dipped = dip;
+      dip = null;
       // A tongue stop where a written note starts: a repeat, from this frame, as a note
       // would start here afresh.
       if (
@@ -191,14 +193,34 @@ export function restartPoint(
 }
 
 /**
- * Where a played note (`notes[i]`, as `transcribe` gave them) is held to on the staff:
- * the next one's start, if that follows on with less than BRIDGE_SECONDS of silence
- * between (the tongue between two notes, or the new note's pitch taking a moment to
- * settle), as that's no rest; otherwise undefined, and it's as long as it sounded.
+ * The longest silence, in quarter notes, that a played note is held on through to the
+ * next (see `heldTo`): BRIDGE_SECONDS, or at a fast tempo a share of the shortest rest
+ * written between two notes (as `forTempo` shortens), so a rest played as written is
+ * never held over. Music with no rests between notes keeps BRIDGE_SECONDS (the rests
+ * padding out the last bar don't count).
  */
-export function heldTo(notes: readonly PlayedNote[], i: number, secondsPerQuarter: number) {
+export function holdLimit(timeline: Pick<Timeline, "notes">, secondsPerQuarter: number) {
+  const { notes } = timeline;
+  const first = notes.findIndex((n) => n.midi !== null);
+  const last = notes.findLastIndex((n) => n.midi !== null);
+  const rests = notes
+    .filter((n, i) => n.midi === null && first < i && i < last)
+    .map((n) => n.length);
+  const seconds = rests.length
+    ? forTempo(BRIDGE_SECONDS, secondsPerQuarter, Math.min(...rests))
+    : BRIDGE_SECONDS;
+  return seconds / secondsPerQuarter;
+}
+
+/**
+ * Where a played note (`notes[i]`, as `transcribe` gave them) is held to on the staff:
+ * the next one's start, if that follows on with less than `limit` (see `holdLimit`) of
+ * silence between (the tongue between two notes, or the new note's pitch taking a moment
+ * to settle), as that's no rest; otherwise undefined, and it's as long as it sounded.
+ */
+export function heldTo(notes: readonly PlayedNote[], i: number, limit: number) {
   const next = notes[i + 1];
-  if (!next || next.start - notes[i].end >= BRIDGE_SECONDS / secondsPerQuarter) return undefined;
+  if (!next || next.start - notes[i].end >= limit) return undefined;
   return next.start;
 }
 

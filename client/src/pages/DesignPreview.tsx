@@ -149,11 +149,11 @@ const OUT_OF_RANGE_PLAYED: PlayedMark[] = [
  * a held note tied into an eighth beamed with the next.
  */
 const BEAMED_NOTES =
-  "C5/8, D5, E5, F5, G5/16, A5, G5, F5, E5/8., D5/16, F4/8, G4, A4, F4, G4/16, E5, D5, C5, G4/q, E5/8, D5, C5/h";
+  "C5/8, D5, E5, F5, G5/16, A5, G5, F5, E5/8., D5/16, F4/8, G4, A4, F4, G4/16, E5, D5, C5, G4/q, E5/8, D5, C5/h.";
 const BEAMED_PLAYED: PlayedMark[] = buildTimeline(BEAMED_NOTES, "4/4").notes.flatMap(
   (n, i): PlayedMark[] => {
     if (n.midi === null || i === 19) return [];
-    // The G4 on beat 3 of bar 2 held on through the E5 after it.
+    // The G4 on beat 4 of bar 2 held on through the E5 after it.
     const length = i === 18 ? 1.5 : n.length;
     const midi = i === 15 ? 74 : n.midi;
     const status = i === 15 ? "wrong" : "right";
@@ -602,7 +602,7 @@ export default function DesignPreview() {
             <IntonationLegend mt="sm" />
           </Box>
           <Box>
-            <Text fontSize="12px" color="fg.muted" mb="xs">
+            <Text textStyle="meta" color="fg.muted" mb="xs">
               Annotated, no barlines (intonation by note)
             </Text>
             <Staff
@@ -615,7 +615,7 @@ export default function DesignPreview() {
             />
           </Box>
           <Box>
-            <Text fontSize="12px" color="fg.muted" mb="xs">
+            <Text textStyle="meta" color="fg.muted" mb="xs">
               Compound meter (6/8): eighths beamed in threes
             </Text>
             <Staff
@@ -626,7 +626,7 @@ export default function DesignPreview() {
             />
           </Box>
           <Box>
-            <Text fontSize="12px" color="fg.muted" mb="xs">
+            <Text textStyle="meta" color="fg.muted" mb="xs">
               Ties (a trailing ~): across a bar line, across a line break, and within a bar
             </Text>
             <Staff
@@ -638,7 +638,7 @@ export default function DesignPreview() {
             />
           </Box>
           <Box>
-            <Text fontSize="12px" color="fg.muted" mb="xs">
+            <Text textStyle="meta" color="fg.muted" mb="xs">
               Slurs ( … ): under stems-up notes, over mixed stems, and across a line break
             </Text>
             <Staff
@@ -650,7 +650,7 @@ export default function DesignPreview() {
             />
           </Box>
           <Box>
-            <Text fontSize="12px" color="fg.muted" mb="xs">
+            <Text textStyle="meta" color="fg.muted" mb="xs">
               A scored run: every note played (`played`) on a cue-size staff under each line, where
               and as long as it sounded, coloured by intonation, or red where it wasn't the note
               written. A note held across a barline is tied over it, at a line break too, and a
@@ -667,7 +667,7 @@ export default function DesignPreview() {
             />
           </Box>
           <Box>
-            <Text fontSize="12px" color="fg.muted" mb="xs">
+            <Text textStyle="meta" color="fg.muted" mb="xs">
               Eighths and sixteenths played are beamed by the beat, as written notes are: the played
               staff is drawn by VexFlow too
             </Text>
@@ -682,7 +682,7 @@ export default function DesignPreview() {
             />
           </Box>
           <Box>
-            <Text fontSize="12px" color="fg.muted" mb="xs">
+            <Text textStyle="meta" color="fg.muted" mb="xs">
               Played notes far off the staff get room between the lines, and take in accidentals
               played earlier in the bar: after the B♮, the B♭ on beat 3 shows its flat. The last
               note is still sounding, so it isn't judged yet
@@ -698,7 +698,7 @@ export default function DesignPreview() {
             />
           </Box>
           <Box>
-            <Text fontSize="12px" color="fg.muted" mb="xs">
+            <Text textStyle="meta" color="fg.muted" mb="xs">
               PracticeButton opens the player on an exercise; its back link returns here. It waits
               for history to number a new exercise.
             </Text>

@@ -163,14 +163,19 @@ stop there.
   long it lasted at the tempo, snapped to a sixteenth (held past a whole note, to the
   nearest beat). A note followed by the next within 0.2 s (a tongue gap, or the new
   pitch settling) is held up to it instead (`heldTo()`), so rounding its length doesn't
-  leave a rest that wasn't played. `judgePlayed()` finds the written note under each one's middle: it's
+  leave a rest that wasn't played. At a fast tempo that limit shrinks to 0.6 of the
+  shortest rest written between notes (`holdLimit()`), so a short rest that was played
+  isn't held over. `judgePlayed()` finds the written note under each one's middle: it's
   right if it's that note, wrong if not (or a rest is written there). A held note
   carries on through a little wavering or being out of tune, and through the microphone
   losing it for up to 0.2 s, unless a written note starts in that silence (then it's a
   tongued repeat). A tongue stop between fast notes can be shorter than a frame (about
   43 ms), so no frame is silent: `dipAt()` in `lib/hearing.ts` finds it as a dip in level
   instead, and a dip where a written note starts is a repeat too, both in `transcribe()`
-  and as a note's attack in `scoreRun()`. A different note has to last 0.07 s to start a new one, and a note
+  (even if the frame at the dip's bottom strays to another pitch) and as a note's attack
+  in `scoreRun()`. `scoreRun()` only takes a dip as the attack when the note before was
+  the same pitch, or when nothing else came in, so a dip through a note entered early
+  doesn't put it on time. A different note has to last 0.07 s to start a new one, and a note
   0.08 s to be kept, or at a fast tempo 0.6 of the shortest note written if that's
   shorter (`forTempo()`), so fast sixteenths aren't lost, but never under 0.03 s, so the
   metronome's click is still a blip. It goes by the shortest note written, not a

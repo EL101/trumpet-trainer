@@ -809,6 +809,8 @@ type PlayedHead = {
   color: string;
   /** Its stem goes up. A beamed piece's goes its beam's way. */
   up: boolean;
+  /** Its mark's first piece's stem goes up: the ties between the mark's pieces arc away from it. */
+  firstUp: boolean;
   /** The beam it's under, as an index into the layout's `runs`; null for flags of its own. */
   run: number | null;
 };
@@ -846,6 +848,7 @@ function layoutPlayed(
         accidental: i === 0 ? accidental : "",
         color,
         up: line < 3,
+        firstUp: line < 3,
         run: null,
       }),
     );
@@ -858,6 +861,10 @@ function layoutPlayed(
   runs.forEach((run, r) => {
     const up = run.reduce((sum, i) => sum + heads[i].line - 3, 0) < 0;
     for (const i of run) Object.assign(heads[i], { up, run: r });
+  });
+  // A mark's pieces follow on in `heads`, so its first is the last one starting a mark.
+  heads.forEach((h, i) => {
+    h.firstUp = heads[i - 1]?.mark === h.mark ? heads[i - 1].firstUp : h.up;
   });
   return { marks, heads, runs };
 }
@@ -894,9 +901,8 @@ function playedReach(
       take(h.piece, y - (h.up ? stem : 0), y + (h.up ? 0 : stem));
     }
     // Ties arc on the side away from the first piece's stem.
-    const first = heads.find((o) => o.mark === h.mark)!;
     const tied = h.piece.tied || heads[i - 1]?.mark === h.mark;
-    if (tied) take(h.piece, y - (first.up ? 0 : tie), y + (first.up ? tie : 0));
+    if (tied) take(h.piece, y - (h.firstUp ? 0 : tie), y + (h.firstUp ? tie : 0));
   });
   // A beam lies a stem's length from the head furthest its way, and slants at most
   // PLAYED_BEAM_SLANT further.
@@ -1093,7 +1099,7 @@ function drawPlayed(
                 { first_note: from.note, last_note: null },
                 { first_note: null, last_note: to.note },
               ];
-        const up = heads.find((o) => o.mark === h.mark)!.up;
+        const up = h.firstUp;
         for (const { first_note, last_note } of halves) {
           const tie = new StaveTie({
             first_note,

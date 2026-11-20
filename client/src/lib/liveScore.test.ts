@@ -6,6 +6,7 @@ import { buildTimeline, soundingNotes, type Timeline } from "./timeline";
 import {
   BRIDGE_SECONDS,
   heldTo,
+  holdLimit,
   judgePlayed,
   restartPoint,
   toMark,
@@ -67,7 +68,11 @@ function fullMarks(timeline: Timeline, samples: PitchSample[], now: number) {
     last >= 0 && restartPoint(transcribed, heardTo, TIMING.secondsPerQuarter) !== last;
   const played = transcribed.map((p, i) =>
     toMark(
-      judgePlayed(p, timeline, heldTo(transcribed, i, TIMING.secondsPerQuarter)),
+      judgePlayed(
+        p,
+        timeline,
+        heldTo(transcribed, i, holdLimit(timeline, TIMING.secondsPerQuarter)),
+      ),
       cents,
       sounding && i === last,
     ),

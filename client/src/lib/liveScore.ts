@@ -4,6 +4,7 @@ import { soundingNotes, type Timeline } from "./timeline";
 import {
   BRIDGE_SECONDS,
   heldTo,
+  holdLimit,
   judgePlayed,
   restartPoint,
   toMark,
@@ -83,8 +84,8 @@ export function updateLive(
 
   const open = transcribe(samples, timeline, time.secondsPerQuarter, live.restartAt);
   const over = restartPoint(open, heardTo, time.secondsPerQuarter);
-  const judge = (p: PlayedNote, i: number) =>
-    judgePlayed(p, timeline, heldTo(open, i, time.secondsPerQuarter));
+  const limit = holdLimit(timeline, time.secondsPerQuarter);
+  const judge = (p: PlayedNote, i: number) => judgePlayed(p, timeline, heldTo(open, i, limit));
   const done = open.slice(0, Math.max(0, over));
   const doneJudged = done.map(judge);
   const judged = [
