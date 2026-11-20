@@ -55,6 +55,39 @@ export function isVoiced(s: PitchSample) {
 }
 
 /**
+ * A tongue stop between fast notes can be shorter than a frame (FRAME in
+ * `useRunRecorder`, about 43 ms), so no frame is silent: it shows only as a dip in
+ * level. A frame at most this share as loud as the loudest within DIP_REACH_SECONDS
+ * either side is the bottom of one. (Tongue stops of 15–25 ms dip to around 0.45–0.7.)
+ */
+const DIP_SHARE = 0.75;
+const DIP_REACH_SECONDS = 0.06;
+
+/**
+ * Whether `samples[i]` (in order of `at`) is the bottom of a dip in level, as a tongue
+ * stop too short for a silent frame makes: quieter than the frames either side of it, and
+ * at most DIP_SHARE as loud as the loudest within DIP_REACH_SECONDS on each side. Of a
+ * flat bottom, the last frame is the dip. Only frames already heard count, so one near the
+ * newest frame can turn out to be a dip once more come in.
+ */
+export function dipAt(samples: readonly PitchSample[], i: number, secondsPerQuarter: number) {
+  const s = samples[i];
+  const before = samples[i - 1];
+  const after = samples[i + 1];
+  if (!before || !after || s.level > before.level || s.level >= after.level) return false;
+  const reach = DIP_REACH_SECONDS / secondsPerQuarter;
+  const loudest = (from: number, step: number) => {
+    let level = 0;
+    for (let j = from; j >= 0 && j < samples.length; j += step) {
+      if (Math.abs(samples[j].at - s.at) > reach) break;
+      level = Math.max(level, samples[j].level);
+    }
+    return level;
+  };
+  return s.level <= DIP_SHARE * loudest(i - 1, -1) && s.level <= DIP_SHARE * loudest(i + 1, 1);
+}
+
+/**
  * The index of the first sample at or after `at`, by binary search: `samples` must be in
  * order of `at`. `samples.length` if none is.
  */
