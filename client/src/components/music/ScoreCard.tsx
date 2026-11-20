@@ -9,7 +9,7 @@ import { pulseOf } from "@/lib/meter";
 import { barExcerpt } from "@/lib/notation";
 import { notePlace, SCORE_PARTS, type RunScore, type ScoreNote } from "@/lib/scoring";
 import { buildTimeline } from "@/lib/timeline";
-import { toGhost, type PlayedMark } from "@/lib/transcribe";
+import type { PlayedMark } from "@/lib/transcribe";
 import type { MusicInfo } from "@/schema";
 import { PitchText } from "./PitchText";
 import { Staff } from "./Staff";
@@ -299,10 +299,11 @@ function WrongNoteBar({
     const timeline = buildTimeline(exercise.notes, exercise.timeSig);
     const written = timeline.notes[index];
     if (!written) return [];
-    // Where the note falls in its bar, which the excerpt starts at.
+    // Where the note falls in its bar, which the excerpt starts at. Its length is as the
+    // played staff drew it (a note value, or held on to the next note), so it's drawn as is.
     const start = written.start - bar * timeline.bar;
-    const ghost = toGhost({ start, end: start + (playedLength ?? written.length), midi: played });
-    return [{ ...ghost, status: "wrong", cents: null }];
+    const length = playedLength ?? written.length;
+    return [{ start, length, midi: played, status: "wrong", cents: null }];
   }, [exercise.notes, exercise.timeSig, bar, index, played, playedLength]);
   if (!notes) return null;
   return (
