@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { DIFFICULTIES, PITCH_CLASSES, RANGES } from "@/schema";
 import { ETUDE_MEASURE_LIMITS, keyChoices, TIME_SIGNATURES } from "@/lib/generatorOptions";
-import { RANGE_NOTES } from "@/utils/generateMusic";
+import {
+  DEFAULT_NOTE_RANGES,
+  HORN_SPAN,
+  MIN_RANGE_SPAN,
+  noteName,
+  RANGE_NOTES,
+  SETTABLE_RANGES,
+} from "@/lib/noteRanges";
 import { barLength, notate, type NoteEvent } from "./notate";
 // The server's etude rules keep a copy of the client's vocabulary, since the two
 // packages share no code. That file has no imports, so it loads here as it is.
@@ -17,6 +24,19 @@ describe("the server's copy of the generator's vocabulary", () => {
 
   it("has the same written range for each range", () => {
     expect(server.RANGE_NOTES).toEqual(RANGE_NOTES);
+  });
+
+  it("has the same rules for the ranges a user sets", () => {
+    expect(server.SETTABLE_RANGES).toEqual(SETTABLE_RANGES);
+    expect(server.DEFAULT_NOTE_RANGES).toEqual(DEFAULT_NOTE_RANGES);
+    expect(server.HORN_SPAN).toEqual(HORN_SPAN);
+    expect(server.MIN_RANGE_SPAN).toBe(MIN_RANGE_SPAN);
+  });
+
+  it("names notes as the client does", () => {
+    for (let midi = HORN_SPAN[0]; midi <= HORN_SPAN[1]; midi++) {
+      expect(server.noteName(midi)).toBe(noteName(midi));
+    }
   });
 
   it("accepts every key the page offers", () => {

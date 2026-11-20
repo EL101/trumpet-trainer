@@ -41,7 +41,11 @@ export type TimeSignature = (typeof TIME_SIGNATURES)[number];
 /** Bars an etude can be. Longer etudes cost more and take longer to write. */
 export const ETUDE_MEASURES = { min: 4, max: 16, default: 8 } as const;
 
-/** Lowest and highest written note for each range. Mirrors the client's RANGE_NOTES. */
+/**
+ * Lowest and highest written note for each range, by default. Low, Medium and High
+ * can be redefined in each user's settings (`NoteRanges`); Any is always the whole
+ * horn. Mirrors the client's RANGE_NOTES.
+ */
 export const RANGE_NOTES: Record<Range, readonly [string, string]> = {
   LOW: ["F#3", "C5"],
   MED: ["C4", "C6"],
@@ -62,13 +66,49 @@ export function midi(pitch: string): number | null {
   return (Number(m[3]) + 1) * 12 + SEMITONES[m[1]] + accidental;
 }
 
+const SHARP_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+
+/** A MIDI number as a pitch, spelt with sharps: 54 is "F#3". */
+export function noteName(midiNumber: number): string {
+  return `${SHARP_NAMES[midiNumber % 12]}${Math.floor(midiNumber / 12) - 1}`;
+}
+
+/** A range's lowest and highest written note, as MIDI numbers. */
+export type NoteSpan = readonly [low: number, high: number];
+
+/** The ranges a user can redefine. Any is always the whole horn. */
+export const SETTABLE_RANGES = ["LOW", "MED", "HIGH"] as const;
+export type SettableRange = (typeof SETTABLE_RANGES)[number];
+
+/** What Low, Medium and High cover for one user. */
+export type NoteRanges = Record<SettableRange, NoteSpan>;
+
+/** How narrow a range can be made: an octave, so every key's tonic falls inside it. */
+export const MIN_RANGE_SPAN = 12;
+
+const spanOfNotes = ([low, high]: readonly [string, string]): NoteSpan => [midi(low)!, midi(high)!];
+
+/** The whole horn, F#3 to G6: every range has to stay inside it. */
+export const HORN_SPAN = spanOfNotes(RANGE_NOTES.ANY);
+
+/** What the ranges cover for a user who hasn't changed them. */
+export const DEFAULT_NOTE_RANGES: NoteRanges = {
+  LOW: spanOfNotes(RANGE_NOTES.LOW),
+  MED: spanOfNotes(RANGE_NOTES.MED),
+  HIGH: spanOfNotes(RANGE_NOTES.HIGH),
+};
+
+/** The notes a range covers, given what the user's ranges are. */
+export function spanOf(range: Range, ranges: NoteRanges = DEFAULT_NOTE_RANGES): NoteSpan {
+  return range === "ANY" ? HORN_SPAN : ranges[range];
+}
+
 /**
  * Every spelling of every pitch inside the range, lowest first. Both spellings
  * of each black key are offered, since keys and minor-mode leading notes need
  * either; the prompt asks for spelling that suits the key.
  */
-export function pitchesInRange(range: Range): string[] {
-  const [low, high] = RANGE_NOTES[range].map((note) => midi(note)!);
+export function pitchesInRange([low, high]: NoteSpan): string[] {
   return [2, 3, 4, 5, 6, 7]
     .flatMap((octave) => PITCH_CLASSES.map((pc) => `${pc}${octave}`))
     .filter((pitch) => {
@@ -289,7 +329,16 @@ export type EtudeOptions = {
   noteRange: Range;
   difficulty: Difficulty;
   character?: string;
+  /**
+   * The notes `noteRange` covers for the user asking, from their settings. Not part of
+   * the request: the server looks it up. Without it, the range's default.
+   */
+  span?: NoteSpan;
 };
+
+/** The notes an etude can use: its range, as the user who asked for it has it. */
+export const etudeSpan = (options: EtudeOptions): NoteSpan =>
+  options.span ?? spanOf(options.noteRange);
 
 /**
  * What's wrong with an etude, as sentences Claude can act on when asked to fix
@@ -300,9 +349,10 @@ export type EtudeOptions = {
 export function findProblems(bars: readonly (readonly NoteEvent[])[], options: EtudeOptions) {
   const problems: string[] = [];
   const length = barLength(options.timeSig);
-  const pitches = new Set(pitchesInRange(options.noteRange));
+  const span = etudeSpan(options);
+  const pitches = new Set(pitchesInRange(span));
   const durations = new Set(allowedDurations(options.difficulty, options.timeSig));
-  const [low, high] = RANGE_NOTES[options.noteRange];
+  const [low, high] = span.map(noteName);
 
   if (bars.length !== options.measures) {
     problems.push(`It has ${bars.length} bars, but ${options.measures} were asked for.`);

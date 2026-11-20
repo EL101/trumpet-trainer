@@ -1,15 +1,22 @@
 import { useRef, useState } from "react";
-import { Box, Button, Dialog, Flex, Portal, Spinner, Text, chakra } from "@chakra-ui/react";
-import { LuTrash2, LuUpload } from "react-icons/lu";
+import { Box, Dialog, Flex, Portal, Text } from "@chakra-ui/react";
+import { Camera, Trash2, Upload } from "lucide-react";
 import type { User } from "firebase/auth";
+import { Button, IconButton } from "@/components/primitives";
 import UserAvatar from "./UserAvatar";
 import { useProfile } from "@/profile/useProfile";
 import { AvatarImageError, fileToAvatarDataUrl } from "@/utils/image";
 import { removeAvatar, uploadAvatar } from "@/utils/profile";
 
 const ACCEPT = "image/png,image/jpeg,image/webp";
+/** The portrait's size inside its accent ring. */
+const SIZE = 116;
 
-/** The profile picture; clicking it opens a dialog to upload or remove one. */
+/**
+ * The profile picture in an accent ring, as the profile's bookplate frames it. Signed-in
+ * users get a button on the ring that opens a dialog to upload or remove one; guests
+ * can't upload, so theirs is just the initial.
+ */
 export default function AvatarUpload({ user }: { readonly user: User }) {
   const { profile, applyAvatar, refresh } = useProfile();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -56,115 +63,101 @@ export default function AvatarUpload({ user }: { readonly user: User }) {
     }
   };
 
-  if (profile?.isAnonymous) {
-    return <UserAvatar size={120} isGuest />;
-  }
+  const guest = profile?.isAnonymous ?? false;
+  const avatar = (
+    <UserAvatar size={SIZE} src={profile?.avatarUrl} name={profile?.displayName} isGuest={guest} />
+  );
 
   return (
-    <Box>
-      {/* The overlay is positioned against the button, not the Box: the button
-          is inline by default, so the Box's line box adds a few pixels of
-          descender space below it and an `inset: 0` overlay spills out there. */}
-      <chakra.button
-        type="button"
-        onClick={() => {
-          setError(null);
-          setOpen(true);
-        }}
-        disabled={busy}
-        position="relative"
-        display="block"
-        borderRadius="100%"
-        cursor={busy ? "default" : "pointer"}
-        aria-label="Change profile picture"
-        _hover={{ "& .avatar-overlay": { opacity: 1 } }}
-        _focusVisible={{ outline: "2px solid", outlineColor: "blue.500", outlineOffset: "2px" }}
-      >
-        <UserAvatar
-          size={120}
-          src={profile?.avatarUrl}
-          name={profile?.displayName}
-          isGuest={profile?.isAnonymous}
-        />
-        <Flex
-          className="avatar-overlay"
-          position="absolute"
-          inset={0}
-          borderRadius="100%"
-          bg="blackAlpha.600"
-          color="white"
-          align="center"
-          justify="center"
-          opacity={busy ? 1 : 0}
-          transition="opacity 0.15s"
-          pointerEvents="none"
-        >
-          {busy ? <Spinner size="sm" /> : <Text fontSize="sm">Change</Text>}
-        </Flex>
-      </chakra.button>
-      <input
-        ref={inputRef}
-        type="file"
-        accept={ACCEPT}
-        onChange={handleFile}
-        style={{ display: "none" }}
-      />
-
-      <Dialog.Root
-        open={open}
-        onOpenChange={(e) => {
-          if (!busy) setOpen(e.open);
-        }}
-        placement="center"
-        size="xs"
-      >
-        <Portal>
-          <Dialog.Backdrop />
-          <Dialog.Positioner>
-            <Dialog.Content py={3} px={4}>
-              <Dialog.Header>
-                <Dialog.Title>Profile picture</Dialog.Title>
-              </Dialog.Header>
-              <Dialog.Body>
-                <Flex direction="column" align="center" gap={3} mt={2}>
-                  <UserAvatar size={96} src={profile?.avatarUrl} name={profile?.displayName} />
-                  <Button
-                    width="full"
-                    colorPalette="blue"
-                    onClick={() => inputRef.current?.click()}
-                    loading={busy}
-                  >
-                    <LuUpload />
-                    Upload new picture
-                  </Button>
-                  {profile?.hasUpload && (
+    <Box
+      position="relative"
+      flexShrink={0}
+      borderRadius="full"
+      borderWidth="1px"
+      borderColor="accent.solid"
+      p="5px"
+      width="fit-content"
+    >
+      {avatar}
+      {!guest && (
+        <>
+          <IconButton
+            aria-label="Change profile picture"
+            variant="primary"
+            size="sm"
+            position="absolute"
+            right="-4px"
+            bottom="0"
+            borderRadius="full"
+            bg="bg"
+            onClick={() => {
+              setError(null);
+              setOpen(true);
+            }}
+          >
+            <Camera />
+          </IconButton>
+          <input
+            ref={inputRef}
+            type="file"
+            accept={ACCEPT}
+            onChange={handleFile}
+            style={{ display: "none" }}
+          />
+          <Dialog.Root
+            open={open}
+            onOpenChange={(e) => {
+              if (!busy) setOpen(e.open);
+            }}
+            placement="center"
+          >
+            <Portal>
+              <Dialog.Backdrop bg="bg.backdrop" />
+              <Dialog.Positioner px="md">
+                <Dialog.Content
+                  maxWidth="360px"
+                  p="lg"
+                  gap="md"
+                  borderWidth="1px"
+                  borderColor="border"
+                >
+                  <Dialog.Title textStyle="heading.md">Profile picture</Dialog.Title>
+                  <Flex direction="column" align="center" gap="md">
+                    <UserAvatar size={96} src={profile?.avatarUrl} name={profile?.displayName} />
                     <Button
-                      width="full"
-                      variant="outline"
-                      colorPalette="red"
-                      onClick={handleRemove}
+                      variant="primary"
+                      fullWidth
+                      onClick={() => inputRef.current?.click()}
                       disabled={busy}
                     >
-                      <LuTrash2 />
-                      Remove picture
+                      <Upload />
+                      {busy ? "Saving…" : "Upload new picture"}
                     </Button>
-                  )}
-                  {error && (
-                    <Text color="red.600" fontSize="sm" textAlign="center">
-                      {error}
-                    </Text>
-                  )}
-                </Flex>
-              </Dialog.Body>
-              <Dialog.Footer mt={3}>
-                <Button variant="ghost" onClick={() => setOpen(false)} disabled={busy}>
-                  Cancel
-                </Button>
-              </Dialog.Footer>
-            </Dialog.Content>
-          </Dialog.Positioner>
-        </Portal>
-      </Dialog.Root>
+                    {profile?.hasUpload && (
+                      <Button fullWidth onClick={handleRemove} disabled={busy}>
+                        <Trash2 />
+                        Remove picture
+                      </Button>
+                    )}
+                    {error && (
+                      <Text role="alert" textStyle="small" color="fg.error" textAlign="center">
+                        {error}
+                      </Text>
+                    )}
+                  </Flex>
+                  <Flex justify="flex-end">
+                    <Dialog.ActionTrigger asChild>
+                      <Button variant="ghost" disabled={busy}>
+                        Cancel
+                      </Button>
+                    </Dialog.ActionTrigger>
+                  </Flex>
+                </Dialog.Content>
+              </Dialog.Positioner>
+            </Portal>
+          </Dialog.Root>
+        </>
+      )}
     </Box>
   );
 }

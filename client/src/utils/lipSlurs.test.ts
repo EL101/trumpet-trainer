@@ -2,7 +2,7 @@ import { Note } from "tonal";
 import { describe, expect, it } from "vitest";
 import { MEASURE_LIMITS, TIME_SIGNATURES } from "@/lib/generatorOptions";
 import { DIFFICULTIES, RANGES, type Difficulty, type Range } from "@/schema";
-import { RANGE_NOTES } from "./generateMusic";
+import { HORN_SPAN, MIN_RANGE_SPAN, RANGE_NOTES } from "@/lib/noteRanges";
 import {
   generateLipSlurs,
   lipSlurFingerings,
@@ -134,6 +134,20 @@ describe("planLipSlurs", () => {
       }
     },
   );
+
+  it("fits every range a user can set, down to an octave anywhere on the horn", () => {
+    for (let low = HORN_SPAN[0]; low + MIN_RANGE_SPAN <= HORN_SPAN[1]; low++) {
+      const span = [low, low + MIN_RANGE_SPAN] as const;
+      for (const timeSig of TIME_SIGNATURES) {
+        for (const difficulty of DIFFICULTIES) {
+          for (const note of planLipSlurs(4, timeSig, span, difficulty)) {
+            expect(note.midi).toBeGreaterThanOrEqual(span[0]);
+            expect(note.midi).toBeLessThanOrEqual(span[1]);
+          }
+        }
+      }
+    }
+  });
 
   it("starts on any fingering, and ends on that fingering's root", () => {
     const starts = new Set<string>();

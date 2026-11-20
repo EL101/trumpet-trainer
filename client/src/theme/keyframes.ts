@@ -35,6 +35,42 @@ export const keyframes = defineKeyframes({
     from: { clipPath: "inset(-50% 100% -50% 0)" },
     to: { clipPath: "inset(-50% 0 -50% 0)" },
   },
+  /**
+   * Drift up the full height of the box it's in, from just below its bottom to past its
+   * top, fading in and out on the way. Put it inside a box with `container-type: size`,
+   * whose height (`cqh`) sets the climb; outside one it climbs the height of the screen.
+   * Loop it (`linear infinite`) with a negative delay so it starts part-way up.
+   */
+  "float-up": {
+    "0%": { transform: "translateY(0)", opacity: 0 },
+    "10%, 82%": { opacity: 1 },
+    "100%": { transform: "translateY(calc(-100cqh - 180px))", opacity: 0 },
+  },
+  /** Sway from side to side with a little tilt, for something drifting. Loop it. */
+  sway: {
+    "0%, 100%": { transform: "translateX(-16px) rotate(-7deg)" },
+    "50%": { transform: "translateX(16px) rotate(7deg)" },
+  },
+  /**
+   * A horn raised to play: swings up from below, overshoots, dips back and settles. Set
+   * `transform-origin` to the end it's held by (the mouthpiece), and use an ease-out
+   * curve so each swing slows into its turn.
+   */
+  "raise-horn": {
+    "0%": { transform: "rotate(20deg)", opacity: 0 },
+    "18%": { opacity: 1 },
+    "55%": { transform: "rotate(-5deg)" },
+    "78%": { transform: "rotate(1.5deg)" },
+    "100%": { transform: "rotate(0deg)" },
+  },
+  /**
+   * A ring of sound leaving a trumpet's bell: spreads out from its left edge and fades.
+   * Give it `transform-box: fill-box` and `transform-origin: 0% 50%`, and loop it.
+   */
+  "ring-out": {
+    from: { transform: "none", opacity: 0.8 },
+    to: { transform: "translateX(40px) scale(1.4)", opacity: 0 },
+  },
   /** Waiting: dim and brighten, for placeholders standing in for content. Loop it. */
   pulse: { "50%": { opacity: 0.45 } },
   /**

@@ -86,8 +86,12 @@ model User {
   lastSeenAt  DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  /// Exercises the user has generated, counted as each is saved to history. Kept
+  /// here because history itself is pruned to its newest rows.
+  exercisesGenerated Int @default(0) @map("exercises_generated")
 
   avatar           UserAvatar?
+  settings         UserSettings?
   history          History[]
   library          Library[]
   etudeGenerations EtudeGeneration[]
@@ -112,7 +116,9 @@ enum EtudeStatus {
 /// global daily spend cap, and records what each etude really cost.
 model EtudeGeneration {
   id           String      @id @default(uuid())
-  userId       String      @map("user_id")
+  /// Null once the user has deleted their account. The row stays, since the spend cap
+  /// counts it: deleting an account mustn't give back what its etudes cost.
+  userId       String?     @map("user_id")
   status       EtudeStatus @default(PENDING)
   model        String
   inputTokens  Int         @default(0) @map("input_tokens")
@@ -126,7 +132,7 @@ model EtudeGeneration {
   error        String?
   createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   /// One etude being written per user at a time, enforced by the database, so two
   /// requests at once can't both start one (or both take the last of the quota).
@@ -146,6 +152,26 @@ model UserAvatar {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_avatars")
+}
+
+/// The user's own settings, at most one row each. A user without one has the
+/// defaults, so nothing is written until they first save.
+model UserSettings {
+  userId    String   @id @map("user_id")
+  /// What the Low, Medium and High ranges cover: the lowest and highest written
+  /// note of each, as MIDI numbers. The SQL checks they're inside F#3–G6 and at
+  /// least an octave apart, as the API does first.
+  lowMin    Int      @map("low_min")
+  lowMax    Int      @map("low_max")
+  medMin    Int      @map("med_min")
+  medMax    Int      @map("med_max")
+  highMin   Int      @map("high_min")
+  highMax   Int      @map("high_max")
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
 }
 
 /// One scored run of an exercise in the player's Play mode: a 0–100 score for each

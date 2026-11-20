@@ -38,6 +38,13 @@ export const buttonRecipe = defineRecipe({
         _hover: { bg: "bg.hover" },
         _active: { bg: "bg.pressed" },
       },
+      /** Outlined in red, for an action that can't be undone. */
+      danger: {
+        color: "danger.fg",
+        borderColor: "danger.fg",
+        _hover: { bg: "danger.hover" },
+        _active: { bg: "danger.pressed" },
+      },
       ghost: {
         color: "accent.solid",
         _hover: { bg: "accent.ghostHover" },

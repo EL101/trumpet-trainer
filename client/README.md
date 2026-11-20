@@ -6,8 +6,8 @@ brass accent, hairline borders, and outlined buttons (never filled).
 
 > The frontend is mid-rehaul. The new design system, shared components and app shell
 > (sidebar) are in place; page content is being rebuilt on top of them one screen at a
-> time (done so far: the landing page, Generate, the practice player, the library and
-> Tools). See [Old vs new](#old-vs-new) for what to use and what to avoid.
+> time (done so far: the landing page, Generate, the practice player, the library,
+> Tools and Profile). See [Old vs new](#old-vs-new) for what to use and what to avoid.
 >
 > Today and Progress aren't built yet, so they're commented out of the sidebar and
 > `App.tsx`, and their routes go to Generate, which is also where signing in lands.
@@ -64,16 +64,22 @@ theme/                    colours, fonts, spacing, component variants
 
 The roles you'll use most:
 
-| Role                                        | Use for                                               |
-| ------------------------------------------- | ----------------------------------------------------- |
-| `bg`, `bg.panel`, `bg.subtle`               | Page background, raised surfaces, light fills         |
-| `fg`, `fg.muted`, `fg.subtle`               | Body text, secondary text, tertiary labels            |
-| `fg.error`                                  | Error messages                                        |
-| `border`, `border.emphasized`               | Hairlines and dividers, hovered borders               |
-| `accent.solid`                              | The brass accent for strokes, icons and large text    |
-| `accent.fg`                                 | Accent-coloured text at small sizes (better contrast) |
-| `accent.subtle`, `accent.muted`             | Tinted fills, soft accent borders                     |
-| `intonation.good` / `fair` / `warn` / `bad` | Score and pitch colours, green through red            |
+| Role                                        | Use for                                                  |
+| ------------------------------------------- | -------------------------------------------------------- |
+| `bg`, `bg.panel`, `bg.subtle`               | Page background, raised surfaces, light fills            |
+| `fg`, `fg.muted`, `fg.subtle`               | Body text, secondary text, tertiary labels               |
+| `fg.error`                                  | Error messages                                           |
+| `danger.fg`, `danger.hover`                 | Actions that delete for good (`Button variant="danger"`) |
+| `border`, `border.emphasized`               | Hairlines and dividers, hovered borders                  |
+| `accent.solid`                              | The brass accent for strokes, icons and large text       |
+| `accent.fg`                                 | Accent-coloured text at small sizes (better contrast)    |
+| `accent.subtle`, `accent.muted`             | Tinted fills, soft accent borders                        |
+| `intonation.good` / `fair` / `warn` / `bad` | Score and pitch colours, green through red               |
+| `activity.1` – `activity.4`                 | The activity grid's shades, lightest to darkest          |
+
+Two groups are only for drawings, not UI: `engraving.*` (the etched brass of the landing
+page's trumpets: `line`, `hatch`, `deep`, `wash`) and `spotlight.*` (the landing page's
+pool of light and its darker edges).
 
 For colours that depend on cents (note colouring, pitch readouts), call
 `centsColor(cents)` from `@/lib/intonation`. It blends smoothly from green to red.
@@ -97,6 +103,10 @@ prop automatically.
 A component built for a single page can live inside that page file. Move it into
 `components/` once a second page needs it.
 
+Routes are declared in `App.tsx`, under a `Root` route that holds the shared providers
+(auth, profile, settings, streak, etudes) and the `Toaster`. The app uses a data router (`createBrowserRouter`), so a page can
+hold up navigation with `useBlocker`.
+
 The signed-out landing page (`pages/LandingPage.tsx`) is the one screen without a
 shell: it has no sidebar and nothing to go back to.
 
@@ -115,7 +125,7 @@ from history:
   player shows it without a request.
 - **In a new tab, after a reload or from a bookmark,** it loads the exercise with
   `GET /api/history/:exerciseId`, then `GET /api/library/:exerciseId` if history has let
-  it go (pruned past the newest 100, or cleared). An id neither has goes back to the
+  it go (pruned past the newest 300, or cleared). An id neither has goes back to the
   page that opened the player (Generate if the address doesn't name one) with an
   "Exercise not found" notice. Deleted history leaves no trace, so the notice can't tell
   a cleared exercise from a wrong link, and says it could be either. A load that fails
@@ -226,9 +236,10 @@ stop there.
   (`utils/scores.ts`), each score and each part's feedback in its own column.
   `GET /api/scores/latest/:id` gives the newest that still has its feedback.
   `LastFeedbackButton` (beside Practice on Generate and in the library's panel) and the
-  player's "Last feedback" open it. Scores are never deleted, for the user's progress:
-  each keeps what its exercise was (type, key, time signature, range, difficulty), and
-  the hourly prune only clears the feedback, of runs past an exercise's newest 20 and of
+  player's "Last feedback" open it. Scores are kept for the user's progress,
+  until they reset their practice data on Profile: each keeps what its exercise was
+  (type, key, time signature, range, difficulty), and the hourly prune only clears the
+  feedback, of runs past an exercise's newest 20 and of
   exercises in neither history nor the library. Those of an exercise gone are only
   marked at first (`feedback_orphaned_at`) and cleared by a later prune, at least 30
   minutes on, if it's still gone; one that's back is unmarked. Clearing history on
@@ -265,9 +276,9 @@ with margins rather than a row gap, so the gap under a panel opens with it. The 
 back links (and the browser's Back button) return with the practised exercise's panel
 open again, loading chunks until it's among them. The filter and search are kept per tab. Exercises get into the library
 from Generate's "Save to library". The panel's "Remove from library" asks first, and
-looks for the exercise in the history Generate lists (`listHistory()`, its newest 100)
+looks for the exercise in the history Generate lists (`listHistory()`, its newest 300)
 to say whether it can be saved again from there. Anywhere else, including a row past
-the newest 100 that the hourly prune hasn't deleted yet, or a lookup that failed, it
+the newest 300 that the hourly prune hasn't deleted yet, or a lookup that failed, it
 says it **can't** be. Choosing a card moves focus to its panel's heading, and each card's
 `aria-label` (`cardLabel()`) gives its key, length and date, so two cards with the same
 number can be told apart.
@@ -276,12 +287,75 @@ The staff is written for B♭ trumpet, so the player sounds every note a whole t
 lower (`CONCERT_OFFSET` in `lib/tuning.ts`). The trumpet samples are in
 `public/samples/trumpet/` (FluidR3 GM, MIT; the notice is in that folder).
 
+## Profile and settings
+
+`pages/Profile.tsx` (route `/profile`, mockup 3a) is the practice record on a bookplate
+(portrait, name, Google sign-in for guests, sign out, exercises generated and played,
+longest streak), then the activity grid, the settings and the data section. On arrival
+these rise in one after another, the stats count up, and the days played fill the grid week by
+week (again whenever another year loads, since the grid is keyed by the span shown).
+
+- **Activity.** A year of days like GitHub's contributions graph (`ActivityGrid`, from
+  mockup 4c's grid with 1k's labels), one column per week, Monday on top. A day's
+  shade is how many different exercises were played that day, in fixed steps (1, 2–3,
+  4–6, 7+; `activityLevel()` in `lib/activity.ts`), so a day looks the same whatever
+  the busiest day was. It shows the past year (53 weeks to today), or a calendar year
+  chosen beside the heading from the years with any play (`pastYear()`,
+  `calendarYear()`). `GET /api/profile/activity?tz=&year=` counts the days in the
+  browser's time zone and lists those years. It comes from the scores, so resetting
+  practice data empties it.
+
+- **Note ranges.** What Low, Medium and High cover is the user's own: a slider each
+  (`RangeSlider`, two thumbs) over the whole horn, F#3 to G6, with the two notes drawn
+  on a small staff beside it. Ranges can overlap, and each stays at least an octave wide
+  (`MIN_RANGE_SPAN`), so every key's tonic falls inside it; Any is always the whole horn.
+  The rules and the defaults are in `lib/noteRanges.ts` (the server keeps a copy in
+  `server/src/etudes/music.ts`, checked by `utils/etudeMirror.test.ts`). Changes are a
+  draft, kept for the tab, until the row at the foot of the page saves them
+  (`PUT /api/settings`); Discard drops them, and Reset to default only fills in the
+  defaults. Leaving with a draft asks first: the browser asks on a reload or a closed
+  tab, and going to another page in the app opens a dialog to save, drop the draft or
+  stay (`useBlocker`; signing out isn't held up).
+- **Where they're used.** `SettingsProvider` (`settings/`) loads the user's settings
+  once (`GET /api/settings`, the defaults for a user who never saved any) and shares
+  them. Generate passes the chosen range's notes (`spanOf()`) to the generators, which
+  take either a named range at its defaults or the notes themselves. Etudes are written
+  on the server, which looks the range up in the user's settings rather than taking the
+  request's word. Exercises already made keep their range name: changing what Medium
+  means doesn't change them.
+- **The record.** `GET /api/profile/stats`: exercises generated is a count kept on the
+  user's row as each is saved to history (history itself is pruned), exercises played
+  is how many different exercises they have a scored run of (replays don't count again).
+- **Reset practice data** asks first, then deletes every scored run
+  (`DELETE /api/scores`), which takes exercises played back to 0. History, the library,
+  the generated count and the settings stay.
+- **Delete account** asks first, then deletes the user and everything they own
+  (`DELETE /api/profile`: their rows, then their Firebase user, so a failure part way
+  can be retried), signs them out and goes to the landing page. Signing in with Google
+  again starts a new, empty account. Their etude requests stay, with no user, since the
+  daily spend cap counts what they cost.
+
+## The streak
+
+The sidebar shows the user's current streak and this week, Monday to Sunday, as the
+design's Sidebar has it; Profile's bookplate shows the longest. A day counts if
+anything was played on it, in the browser's time zone, and the current streak runs up
+to today, or to yesterday while today has nothing yet. `GET /api/profile/streak?tz=`
+gives both streaks and the days played this week; `streakWeek()` in `lib/streak.ts`
+turns those into the week's circles (played, today, missed, to come).
+`StreakProvider` (`streak/`) loads it and shares it. Its `refresh()` asks again after
+anything that changes it: the player calls it once a run is saved, so the day just
+played is there when the player is left, and Profile after a reset. It also asks again
+whenever the tab comes back into view, for a day that's gone by or play in another tab.
+`Sidebar` takes a `streak` prop to show another one (the `/design` gallery does).
+
 ## Writing styles
 
 - **Use text styles, not ad-hoc font sizes:**
   `<Text textStyle="heading.md">`, `<Heading textStyle="display.md">`, `<Text textStyle="kicker">`.
   Between the sizes: `subheading` (a row's label, a size up from `heading.sm`) and
-  `small` (body a size down, for short lines in a list).
+  `small` (body a size down, for short lines in a list). Music glyphs set as text
+  (decoration, not the staff) use `notation.sm`–`xl`, in Bravura (the `music` font).
 - **Spacing:** the design system's scale is `xs`, `sm`, `md`, `lg`, `xl`, `2xl`
   (4.6px through 36.8px). Chakra's numeric scale (`p={4}`) still works, but it's what
   the old pages use.
@@ -299,7 +373,8 @@ lower (`CONCERT_OFFSET` in `lib/tuning.ts`). The trumpet samples are in
   motion: `_motionSafe={{ animation: "appear 400ms ease-out 200ms backwards" }}`. Code
   that animates outside CSS (its own SVG, `scrollIntoView`, `element.animate()`, a
   timer) can't use `_motionSafe`; check `prefersReducedMotion()` from `@/lib/motion`
-  instead, as `Staff` does for its labels.
+  instead, as `Staff` does for its labels. To count a figure up as it arrives (Profile's
+  stats), use `useCountUp()` from `hooks/useCountUp.ts`, which does that check itself.
 
 ## Old vs new
 

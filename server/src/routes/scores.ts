@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/requireAuth.js";
 import { ScoreInputSchema } from "../schema/index.js";
-import { findExerciseInfo, insertScore, latestScore } from "../queries/scores.js";
+import { deleteScores, findExerciseInfo, insertScore, latestScore } from "../queries/scores.js";
 
 const router = Router();
 
@@ -33,6 +33,16 @@ router.post("/", requireAuth, async (req: Request, res: Response) => {
   } catch (err) {
     console.error("Failed to save score:", err);
     res.status(500).json({ error: "Failed to save score" });
+  }
+});
+
+/** Reset the caller's practice data: every scored run goes. Can't be undone. */
+router.delete("/", requireAuth, async (req: Request, res: Response) => {
+  try {
+    res.json({ deleted: await deleteScores(req.user!.uid) });
+  } catch (err) {
+    console.error("Failed to delete scores:", err);
+    res.status(500).json({ error: "Failed to reset practice data" });
   }
 });
 

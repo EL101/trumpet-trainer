@@ -5,7 +5,7 @@ export const EXERCISE_TYPES = ["LONG_TONES", "SCALES", "LIP_SLURS", "ETUDES", "R
 export type ExerciseType = (typeof EXERCISE_TYPES)[number];
 
 /** History entries the server keeps per user. Mirrors the server's HISTORY_LIMIT. */
-export const HISTORY_LIMIT = 100;
+export const HISTORY_LIMIT = 300;
 
 /** A generated exercise, as stored in history and in the library. */
 export type MusicInfo = {

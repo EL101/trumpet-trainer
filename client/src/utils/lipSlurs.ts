@@ -1,6 +1,6 @@
 import { Note } from "tonal";
 import type { Difficulty, Range } from "@/schema";
-import { RANGE_NOTES } from "./generateMusic";
+import { toSpan, type NoteSpan } from "@/lib/noteRanges";
 import { reachOf } from "./melody";
 import { barLength } from "./notate";
 import { isCompound } from "./rhythm";
@@ -155,14 +155,14 @@ function layout(timeSig: string) {
 export function planLipSlurs(
   bars: number,
   timeSig: string,
-  range: Range = "MED",
+  range: Range | NoteSpan = "MED",
   difficulty: Difficulty = "LOW",
 ): PlannedNote[] {
   const { perBar, groupSize } = layout(timeSig);
   // Changes can only come once a group, so they're likelier there to make up the share.
   const changeChance = Math.min(1, PLANNED_CHANGES * groupSize);
   const { min, max, decay } = SLUR_PARTIALS[difficulty];
-  const [low, high] = RANGE_NOTES[range].map((note) => Note.midi(note)!);
+  const [low, high] = toSpan(range);
   const notes: PlannedNote[] = VALVE_ORDER.flatMap((fingering) =>
     SERIES[fingering].map((pitch, partial) => ({
       pitch,
@@ -220,7 +220,7 @@ export function planLipSlurs(
         }
       }
     }
-    throw new Error(`No lip slur fits ${bars} bars of ${timeSig} in the ${range} range`);
+    throw new Error(`No lip slur fits ${bars} bars of ${timeSig} in the range ${low}–${high}`);
   };
 
   const { first, reach, canChange } = start();
@@ -271,7 +271,7 @@ export function planLipSlurs(
 export function generateLipSlurs(
   bars: number,
   timeSig: string,
-  range: Range = "MED",
+  range: Range | NoteSpan = "MED",
   difficulty: Difficulty = "LOW",
 ) {
   const { value, perBar } = layout(timeSig);
