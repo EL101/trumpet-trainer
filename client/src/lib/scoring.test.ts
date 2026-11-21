@@ -295,6 +295,66 @@ describe("scoreRun", () => {
     }
   });
 
+  it("hears tongued sixteenths as tongued, though no frame between them is silent", () => {
+    const timeline = buildTimeline("G4/16, G4, G4, G4, G4/q, C5/h", "4/4");
+    // One unbroken sound, the level dipping to half at each tongue stop (a 25 ms stop,
+    // through the 43 ms frame).
+    const onsets = [0.25, 0.5, 0.75, 1];
+    const samples = hear(4, { midi: 67, from: 0, to: 1.95 }, { midi: 72, from: 2, to: 3.8 }).map(
+      (s) => {
+        const seconds =
+          Math.min(...onsets.map((a) => Math.abs(s.at - a))) * TIMING.secondsPerQuarter;
+        return { ...s, level: s.level * (seconds < 0.0125 ? 0.5 : seconds < 0.03 ? 0.8 : 1) };
+      },
+    );
+    const run = scoreRun(timeline, samples, TIMING);
+    expect(run.parts.rhythm).toEqual({ score: 100, notes: [] });
+    expect(run.played.map((m) => m.start)).toEqual([0, ...onsets, 2]);
+  });
+
+  it("doesn't take a dip through a note entered early for its attack", () => {
+    const timeline = buildTimeline("C4/h, D4/h", "4/4");
+    // D4 comes in 0.3 of a beat early, and its level dips for a frame at its beat (a
+    // breath, or the microphone's gain): the dip isn't where it came in.
+    const samples = hear(4, { midi: 60, from: 0, to: 1.6 }, { midi: 62, from: 1.7, to: 3.8 }).map(
+      (s) => (Math.abs(s.at - 2) < 0.02 ? { ...s, level: s.level * 0.5 } : s),
+    );
+    const run = scoreRun(timeline, samples, TIMING);
+    expect(run.parts.rhythm.score).toBeLessThan(100);
+    expect(run.parts.rhythm.notes).toContainEqual({ bar: 1, beat: 3, text: "Came in well early." });
+  });
+
+  it("gives a wrong note held on into the next the length the played staff draws", () => {
+    const timeline = buildTimeline("C5/q, D5/q, E5/h", "4/4");
+    // E♭5 for 0.83 of a beat (a dotted eighth on its own), the next note 0.08 s later.
+    const samples = hear(
+      4,
+      { midi: 72, from: 0, to: 0.9 },
+      { midi: 75, from: 1, to: 1.85 },
+      { midi: 76, from: 2, to: 3.8 },
+    );
+    const run = scoreRun(timeline, samples, TIMING);
+    expect(wrongNotes(run)).toEqual([{ start: 1, length: 1, midi: 75 }]);
+    expect(run.parts.rightNotes.notes).toContainEqual(
+      expect.objectContaining({ played: 75, playedLength: 1 }),
+    );
+  });
+
+  it("keeps the rests played between short notes at a fast tempo", () => {
+    // ♩ = 160: each eighth rest is 0.19 s, under BRIDGE_SECONDS. Played with 0.16 s of
+    // silence, it's still a rest, not a note held on into the next.
+    const fast = { beat: 1, secondsPerQuarter: 0.375 };
+    const timeline = buildTimeline("C5/8, B4/8/r, C5/8, B4/8/r, C5/8, B4/8/r, C5/8, B4/8/r", "4/4");
+    const samples = hear(4, ...[0, 1, 2, 3].map((k) => ({ midi: 72, from: k, to: k + 0.6 })));
+    const run = scoreRun(timeline, samples, fast);
+    expect(run.played.map((m) => [m.start, m.length])).toEqual([
+      [0, 0.5],
+      [1, 0.5],
+      [2, 0.5],
+      [3, 0.5],
+    ]);
+  });
+
   it("hears a note that wavers, and one scooped into", () => {
     const { timeline, samples } = asWritten("C5/w, G4/w", "4/4", (s, i) =>
       i === 0

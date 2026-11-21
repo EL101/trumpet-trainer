@@ -1,12 +1,14 @@
 import { formatPitch } from "./format";
-import { firstFrom, heardPitch, isVoiced, type PitchSample } from "./hearing";
+import { dipAt, firstFrom, heardPitch, isVoiced, type PitchSample } from "./hearing";
 import {
   BRIDGE_SECONDS,
   DROPOUT_SECONDS,
+  heldTo,
+  holdLimit,
   judgePlayed,
-  toGhost,
   toMark,
   transcribe,
+  type JudgedNote,
   type PlayedMark,
   type PlayedNote,
 } from "./transcribe";
@@ -30,8 +32,9 @@ export type ScoreNote = {
   written?: number;
   played?: number;
   /**
-   * For a wrong note: how long it was played, in quarter notes, as `toGhost` writes it (a
-   * note value, or past a whole note, whole beats).
+   * For a wrong note: how long it was played, in quarter notes, as the played staff draws
+   * it (`judgePlayed`): a note value, or past a whole note, whole beats; held on into the
+   * next note, any number of sixteenths.
    */
   playedLength?: number;
 };
@@ -164,6 +167,8 @@ export function scoreRun(
   const cents: (number | null)[] = timeline.notes.map(() => null);
   for (const h of heard) for (const i of h.note.indices) cents[i] = h.cents;
   const transcribed = transcribe(samples, timeline, time.secondsPerQuarter);
+  const limit = holdLimit(timeline, time.secondsPerQuarter);
+  const judged = transcribed.map((p, i) => judgePlayed(p, timeline, heldTo(transcribed, i, limit)));
 
   const played = heard.filter((h) => !h.missed);
   const right = played.filter((h) => h.right);
@@ -181,13 +186,16 @@ export function scoreRun(
     heard: played.length > 0,
     overall: overallScore(scores),
     parts: {
-      rightNotes: { score: scores.rightNotes, notes: rightNoteNotes(heard, transcribed, name) },
+      rightNotes: {
+        score: scores.rightNotes,
+        notes: rightNoteNotes(heard, transcribed, judged, name),
+      },
       rhythm: { score: scores.rhythm, notes: rhythmNotes(timed) },
       intonation: { score: scores.intonation, notes: intonationNotes(right, played.length > 0) },
       tone: { score: scores.tone, notes: toneNotes(played) },
     },
     cents,
-    played: transcribed.map((p) => toMark(judgePlayed(p, timeline), cents)),
+    played: judged.map((j) => toMark(j, cents)),
   };
 }
 
@@ -278,7 +286,11 @@ function hear(
   const sounding = voiced.length / (last - first + 1);
 
   // Where it came in: the moment a sound near the note played starts (a scoop into it
-  // counts), nearest its beat.
+  // counts), nearest its beat. A tongue stop too short for a silent frame, a dip in level
+  // through the sound (`dipAt`), is an attack too, but only where the note before was the
+  // same pitch, so the sound runs on into this one, or where nothing else came in: a dip
+  // through a note already sounding (a swell, a breath, the microphone's gain) would
+  // otherwise put an early entry on time.
   const near = (i: number) => Math.abs((pitchOf(samples[i]) ?? -Infinity) - played) < NEAR;
   const lead = Math.min(beat / 2, note.length);
   const window = indicesBetween(
@@ -286,16 +298,19 @@ function hear(
     note.start - lead,
     note.start + Math.min(note.length / 2, beat / 2),
   );
-  let onset: number | null = null;
+  const nearest = (a: number | null, b: number | null) =>
+    a === null ||
+    (b !== null && Math.abs(samples[b].at - note.start) < Math.abs(samples[a].at - note.start))
+      ? b
+      : a;
+  let attack: number | null = null;
+  let dip: number | null = null;
   for (let i = window.from; i < window.to; i++) {
-    if (!near(i) || (i > 0 && near(i - 1))) continue;
-    if (
-      onset === null ||
-      Math.abs(samples[i].at - note.start) < Math.abs(samples[onset].at - note.start)
-    ) {
-      onset = i;
-    }
+    if (!near(i)) continue;
+    if (!(i > 0 && near(i - 1))) attack = nearest(attack, i);
+    else if (dipAt(samples, i, time.secondsPerQuarter)) dip = nearest(dip, i);
   }
+  const onset = before?.midi === played ? nearest(attack, dip) : (attack ?? dip);
   const onsetAt = onset === null ? null : samples[onset].at;
 
   // A repeated note needs an attack of its own. With none in reach, and the sound
@@ -362,17 +377,24 @@ function hear(
   };
 }
 
-/** How long a wrong note was held: the note played over it longest, as a note value. */
-function playedLength(h: Heard, transcribed: PlayedNote[]): { playedLength?: number } {
+/**
+ * How long a wrong note was held: the note played over it longest, as long as the played
+ * staff draws it (`judged`, one for each of `transcribed`).
+ */
+function playedLength(
+  h: Heard,
+  transcribed: readonly PlayedNote[],
+  judged: readonly JudgedNote[],
+): { playedLength?: number } {
   const end = h.note.start + h.note.length;
-  let best: PlayedNote | null = null;
+  let best = -1;
   let most = 0;
-  for (const p of transcribed) {
-    if (p.midi !== h.played) continue;
+  transcribed.forEach((p, i) => {
+    if (p.midi !== h.played) return;
     const overlap = Math.min(end, p.end) - Math.max(h.note.start, p.start);
-    if (overlap > most) [best, most] = [p, overlap];
-  }
-  return best ? { playedLength: toGhost(best).length } : {};
+    if (overlap > most) [best, most] = [i, overlap];
+  });
+  return best >= 0 ? { playedLength: judged[best].length } : {};
 }
 
 function rhythmScore(h: Heard) {
@@ -393,7 +415,8 @@ function toneScore(h: Heard) {
 
 function rightNoteNotes(
   heard: Heard[],
-  transcribed: PlayedNote[],
+  transcribed: readonly PlayedNote[],
+  judged: readonly JudgedNote[],
   name: (midi: number) => string,
 ): ScoreNote[] {
   const notes = heard
@@ -406,7 +429,7 @@ function rightNoteNotes(
         : {
             ...at,
             played: h.played,
-            ...playedLength(h, transcribed),
+            ...playedLength(h, transcribed, judged),
             text: `Played ${name(h.played)} instead of ${written}, ${h.played > h.note.midi ? "too high" : "too low"}.`,
           };
     });
